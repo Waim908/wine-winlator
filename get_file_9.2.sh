@@ -2,7 +2,7 @@ mkdir -p download/dlls/midimap/
 mkdir -p download/dlls/winex11.drv
 mkdir -p download/dlls/xinput1_3
 cd download/dlls/midimap
-wget https://github.com/brunodev85/wine-9.2-custom/blob/main/dlls/midimap/midimap.c
+wget https://raw.githubusercontent.com/brunodev85/wine-9.2-custom/main/dlls/midimap/midimap.c
 echo "dlls/midi/"
 cd ../winex11.drv
 wget https://raw.githubusercontent.com/brunodev85/wine-9.2-custom/main/dlls/winex11.drv/keyboard.c
