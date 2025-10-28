@@ -1,0 +1,67 @@
+From b8d73124fd1fd6e697354623d3ef2cecaebc2a2e Mon Sep 17 00:00:00 2001
+From: BrunoSX <brunodeveloper85@gmail.com>
+Date: Thu, 29 Aug 2024 11:57:54 -0300
+Subject: [PATCH] ntdll: Add WINEOVERRIDEAFFINITYMASK to override the process
+ affinity mask
+
+---
+ dlls/ntdll/unix/process.c | 26 ++++++++++++++++++++++++--
+ 1 file changed, 24 insertions(+), 2 deletions(-)
+
+diff --git a/dlls/ntdll/unix/process.c b/dlls/ntdll/unix/process.c
+index b58d69fb..bb3684ff 100755
+--- a/dlls/ntdll/unix/process.c
++++ b/dlls/ntdll/unix/process.c
+@@ -72,11 +72,26 @@
+ 
+ WINE_DEFAULT_DEBUG_CHANNEL(process);
+ 
+-
+ static ULONG execute_flags = MEM_EXECUTE_OPTION_DISABLE;
+ 
+ static UINT process_error_mode;
+ 
++static short override_affinity_mask = -1;
++
++static ULONG_PTR get_override_affinity_mask(void)
++{
++    if (override_affinity_mask == -1)
++    {
++        const char *override_affinity_mask_env = getenv("WINEOVERRIDEAFFINITYMASK");
++
++        override_affinity_mask = 0;
++        if (override_affinity_mask_env) 
++            override_affinity_mask = (short)strtol(override_affinity_mask_env, NULL, 10);
++    }
++    
++    return (ULONG_PTR)override_affinity_mask;
++}
++
+ static char **build_argv( const UNICODE_STRING *cmdline, int reserved )
+ {
+     char **argv, *arg, *src, *dst;
+@@ -1608,16 +1623,23 @@ NTSTATUS WINAPI NtSetInformationProcess( HANDLE handle, PROCESSINFOCLASS class,
+     case ProcessAffinityMask:
+     {
+         const ULONG_PTR system_mask = get_system_affinity_mask();
++        const ULONG_PTR override_affinity_mask = get_override_affinity_mask();
++        ULONG_PTR affinity_mask;
+ 
+         if (size != sizeof(DWORD_PTR)) return STATUS_INVALID_PARAMETER;
+         if (*(PDWORD_PTR)info & ~system_mask)
+             return STATUS_INVALID_PARAMETER;
+         if (!*(PDWORD_PTR)info)
+             return STATUS_INVALID_PARAMETER;
++        
++        affinity_mask = *(PDWORD_PTR)info;
++        if (override_affinity_mask > 0)
++            affinity_mask = override_affinity_mask;
++            
+         SERVER_START_REQ( set_process_info )
+         {
+             req->handle   = wine_server_obj_handle( handle );
+-            req->affinity = *(PDWORD_PTR)info;
++            req->affinity = affinity_mask;
+             req->mask     = SET_PROCESS_INFO_AFFINITY;
+             ret = wine_server_call( req );
+         }

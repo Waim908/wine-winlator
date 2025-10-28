@@ -1,6 +1,6 @@
 diff -urN proton10_wine/dlls/ntdll/unix/virtual.c b/dlls/ntdll/unix/virtual.c
 --- proton10_wine/dlls/ntdll/unix/virtual.c	2025-10-26 19:03:17.882767761 +0800
-+++ b/dlls/ntdll/unix/virtual.c	2025-10-26 23:22:59.490787076 +0800
++++ b/dlls/ntdll/unix/virtual.c	2025-10-28 17:46:18.837550011 +0800
 @@ -293,9 +293,9 @@
  static void *address_space_start = (void *)0x10000;
  #endif
@@ -37,7 +37,7 @@ diff -urN proton10_wine/dlls/ntdll/unix/virtual.c b/dlls/ntdll/unix/virtual.c
          default:
 diff -urN proton10_wine/loader/preloader.c b/loader/preloader.c
 --- proton10_wine/loader/preloader.c	2025-10-26 19:03:19.759764511 +0800
-+++ b/loader/preloader.c	2025-10-27 00:03:03.616624179 +0800
++++ b/loader/preloader.c	2025-10-28 17:46:18.838550009 +0800
 @@ -1487,7 +1487,7 @@
          {
              /* don't warn for low 64k */
@@ -49,7 +49,7 @@ diff -urN proton10_wine/loader/preloader.c b/loader/preloader.c
              )
 diff -urN proton10_wine/server/mapping.c b/server/mapping.c
 --- proton10_wine/server/mapping.c	2025-10-26 19:03:20.247763666 +0800
-+++ b/server/mapping.c	2025-10-27 20:36:42.746454570 +0800
++++ b/server/mapping.c	2025-10-28 17:46:18.839550008 +0800
 @@ -268,7 +268,7 @@
  void init_memory(void)
  {
