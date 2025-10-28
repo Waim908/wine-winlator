@@ -12,6 +12,13 @@ winlator11 hostei mod wine  x86_64 补丁与releases
 # 本项目基于 [LGPL2.1](https://www.gnu.org/licenses/old-licenses/lgpl-2.1.en.html)协议开源
 
 # 鸣谢
+ 
  - [Frogging-Family/wine-tkg-git](https://github.com/Frogging-Family/wine-tkg-git)
+ 
  - [hostei/wine-tkg](https://github.com/hostei33/wine-tkg)
+ 
  - [brunodev85/wine-9.2-custom](https://github.com/brunodev85/wine-9.2-custom)
+ 
+## 项目
+
+ - [Waim908/wine-termux](https://github.com/Waim908/wine-termux)

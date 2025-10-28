@@ -1,0 +1,30 @@
+From f0a45d4741d99ca049a54630ca29a2ca3be7e1d8 Mon Sep 17 00:00:00 2001
+From: BrunoSX <brunodeveloper85@gmail.com>
+Date: Tue, 29 Jul 2025 14:48:04 -0300
+Subject: [PATCH] winex11: Add hint for layered windows
+
+---
+ dlls/winex11.drv/window.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/dlls/winex11.drv/window.c b/dlls/winex11.drv/window.c
+index c793155..c4e4aaf 100755
+--- a/dlls/winex11.drv/window.c
++++ b/dlls/winex11.drv/window.c
+@@ -692,6 +692,7 @@ static void set_style_hints( struct x11drv_win_data *data, DWORD style, DWORD ex
+     HWND owner = NtUserGetWindowRelative( data->hwnd, GW_OWNER );
+     Window owner_win = 0;
+     XWMHints *wm_hints;
++    int WindowLayeredHint = data->layered ? (1 << 16) : 0;
+     Atom window_type;
+ 
+     if (owner)
+@@ -720,7 +721,7 @@ static void set_style_hints( struct x11drv_win_data *data, DWORD style, DWORD ex
+ 
+     if ((wm_hints = XAllocWMHints()))
+     {
+-        wm_hints->flags = InputHint | StateHint | WindowGroupHint;
++        wm_hints->flags = InputHint | StateHint | WindowGroupHint | WindowLayeredHint;
+         wm_hints->input = !use_take_focus && !(style & WS_DISABLED);
+         wm_hints->initial_state = (style & WS_MINIMIZE) ? IconicState : NormalState;
+         wm_hints->window_group = group_leader;

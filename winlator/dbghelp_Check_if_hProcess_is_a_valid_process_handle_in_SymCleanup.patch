@@ -1,0 +1,28 @@
+From 52463862ccda6bfd788dc09d72add57a1e388dc2 Mon Sep 17 00:00:00 2001
+From: BrunoSX <brunodeveloper85@gmail.com>
+Date: Sat, 9 Nov 2024 14:31:02 -0300
+Subject: [PATCH] dbghelp: Check if hProcess is a valid process handle in
+ SymCleanup
+
+---
+ dlls/dbghelp/dbghelp.c | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/dlls/dbghelp/dbghelp.c b/dlls/dbghelp/dbghelp.c
+index 3a8f1b03..dc362161 100755
+--- a/dlls/dbghelp/dbghelp.c
++++ b/dlls/dbghelp/dbghelp.c
+@@ -561,6 +561,13 @@ BOOL WINAPI SymCleanup(HANDLE hProcess)
+ {
+     struct process**    ppcs;
+     struct process*     next;
++    
++    if (hProcess == INVALID_HANDLE_VALUE)
++    {
++        WARN("an invalid process handle was provided!\n");
++        
++        return TRUE;
++    }
+ 
+     for (ppcs = &process_first; *ppcs; ppcs = &(*ppcs)->next)
+     {

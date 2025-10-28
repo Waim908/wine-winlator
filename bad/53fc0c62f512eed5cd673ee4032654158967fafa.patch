@@ -1,0 +1,26 @@
+From 53fc0c62f512eed5cd673ee4032654158967fafa Mon Sep 17 00:00:00 2001
+From: BrunoSX <brunodeveloper85@gmail.com>
+Date: Thu, 5 Sep 2024 15:40:41 -0300
+Subject: [PATCH] win32u: Check the flag CDS_FULLSCREEN in
+ NtUserChangeDisplaySettings
+
+---
+ dlls/win32u/sysparams.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/dlls/win32u/sysparams.c b/dlls/win32u/sysparams.c
+index 67308205..3b5360dd 100755
+--- a/dlls/win32u/sysparams.c
++++ b/dlls/win32u/sysparams.c
+@@ -3239,9 +3239,9 @@ LONG WINAPI NtUserChangeDisplaySettings( UNICODE_STRING *devname, DEVMODEW *devm
+ 
+     if (!(adapter = find_adapter( devname ))) return DISP_CHANGE_BADPARAM;
+ 
+-    if (!adapter_get_full_mode( adapter, devmode, &full_mode )) ret = DISP_CHANGE_BADMODE;
++    if (flags & (CDS_TEST | CDS_FULLSCREEN | CDS_NORESET)) ret = DISP_CHANGE_SUCCESSFUL;
++    else if (!adapter_get_full_mode( adapter, devmode, &full_mode )) ret = DISP_CHANGE_BADMODE;
+     else if ((flags & CDS_UPDATEREGISTRY) && !adapter_set_registry_settings( adapter, &full_mode )) ret = DISP_CHANGE_NOTUPDATED;
+-    else if (flags & (CDS_TEST | CDS_NORESET)) ret = DISP_CHANGE_SUCCESSFUL;
+     else ret = apply_display_settings( adapter->dev.device_name, &full_mode, hwnd, flags, lparam );
+     adapter_release( adapter );
+ 

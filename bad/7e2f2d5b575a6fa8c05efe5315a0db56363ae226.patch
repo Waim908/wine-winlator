@@ -1,0 +1,52 @@
+From 7e2f2d5b575a6fa8c05efe5315a0db56363ae226 Mon Sep 17 00:00:00 2001
+From: BrunoSX <brunodeveloper85@gmail.com>
+Date: Thu, 17 Apr 2025 09:52:16 -0300
+Subject: [PATCH] winex11: Add _NET_WM_SURFACE to window property
+
+---
+ dlls/winex11.drv/window.c      | 4 ++++
+ dlls/winex11.drv/x11drv.h      | 1 +
+ dlls/winex11.drv/x11drv_main.c | 3 ++-
+ 3 files changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/dlls/winex11.drv/window.c b/dlls/winex11.drv/window.c
+index d39a96eb..c793155b 100755
+--- a/dlls/winex11.drv/window.c
++++ b/dlls/winex11.drv/window.c
+@@ -1557,6 +1557,10 @@ Window create_client_window( HWND hwnd, const XVisualInfo *visual )
+                                                CWBackingStore | CWColormap | CWBorderPixel, &attr );
+     if (data->client_window)
+     {
++        const BOOL is_surface = TRUE;
++        XChangeProperty( gdi_display, data->client_window, x11drv_atom(_NET_WM_SURFACE),
++                         XA_CARDINAL, 8, PropModeReplace, (unsigned char *)&is_surface, 1 );
++        
+         XSaveContext( data->display, data->client_window, winContext, (char *)data->hwnd );
+         XMapWindow( gdi_display, data->client_window );
+         if (data->whole_window)
+diff --git a/dlls/winex11.drv/x11drv.h b/dlls/winex11.drv/x11drv.h
+index 9c6e5f86..490ea9dc 100755
+--- a/dlls/winex11.drv/x11drv.h
++++ b/dlls/winex11.drv/x11drv.h
+@@ -552,6 +552,7 @@ enum x11drv_atoms
+     XATOM_text_uri_list,
+     XATOM__NET_WM_HWND,
+     XATOM__NET_WM_WOW64,
++    XATOM__NET_WM_SURFACE,
+     NB_XATOMS
+ };
+ 
+diff --git a/dlls/winex11.drv/x11drv_main.c b/dlls/winex11.drv/x11drv_main.c
+index 5c6a3394..3db0ee7a 100755
+--- a/dlls/winex11.drv/x11drv_main.c
++++ b/dlls/winex11.drv/x11drv_main.c
+@@ -216,7 +216,8 @@ static const char * const atom_names[NB_XATOMS - FIRST_XATOM] =
+     "text/richtext",
+     "text/uri-list",
+     "_NET_WM_HWND",
+-    "_NET_WM_WOW64"
++    "_NET_WM_WOW64",
++    "_NET_WM_SURFACE"
+ };
+ 
+ /***********************************************************************
