@@ -3,7 +3,7 @@ rm -rf /data/data/com.winlator/files/rootfs/home/xuser/.wine
 rm -rf /tmp/output-whp
 mkdir -p /data/data/com.winlator/files/rootfs/tmp
 mkdir -p /data/data/com.winlator/files/rootfs/home/xuser/.wine
-if [[ -z wineName ]]; then
+if [[ -z $wineName ]]; then
   echo "你必须声明wineName变量"
   echo "格式必须为wine-开头，内容只能由数字和-组成"
   exit 1
