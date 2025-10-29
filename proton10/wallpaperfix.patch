@@ -1,38 +1,6 @@
 --- p10/dlls/user32/desktop.c	2025-10-30 00:28:16.946759401 +0800
-+++ winlator9.2/dlls/user32/desktop.c	2025-10-30 00:29:26.953638175 +0800
-@@ -74,29 +74,9 @@
- }
- 
- /***********************************************************************
-- *           DesktopWndProcA
-+ *           DesktopWndProc
-  */
--LRESULT WINAPI DesktopWndProcA( HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam )
--{
--    switch (message)
--    {
--    case WM_NCCREATE:
--    case WM_NCCALCSIZE:
--    case WM_PARENTNOTIFY:
--    case WM_DISPLAYCHANGE:
--        return NtUserMessageCall( hwnd, message, wParam, lParam, 0, NtUserDesktopWindowProc, TRUE );
--
--    default:
--        if (message < WM_USER)
--            return DefWindowProcA( hwnd, message, wParam, lParam );
--        return NtUserMessageCall( hwnd, message, wParam, lParam, 0, NtUserDesktopWindowProc, TRUE );
--    }
--}
--
--/***********************************************************************
-- *           DesktopWndProcW
-- */
--LRESULT WINAPI DesktopWndProcW( HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam )
-+LRESULT WINAPI DesktopWndProc( HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam )
- {
-     switch (message)
-     {
-@@ -158,11 +138,11 @@
++++ b/dlls/user32/desktop.c	2025-10-30 00:58:47.754589234 +0800
+@@ -158,11 +158,11 @@
              }
              else
              {
