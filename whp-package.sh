@@ -1,18 +1,24 @@
 #!/bin/bash
-rm -rf 
+rm -rf /data/data/com.winlator/files/rootfs/home/xuser/.wine
+rm -rf /tmp/output-whp
 mkdir -p /data/data/com.winlator/files/rootfs/tmp
 mkdir -p /data/data/com.winlator/files/rootfs/home/xuser/.wine
+if [[ -z wineName ]]; then
+  echo "你必须声明wineName变量"
+  echo "格式必须为wine-开头，内容只能由数字和-组成"
+  exit 1
+fi
 export WINEESYNC=1
 export WINEFSYNC=1
 export WINEPREFIX=/data/data/com.winlator/files/rootfs/home/xuser/.wine
 export winePath=$1
 export wineRoot=$2
 # need wineVer
-if [[ command -v zstd ]]; then
+if ! command -v zstd; then
   echo "zstd未安装"
   exit 1
 fi
-if [[ command -v xz ]]; then
+if ! command -v xz; then
   echo "xz未安装"
   exit 1
 fi
@@ -37,18 +43,21 @@ rm -rf $WINEPREFIX/dosdevices/*
 mkdir $WINEPREFIX/drive_x
 echo "58000000" > $WINEPREFIX/drive_x/.windows-serial
 # if [[ haveInclude == 1 ]]
+timeStamp=$(TZ=Asia/Shanghai date +%s) 
 if [[ ! $notTimestamp == 1 ]]; then
-  echo $(TZ=Asia/Shanghai date +%s) > $WINEPREFIX/.update-timestamp
+  echo $timeStamp > $WINEPREFIX/.update-timestamp
 else
   echo "disable" > $WINEPREFIX/.update-timestamp
 fi
 cd $WINEPREFIX/..
 mkdir -p /tmp/output-whp
-tar -I 'zstd -T$(nproc)' -cvf /tmp/output-whp/container-pattern-$wineVer.tzst .wine
+tar -I 'zstd -T$(nproc)' -cvf /tmp/output-whp/container-pattern-$wineName.tzst .wine
 cp -r -p $wineRoot /tmp/output-whp/
 baseName=$(basename $wineRoot)
 if [[ ! haveInclude == 1 ]]; then
   rm -rf /tmp/output-whp/$baseName/include
 fi
-tar -I 'xz -T$(nproc)' -cvf /tmp/output-whp/$wineVer-wlt.whp  /tmp/output-whp/ $baseName container-pattern-$wineVer.tzst
-echo "Output=> /tmp/output-whp/$wineVer-wlt.whp"
+cd /tmp/output-whp/
+mv $baseName $wineName-
+tar -I 'xz -T$(nproc)' -cvf /tmp/output-whp/$wineName.whp $wineName container-pattern-$timeStamp.tzst
+echo "Output=> /tmp/output-whp/$wineName.whp"
