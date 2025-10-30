@@ -1,7 +1,7 @@
 #!/bin/bash
 rm -rf /data/data/com.winlator/files/rootfs/home/xuser/.wine
 rm -rf /tmp/output-whp
-mkdir -p /data/data/com.winlator/files/rootfs/tmp
+mkdir -p /data/data/com.winlator/files/rootfs/tmp/shm
 mkdir -p /data/data/com.winlator/files/rootfs/home/xuser/.wine
 if [[ -z $wineName ]]; then
   echo "你必须声明wineName变量"
@@ -51,7 +51,7 @@ else
 fi
 cd $WINEPREFIX/..
 mkdir -p /tmp/output-whp
-tar -I 'zstd -T$(nproc)' -cvf /tmp/output-whp/container-pattern-$wineName.tzst .wine
+tar -I 'zstd -T$(nproc)' -cvf /tmp/output-whp/container-pattern-$timeStamp.tzst .wine
 cp -r -p $wineRoot /tmp/output-whp/
 baseName=$(basename $wineRoot)
 if [[ ! haveInclude == 1 ]]; then
@@ -59,5 +59,5 @@ if [[ ! haveInclude == 1 ]]; then
 fi
 cd /tmp/output-whp/
 mv $baseName $wineName-
-tar -I 'xz -T$(nproc)' -cvf /tmp/output-whp/$wineName.whp $wineName container-pattern-$timeStamp.tzst
+tar -I 'xz -T$(nproc)' -cvf /tmp/output-whp/$wineName.whp $wineName- container-pattern-$timeStamp.tzst
 echo "Output=> /tmp/output-whp/$wineName.whp"
