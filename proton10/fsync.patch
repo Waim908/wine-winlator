@@ -54,7 +54,7 @@ diff -urN proton10_wine/server/fsync.c b/server/fsync.c
 +        sprintf( shm_name, "/data/data/com.winlator/files/rootfs/tmp/wine-%lx%08lx-fsync", (unsigned long)((unsigned long long)st.st_ino >> 32), (unsigned long)st.st_ino );
      else
 -        sprintf( shm_name, "/wine-%lx-fsync", (unsigned long)st.st_ino );
-+        sprintf( shm_name, " /data/data/com.winlator/files/rootfs/tmp/wine-%lx-fsync", (unsigned long)st.st_ino );
++        sprintf( shm_name, "/data/data/com.winlator/files/rootfs/tmp/wine-%lx-fsync", (unsigned long)st.st_ino );
  
 -    if (!shm_unlink( shm_name ))
 +    if (!unlink( shm_name ))
