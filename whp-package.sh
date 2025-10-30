@@ -1,5 +1,6 @@
 #!/bin/bash
 rm -rf /data/data/com.winlator/files/rootfs/home/xuser/.wine
+rm -rf /data/data/com.winlator/files/rootfs/tmp
 rm -rf /tmp/output-whp
 mkdir -p /data/data/com.winlator/files/rootfs/tmp/shm
 mkdir -p /data/data/com.winlator/files/rootfs/home/xuser/.wine
