@@ -57,6 +57,7 @@ echo "58000000" > $WINEPREFIX/drive_x/.windows-serial
 # if [[ haveInclude == 1 ]]
 timeStamp=$(TZ=Asia/Shanghai date +%s)
 if [[ ! $notTimestamp == 1 ]]; then
+  # 实际使用可能会强制替换为disable ，也就是说这个意义不大，仅作确认更新时间用
   echo $timeStamp > $WINEPREFIX/.update-timestamp
 else
   echo "disable" > $WINEPREFIX/.update-timestamp
