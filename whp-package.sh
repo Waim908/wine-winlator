@@ -29,12 +29,12 @@ else
   export USER=xuser
   if [[ $useBox64 == 1 ]]; then
     echo "使用box64执行"
-    if ! box64 $winePath/wineboot &; then
+    if ! box64 $winePath/wineboot 2>&1 >/dev/tty &; then
       echo "失败"
       exit 1
     fi
   else
-    if ! $winePath/wineboot &; then
+    if ! $winePath/wineboot 2>&1 >/dev/tty &; then
       echo "失败"
       exit 1
     fi
