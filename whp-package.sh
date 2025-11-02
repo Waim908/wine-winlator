@@ -72,5 +72,5 @@ if [[ ! haveInclude == 1 ]]; then
 fi
 cd /tmp/output-whp/
 mv $baseName wine-$wineVer-
-tar -I 'xz -T$(nproc)' -cvf /tmp/output-whp/wine-$wineVer.whp $wineVer container-pattern-$wineVer.tzst
+tar -I 'xz -T$(nproc)' -cvf /tmp/output-whp/wine-$wineVer.whp wine-$wineVer- container-pattern-$wineVer.tzst
 echo "Output=> /tmp/output-whp/wine-$wineVer.whp"
