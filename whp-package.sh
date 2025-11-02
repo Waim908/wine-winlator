@@ -59,5 +59,5 @@ if [[ ! haveInclude == 1 ]]; then
 fi
 cd /tmp/output-whp/
 mv $baseName $wineName-
-tar -I 'xz -T$(nproc)' -cvf /tmp/output-whp/$wineName.whp $wineName container-pattern-$timeStamp.tzst
+tar -I 'xz -T$(nproc)' -cvf /tmp/output-whp/$wineName.whp $wineName container-pattern-$wineName.tzst
 echo "Output=> /tmp/output-whp/$wineName.whp"
