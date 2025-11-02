@@ -12,8 +12,8 @@ fi
 export WINEESYNC=1
 export WINEFSYNC=1
 export WINEPREFIX=/data/data/com.winlator/files/rootfs/home/xuser/.wine
-export winePath=$1
-export wineRoot=$2
+export winePath=$1/bin
+export wineRoot=$1
 # need wineVer
 if ! command -v zstd; then
   echo "zstd未安装"
@@ -24,7 +24,7 @@ if ! command -v xz; then
   exit 1
 fi
 if [[ -z $winePath ]]; then
-  echo "没有在参数1定义wine可执行文件路径"
+  echo "没有在参数1定义wine可执路径"
   exit 1
 else
   if [[ $useBox64 == 1 ]]; then
