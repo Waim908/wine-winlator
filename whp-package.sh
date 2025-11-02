@@ -4,9 +4,9 @@ rm -rf /tmp/output-whp
 rm -rf /data/data/com.winlator/files/rootfs/tmp
 mkdir -p /data/data/com.winlator/files/rootfs/tmp
 mkdir -p /data/data/com.winlator/files/rootfs/home/xuser/.wine
-if [[ -z $wineName ]]; then
-  echo "你必须声明wineName变量"
-  echo "格式必须为wine-开头，内容只能由数字和-组成"
+if [[ -z $wineVer ]]; then
+  echo "你必须声明wineVer变量"
+  echo "内容只能由数字或小数和-组成"
   exit 1
 fi
 export WINEESYNC=1
@@ -64,13 +64,13 @@ else
 fi
 cd $WINEPREFIX/..
 mkdir -p /tmp/output-whp
-tar -I 'zstd -T$(nproc)' -cvf /tmp/output-whp/container-pattern-$wineName.tzst .wine
+tar -I 'zstd -T$(nproc)' -cvf /tmp/output-whp/container-pattern-$wineVer.tzst .wine
 cp -r -p $wineRoot /tmp/output-whp/
 baseName=$(basename $wineRoot)
 if [[ ! haveInclude == 1 ]]; then
   rm -rf /tmp/output-whp/$baseName/include
 fi
 cd /tmp/output-whp/
-mv $baseName $wineName-
-tar -I 'xz -T$(nproc)' -cvf /tmp/output-whp/$wineName.whp $wineName container-pattern-$wineName.tzst
-echo "Output=> /tmp/output-whp/$wineName.whp"
+mv $baseName wine-$wineVer-
+tar -I 'xz -T$(nproc)' -cvf /tmp/output-whp/wine-$wineVer.whp $wineVer container-pattern-$wineVer.tzst
+echo "Output=> /tmp/output-whp/wine-$wineVer.whp"
