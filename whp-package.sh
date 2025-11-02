@@ -1,6 +1,7 @@
 #!/bin/bash
 rm -rf /data/data/com.winlator/files/rootfs/home/xuser/.wine
 rm -rf /tmp/output-whp
+rm -rf /data/data/com.winlator/files/rootfs/tmp
 mkdir -p /data/data/com.winlator/files/rootfs/tmp
 mkdir -p /data/data/com.winlator/files/rootfs/home/xuser/.wine
 if [[ -z $wineName ]]; then
