@@ -2,7 +2,7 @@
 rm -rf /data/data/com.winlator/files/rootfs/home/xuser/.wine
 rm -rf /tmp/output-whp
 rm -rf /data/data/com.winlator/files/rootfs/tmp
-mkdir -p /data/data/com.winlator/files/rootfs/tmp
+mkdir -p /data/data/com.winlator/files/rootfs/tmp/shm
 mkdir -p /data/data/com.winlator/files/rootfs/home/xuser/.wine
 if [[ -z $wineVer ]]; then
   echo "你必须声明wineVer变量"
@@ -29,21 +29,22 @@ else
   export USER=xuser
   if [[ $useBox64 == 1 ]]; then
     echo "使用box64执行"
-    if ! eval "box64 $winePath/wineboot"; then
+    if ! box64 $winePath/wineboot &; then
       echo "失败"
       exit 1
     fi
   else
-    if ! $winePath/wineboot; then
+    if ! $winePath/wineboot &; then
       echo "失败"
       exit 1
     fi
   fi
 fi
+wait
 if [[ $useBox64 == 1 ]]; then
   wineVersion=$(box64 $winePath/wine --version)
 else
-  wineVersion=$(wine --version)
+  wineVersion=$($winePath/wine --version)
 fi
 cat > '$WINEPREFIX/drive_c/ProgramData/Microsoft/Windows/Start Menu/TkG-version.bat' << 'EOF'
 winver
