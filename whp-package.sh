@@ -30,11 +30,13 @@ else
   if [[ $useBox64 == 1 ]]; then
     echo "使用box64执行"
     box64 $winePath/wineboot 2>&1 >/dev/tty &
+    wait
   else
     $winePath/wineboot 2>&1 >/dev/tty &
+    wait
   fi
 fi
-wait
+sleep 2
 if [[ $useBox64 == 1 ]]; then
   wineVersion=$(box64 $winePath/wine --version)
 else
