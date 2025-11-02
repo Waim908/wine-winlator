@@ -37,7 +37,7 @@ find "$B_DIR" -type f | while read b_file; do
     # 检查A目录中是否存在对应文件
     if [[ -f "$a_file" ]]; then
         # 生成补丁文件名（保持原文件名）
-	if [[ $1 == --all_in_dir ]]; then
+	if [[ $all_in == 1 ]]; then
             patch_name="patches/$(basename ${relative_path}).patch"
 	else
 	    patch_name="patches/${relative_path}.patch"
