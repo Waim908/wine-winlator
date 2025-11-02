@@ -14,7 +14,6 @@ export WINEFSYNC=1
 export WINEPREFIX=/data/data/com.winlator/files/rootfs/home/xuser/.wine
 export winePath=$1/bin
 export wineRoot=$1
-# need wineVer
 if ! command -v zstd; then
   echo "zstd未安装"
   exit 1
@@ -27,6 +26,7 @@ if [[ -z $winePath ]]; then
   echo "没有在参数1定义wine可执路径"
   exit 1
 else
+  export USER=xuser
   if [[ $useBox64 == 1 ]]; then
     echo "使用box64执行"
     if ! eval "box64 $winePath/wineboot"; then
@@ -40,11 +40,22 @@ else
     fi
   fi
 fi
+if [[ $useBox64 == 1 ]]; then
+  wineVersion=$(box64 $winePath/wine --version)
+else
+  wineVersion=$(wine --version)
+fi
+cat > '$WINEPREFIX/drive_c/ProgramData/Microsoft/Windows/Start Menu/TkG-version.bat' << 'EOF'
+winver
+echo "Wine Version: ${wineVersion}"
+echo "More staging settings in winecfg"
+echo "[Waim908/wine-winlator](https://github.com/Waim908/wine-winlator)"
+EOF
 rm -rf $WINEPREFIX/dosdevices/*
 mkdir $WINEPREFIX/drive_x
 echo "58000000" > $WINEPREFIX/drive_x/.windows-serial
 # if [[ haveInclude == 1 ]]
-timeStamp=$(TZ=Asia/Shanghai date +%s) 
+timeStamp=$(TZ=Asia/Shanghai date +%s)
 if [[ ! $notTimestamp == 1 ]]; then
   echo $timeStamp > $WINEPREFIX/.update-timestamp
 else
