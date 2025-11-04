@@ -1,6 +1,6 @@
 diff -urN proton_10.0/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 --- proton_10.0/dlls/xinput1_3/main.c	2025-11-03 13:28:49.364233058 +0800
-+++ b/dlls/xinput1_3/main.c	2025-11-04 16:21:23.625695991 +0800
++++ b/dlls/xinput1_3/main.c	2025-11-04 16:27:38.869046233 +0800
 @@ -3,6 +3,7 @@
   * Copyright 2008 Andrew Fenn
   * Copyright 2018 Aric Stewart
@@ -383,8 +383,7 @@ diff -urN proton_10.0/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
  }
  
 -static DWORD HID_set_state(struct xinput_controller *controller, XINPUT_VIBRATION *state)
-+static void controller_disable(void)
- {
+-{
 -    ULONG report_len = controller->hid.caps.OutputReportByteLength;
 -    PHIDP_PREPARSED_DATA preparsed = controller->hid.preparsed;
 -    char *report_buf = controller->hid.output_report_buf;
@@ -425,7 +424,8 @@ diff -urN proton_10.0/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 -}
 -
 -static void controller_disable(struct xinput_controller *controller)
--{
++static void controller_disable(void)
+ {
 -    XINPUT_VIBRATION state = {0};
 -
 -    if (!controller->enabled) return;
@@ -468,10 +468,15 @@ diff -urN proton_10.0/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
      }
 -
 -    LeaveCriticalSection(&controller->crit);
--}
--
++    
++    close_server_socket();
++    
++    LeaveCriticalSection(&controller.crit);
+ }
+ 
 -static void controller_enable(struct xinput_controller *controller)
--{
++static void stop_update_thread(void)
+ {
 -    ULONG report_len = controller->hid.caps.InputReportByteLength;
 -    char *report_buf = controller->hid.input_report_buf;
 -    XINPUT_VIBRATION state = controller->vibration;
@@ -480,21 +485,26 @@ diff -urN proton_10.0/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 -    if (controller->enabled) return;
 -    if (controller->caps.Flags & XINPUT_CAPS_FFB_SUPPORTED) HID_set_state(controller, &state);
 -    controller->enabled = TRUE;
--
++    ResetEvent(update_event);
++    SetEvent(stop_event);
++    WaitForSingleObject(done_event, INFINITE);
+ 
 -    memset(&controller->hid.read_ovl, 0, sizeof(controller->hid.read_ovl));
 -    controller->hid.read_ovl.hEvent = controller->hid.read_event;
 -    ret = ReadFile(controller->device, report_buf, report_len, NULL, &controller->hid.read_ovl);
 -    if (!ret && GetLastError() != ERROR_IO_PENDING) controller_destroy(controller, TRUE);
 -    else SetEvent(update_event);
++    CloseHandle(start_event);
++    CloseHandle(stop_event);
++    CloseHandle(done_event);
++    CloseHandle(update_event);
 +    
-+    close_server_socket();
-+    
-+    LeaveCriticalSection(&controller.crit);
++    controller_destroy();
  }
  
 -static BOOL controller_init(struct xinput_controller *controller, PHIDP_PREPARSED_DATA preparsed,
 -                            HIDP_CAPS *caps, HANDLE device, const WCHAR *device_path)
-+static void stop_update_thread(void)
++static void controller_enable(void)
  {
 -    HANDLE event = NULL;
 -
@@ -633,22 +643,12 @@ diff -urN proton_10.0/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 -        if (*free_slot != XUSER_MAX_COUNT) open_device_at_index(controllers[i].device_path, *free_slot);
 -        *free_slot = i;
 -    }
-+    ResetEvent(update_event);
-+    SetEvent(stop_event);
-+    WaitForSingleObject(done_event, INFINITE);
- 
+-
 -    return FALSE;
-+    CloseHandle(start_event);
-+    CloseHandle(stop_event);
-+    CloseHandle(done_event);
-+    CloseHandle(update_event);
-+    
-+    controller_destroy();
- }
- 
+-}
+-
 -static BOOL try_add_device(const WCHAR *device_path)
-+static void controller_enable(void)
- {
+-{
 -    SP_DEVICE_INTERFACE_DATA iface = {sizeof(iface)};
 -    int i;
 -
@@ -990,9 +990,9 @@ diff -urN proton_10.0/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 -    }
 -    while ((ret = MsgWaitForMultipleObjectsEx(count, events, 2000, QS_ALLINPUT, MWMO_ALERTABLE)) <= count ||
 -            ret == WAIT_TIMEOUT);
- 
--    ERR("wait failed in the update thread, ret %lu, error %lu\n", ret, GetLastError());
 -
+-    ERR("wait failed in the update thread, ret %lu, error %lu\n", ret, GetLastError());
+ 
 -    UnregisterDeviceNotification(notif);
 -    DestroyWindow(hwnd);
 -    UnregisterClassW(cls.lpszClassName, xinput_instance);
@@ -1029,11 +1029,11 @@ diff -urN proton_10.0/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 +
 +    done_event = CreateEventA(NULL, FALSE, FALSE, NULL);
 +    if (!done_event) ERR("failed to create done event, error %lu\n", GetLastError());
-+
-+    update_event = CreateEventA(NULL, TRUE, FALSE, NULL);
-+    if (!update_event) ERR("failed to create update event, error %lu\n", GetLastError());    
  
 -    thread = CreateThread(NULL, 0, hid_update_thread_proc, NULL, 0, NULL);
++    update_event = CreateEventA(NULL, TRUE, FALSE, NULL);
++    if (!update_event) ERR("failed to create update event, error %lu\n", GetLastError());    
++
 +    thread = CreateThread(NULL, 0, controller_update_thread_proc, NULL, 0, NULL);
      if (!thread) ERR("failed to create update thread, error %lu\n", GetLastError());
      CloseHandle(thread);
@@ -1043,8 +1043,7 @@ diff -urN proton_10.0/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
  }
  
 -static BOOL controller_lock(struct xinput_controller *controller)
-+static BOOL controller_is_connected(DWORD index)
- {
+-{
 -    if (!controller->device) return FALSE;
 -
 -    EnterCriticalSection(&controller->crit);
@@ -1059,7 +1058,8 @@ diff -urN proton_10.0/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 -}
 -
 -static void controller_unlock(struct xinput_controller *controller)
--{
++static BOOL controller_is_connected(DWORD index)
+ {
 -    LeaveCriticalSection(&controller->crit);
 +    return index == 0 && controller.connected;
  }
@@ -1307,7 +1307,7 @@ diff -urN proton_10.0/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
  }
  
  DWORD WINAPI DECLSPEC_HOTPATCH XInputGetCapabilities(DWORD index, DWORD flags, XINPUT_CAPABILITIES *capabilities)
-@@ -1118,61 +744,55 @@
+@@ -1118,61 +744,52 @@
      ret = XInputGetCapabilitiesEx(1, index, flags, &caps_ex);
  
      if (!ret) *capabilities = caps_ex.Capabilities;
@@ -1385,7 +1385,4 @@ diff -urN proton_10.0/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 + * The Wine project - Xinput Joystick Library
 + * Copyright 2008 Andrew Fenn
 + * Copyright 2018 Aric Stewart
-+/*
-+ * The Wine project - Xinput Joystick Library
-+ * Copyright 2008 Andrew Fenn
-+ * Copyright 2018 Aric Stewart
++/
