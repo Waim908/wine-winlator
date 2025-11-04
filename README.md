@@ -1,6 +1,6 @@
 # wine-winlator
 
-# 本项目基于 [LGPL2.1](https://www.gnu.org/licenses/old-licenses/lgpl-2.1.en.html)协议开源
+# 本项目基于 [LGPL2.1](LICENSE)协议开源
 
 winlator11 hostei mod wine  x86_64 补丁与releases
 
