@@ -1,6 +1,6 @@
 diff -urN proton_10.0/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 --- proton_10.0/dlls/xinput1_3/main.c	2025-11-03 13:28:49.364233058 +0800
-+++ b/dlls/xinput1_3/main.c	2025-11-03 20:01:29.890436303 +0800
++++ b/dlls/xinput1_3/main.c	2025-11-04 09:42:06.508179460 +0800
 @@ -3,6 +3,7 @@
   * Copyright 2008 Andrew Fenn
   * Copyright 2018 Aric Stewart
@@ -55,7 +55,7 @@ diff -urN proton_10.0/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
  WINE_DEFAULT_DEBUG_CHANNEL(xinput);
  
  struct xinput_controller
-@@ -57,408 +75,147 @@
+@@ -57,720 +75,364 @@
      XINPUT_CAPABILITIES caps;
      XINPUT_STATE state;
      XINPUT_GAMEPAD last_keystroke;
@@ -141,22 +141,33 @@ diff -urN proton_10.0/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
  static HANDLE steam_overlay_event;
  
 -static void check_value_caps(struct xinput_controller *controller, USHORT usage, HIDP_VALUE_CAPS *caps)
-+static void close_server_socket(void)
- {
+-{
 -    switch (usage)
-+    if (server_sock != INVALID_SOCKET)
-     {
+-    {
 -    case HID_USAGE_GENERIC_X: controller->hid.lx_caps = *caps; break;
 -    case HID_USAGE_GENERIC_Y: controller->hid.ly_caps = *caps; break;
 -    case HID_USAGE_GENERIC_Z: controller->hid.lt_caps = *caps; break;
 -    case HID_USAGE_GENERIC_RX: controller->hid.rx_caps = *caps; break;
 -    case HID_USAGE_GENERIC_RY: controller->hid.ry_caps = *caps; break;
 -    case HID_USAGE_GENERIC_RZ: controller->hid.rt_caps = *caps; break;
++static SOCKET server_sock = INVALID_SOCKET;
++static BOOL winsock_loaded = FALSE;
++static char xinput_min_index = 3;
++
++static void close_server_socket(void)
++{
++    if (server_sock != INVALID_SOCKET)
++    {
 +        closesocket(server_sock);
 +        server_sock = INVALID_SOCKET;
++    }
++    if (winsock_loaded)
++    {
++        WSACleanup();
++        winsock_loaded = FALSE;
      }
--}
--
+ }
+ 
 -static void check_waveform_caps(struct xinput_controller *controller, HANDLE device, PHIDP_PREPARSED_DATA preparsed,
 -                                HIDP_LINK_COLLECTION_NODE *collections, HIDP_VALUE_CAPS *caps)
 -{
@@ -173,17 +184,13 @@ diff -urN proton_10.0/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 -
 -    if (collections[parent].LinkUsagePage != HID_USAGE_PAGE_HAPTICS ||
 -        collections[parent].LinkUsage != HID_USAGE_HAPTICS_SIMPLE_CONTROLLER)
-+    if (winsock_loaded)
-     {
+-    {
 -        WARN("Failed to find haptics simple controller collection\n");
 -        return;
-+        WSACleanup();
-+        winsock_loaded = FALSE;
-     }
+-    }
 -    phy_usages.UsagePage = collections[collections[parent].Parent].LinkUsagePage;
 -    phy_usages.Usage = collections[collections[parent].Parent].LinkUsage;
-+}
- 
+-
 -    status = HidP_InitializeReportForID(HidP_Feature, caps->ReportID, preparsed, report_buf, report_len);
 -    if (status != HIDP_STATUS_SUCCESS) WARN("HidP_InitializeReportForID returned %#lx\n", status);
 -    if (!HidD_GetFeature(device, report_buf, report_len))
@@ -191,30 +198,7 @@ diff -urN proton_10.0/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 -        WARN("Failed to get waveform list report, error %lu\n", GetLastError());
 -        return;
 -    }
-+static BOOL create_server_socket(void)
-+{    
-+    WSADATA wsa_data;
-+    struct sockaddr_in server_addr;
-+    int res;
-+    
-+    close_server_socket();
-+    
-+    winsock_loaded = WSAStartup(MAKEWORD(2,2), &wsa_data) == NO_ERROR;
-+    if (!winsock_loaded) return FALSE;
-+    
-+    server_addr.sin_family = AF_INET;
-+    server_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
-+    server_addr.sin_port = htons(SERVER_PORT);
-+    
-+    server_sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-+    if (server_sock == INVALID_SOCKET) return FALSE;
-+
-+    res = bind(server_sock, (struct sockaddr*)&server_addr, sizeof(server_addr));
-+    if (res == SOCKET_ERROR) return FALSE;
-+    
-+    return TRUE;
-+}
- 
+-
 -    status = HidP_GetUsageValue(HidP_Feature, caps->UsagePage, caps->LinkCollection, caps->NotRange.Usage,
 -                                &waveform, preparsed, report_buf, report_len);
 -    if (status != HIDP_STATUS_SUCCESS) WARN("HidP_GetUsageValue returned %#lx\n", status);
@@ -240,10 +224,33 @@ diff -urN proton_10.0/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 -        controller->hid.haptics_buzz_caps = value_caps;
 -    }
 -    else FIXME("Unsupported waveform type %#lx\n", waveform);
--}
--
++static BOOL create_server_socket(void)
++{    
++    WSADATA wsa_data;
++    struct sockaddr_in server_addr;
++    int res;
++    
++    close_server_socket();
++    
++    winsock_loaded = WSAStartup(MAKEWORD(2,2), &wsa_data) == NO_ERROR;
++    if (!winsock_loaded) return FALSE;
++    
++    server_addr.sin_family = AF_INET;
++    server_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
++    server_addr.sin_port = htons(SERVER_PORT);
++    
++    server_sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
++    if (server_sock == INVALID_SOCKET) return FALSE;
++
++    res = bind(server_sock, (struct sockaddr*)&server_addr, sizeof(server_addr));
++    if (res == SOCKET_ERROR) return FALSE;
++    
++    return TRUE;
+ }
+ 
 -static BOOL controller_check_caps(struct xinput_controller *controller, HANDLE device, PHIDP_PREPARSED_DATA preparsed)
--{
++static int get_gamepad_request(void)
+ {
 -    USHORT caps_count = 0, waveform_caps_count = 0;
 -    XINPUT_CAPABILITIES *caps = &controller->caps;
 -    HIDP_LINK_COLLECTION_NODE *collections;
@@ -253,8 +260,6 @@ diff -urN proton_10.0/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 -    HIDP_VALUE_CAPS *value_caps;
 -    int i, u, button_count = 0;
 -    NTSTATUS status;
-+static int get_gamepad_request(void)
-+{
 +    int res, client_addr_len, gamepad_id;
 +    char buffer[BUFFER_SIZE];
 +    struct sockaddr_in client_addr;
@@ -378,7 +383,8 @@ diff -urN proton_10.0/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
  }
  
 -static DWORD HID_set_state(struct xinput_controller *controller, XINPUT_VIBRATION *state)
--{
++static void controller_disable(void)
+ {
 -    ULONG report_len = controller->hid.caps.OutputReportByteLength;
 -    PHIDP_PREPARSED_DATA preparsed = controller->hid.preparsed;
 -    char *report_buf = controller->hid.output_report_buf;
@@ -419,8 +425,7 @@ diff -urN proton_10.0/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 -}
 -
 -static void controller_disable(struct xinput_controller *controller)
-+static void controller_disable(void)
- {
+-{
 -    XINPUT_VIBRATION state = {0};
 -
 -    if (!controller->enabled) return;
@@ -435,11 +440,18 @@ diff -urN proton_10.0/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
  }
  
 -static void controller_destroy(struct xinput_controller *controller, BOOL already_removed)
--{
++static void controller_destroy(void)
+ {
 -    EnterCriticalSection(&controller->crit);
 -
 -    if (controller->device)
--    {
++    EnterCriticalSection(&controller.crit);
++    
++    release_gamepad_request();
++    xinput_min_index = 3;
++    
++    if (controller.connected)
+     {
 -        TRACE("removing device %s from index %Iu\n", debugstr_w(controller->device_path), controller - controllers);
 -
 -        if (!already_removed) controller_disable(controller);
@@ -451,7 +463,9 @@ diff -urN proton_10.0/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 -        free(controller->hid.feature_report_buf);
 -        HidD_FreePreparsedData(controller->hid.preparsed);
 -        memset(&controller->hid, 0, sizeof(controller->hid));
--    }
++        controller_disable();
++        controller.connected = FALSE;
+     }
 -
 -    LeaveCriticalSection(&controller->crit);
 -}
@@ -472,13 +486,21 @@ diff -urN proton_10.0/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 -    ret = ReadFile(controller->device, report_buf, report_len, NULL, &controller->hid.read_ovl);
 -    if (!ret && GetLastError() != ERROR_IO_PENDING) controller_destroy(controller, TRUE);
 -    else SetEvent(update_event);
--}
--
++    
++    close_server_socket();
++    
++    LeaveCriticalSection(&controller.crit);
+ }
+ 
 -static BOOL controller_init(struct xinput_controller *controller, PHIDP_PREPARSED_DATA preparsed,
 -                            HIDP_CAPS *caps, HANDLE device, const WCHAR *device_path)
--{
++static void stop_update_thread(void)
+ {
 -    HANDLE event = NULL;
--
++    ResetEvent(update_event);
++    SetEvent(stop_event);
++    WaitForSingleObject(done_event, INFINITE);
+ 
 -    controller->hid.caps = *caps;
 -    if (!(controller->hid.feature_report_buf = calloc(1, controller->hid.caps.FeatureReportByteLength))) goto failed;
 -    if (!controller_check_caps(controller, device, preparsed)) goto failed;
@@ -509,8 +531,14 @@ diff -urN proton_10.0/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 -    memset(&controller->hid, 0, sizeof(controller->hid));
 -    CloseHandle(event);
 -    return FALSE;
--}
--
++    CloseHandle(start_event);
++    CloseHandle(stop_event);
++    CloseHandle(done_event);
++    CloseHandle(update_event);
++    
++    controller_destroy();
+ }
+ 
 -static void get_registry_keys(HKEY *defkey, HKEY *appkey)
 -{
 -    WCHAR buffer[MAX_PATH + 26], *name = buffer, *tmp;
@@ -535,8 +563,7 @@ diff -urN proton_10.0/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 -}
 -
 -static BOOL device_is_overridden(HANDLE device)
-+static void stop_update_thread(void)
- {
+-{
 -    WCHAR name[MAX_PATH], buffer[MAX_PATH];
 -    DWORD size = sizeof(buffer);
 -    BOOL disable = FALSE;
@@ -556,30 +583,49 @@ diff -urN proton_10.0/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 -    if (appkey) RegCloseKey(appkey);
 -    if (defkey) RegCloseKey(defkey);
 -    return disable;
-+    ResetEvent(update_event);
-+    SetEvent(stop_event);
-+    WaitForSingleObject(done_event, INFINITE);
-+
-+    CloseHandle(start_event);
-+    CloseHandle(stop_event);
-+    CloseHandle(done_event);
-+    CloseHandle(update_event);
-+    
-+    controller_destroy();
- }
- 
- static BOOL open_device_at_index(const WCHAR *device_path, int index)
-@@ -498,87 +255,142 @@
-     return TRUE;
- }
- 
+-}
+-
+-static BOOL open_device_at_index(const WCHAR *device_path, int index)
+-{
+-    SP_DEVICE_INTERFACE_DATA iface = {sizeof(iface)};
+-    PHIDP_PREPARSED_DATA preparsed;
+-    HIDP_CAPS caps;
+-    NTSTATUS status;
+-    HANDLE device;
+-
+-    device = CreateFileW(device_path, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE,
+-                         NULL, OPEN_EXISTING, FILE_FLAG_OVERLAPPED | FILE_FLAG_NO_BUFFERING, NULL);
+-    if (device == INVALID_HANDLE_VALUE) return TRUE;
+-
+-    preparsed = NULL;
+-    if (!HidD_GetPreparsedData(device, &preparsed))
+-        WARN("ignoring HID device, HidD_GetPreparsedData failed with error %lu\n", GetLastError());
+-    else if ((status = HidP_GetCaps(preparsed, &caps)) != HIDP_STATUS_SUCCESS)
+-        WARN("ignoring HID device, HidP_GetCaps returned %#lx\n", status);
+-    else if (caps.UsagePage != HID_USAGE_PAGE_GENERIC)
+-        WARN("ignoring HID device, unsupported usage page %04x\n", caps.UsagePage);
+-    else if (caps.Usage != HID_USAGE_GENERIC_GAMEPAD && caps.Usage != HID_USAGE_GENERIC_JOYSTICK &&
+-             caps.Usage != HID_USAGE_GENERIC_MULTI_AXIS_CONTROLLER)
+-        WARN("ignoring HID device, unsupported usage %04x:%04x\n", caps.UsagePage, caps.Usage);
+-    else if (device_is_overridden(device))
+-        WARN("ignoring HID device, overridden for dinput\n");
+-    else if (!controller_init(&controllers[index], preparsed, &caps, device, device_path))
+-        WARN("ignoring HID device, failed to initialize\n");
+-    else
+-    {
+-        TRACE("opened device %s at index %u\n", debugstr_w(device_path), index);
+-        return TRUE;
+-    }
+-
+-    CloseHandle(device);
+-    HidD_FreePreparsedData(preparsed);
+-    return TRUE;
+-}
+-
 -static BOOL find_opened_device(const WCHAR *device_path, int *free_slot)
 -{
 -    int i;
-+static SOCKET server_sock = INVALID_SOCKET;
-+static BOOL winsock_loaded = FALSE;
-+static char xinput_min_index = 3;
- 
+-
 -    *free_slot = XUSER_MAX_COUNT;
 -    for (i = XUSER_MAX_COUNT; i > 0; i--)
 -    {
@@ -599,7 +645,10 @@ diff -urN proton_10.0/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 -
 -    return FALSE;
 -}
--
++static SOCKET server_sock = INVALID_SOCKET;
++static BOOL winsock_loaded = FALSE;
++static char xinput_min_index = 3;
+ 
 -static BOOL try_add_device(const WCHAR *device_path)
 +static void controller_enable(void)
  {
@@ -663,14 +712,22 @@ diff -urN proton_10.0/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
      }
 -
 -    SetupDiDestroyDeviceInfoList(set);
- }
- 
+-}
+-
 -static LONG sign_extend(ULONG value, const HIDP_VALUE_CAPS *caps)
-+static void reset_xinput_state(XINPUT_STATE *state)
- {
+-{
 -    UINT sign = 1 << (caps->BitSize - 1);
 -    if (sign <= 1 || caps->LogicalMin >= 0) return value;
 -    return value - ((value & sign) << 1);
+ }
+ 
+-static LONG scale_value(ULONG value, const HIDP_VALUE_CAPS *caps, LONG min, LONG max)
++static void reset_xinput_state(XINPUT_STATE *state)
+ {
+-    LONG tmp = sign_extend(value, caps);
+-    if (caps->LogicalMin > caps->LogicalMax) return 0;
+-    if (caps->LogicalMin > tmp || caps->LogicalMax < tmp) return 0;
+-    return min + MulDiv(tmp - caps->LogicalMin, max - min, caps->LogicalMax - caps->LogicalMin);
 +    state->Gamepad.wButtons = 0;
 +    state->Gamepad.bLeftTrigger = 0;
 +    state->Gamepad.bRightTrigger = 0;
@@ -680,19 +737,28 @@ diff -urN proton_10.0/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 +    state->Gamepad.sThumbRY = 0;
  }
  
--static LONG scale_value(ULONG value, const HIDP_VALUE_CAPS *caps, LONG min, LONG max)
+-static void read_controller_state(struct xinput_controller *controller)
 +static void read_controller_state(void)
  {
--    LONG tmp = sign_extend(value, caps);
--    if (caps->LogicalMin > caps->LogicalMax) return 0;
--    if (caps->LogicalMin > tmp || caps->LogicalMax < tmp) return 0;
--    return min + MulDiv(tmp - caps->LogicalMin, max - min, caps->LogicalMax - caps->LogicalMin);
+-    ULONG read_len, report_len = controller->hid.caps.InputReportByteLength;
+-    char *report_buf = controller->hid.input_report_buf;
 +    char buffer[BUFFER_SIZE];
 +    int i, res, client_addr_len, gamepad_id;
 +    char dpad;
 +    short buttons, thumb_lx, thumb_ly, thumb_rx, thumb_ry;
 +    struct sockaddr_in client_addr;
-+    XINPUT_STATE state;
+     XINPUT_STATE state;
+-    NTSTATUS status;
+-    USAGE buttons[11];
+-    ULONG i, button_length, value;
+-    BOOL ret;
+-
+-    if (!GetOverlappedResult(controller->device, &controller->hid.read_ovl, &read_len, TRUE))
+-    {
+-        if (GetLastError() == ERROR_OPERATION_ABORTED) return;
+-        if (GetLastError() == ERROR_ACCESS_DENIED || GetLastError() == ERROR_INVALID_HANDLE) controller_destroy(controller, TRUE);
+-        else ERR("Failed to read input report, GetOverlappedResult failed with error %lu\n", GetLastError());
+-        return;
 +    
 +    reset_xinput_state(&state);
 +    
@@ -718,8 +784,28 @@ diff -urN proton_10.0/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 +        controller.connected = FALSE;
 +        LeaveCriticalSection(&controller.crit);
 +        goto done;
-+    }
-+
+     }
+ 
+-    button_length = ARRAY_SIZE(buttons);
+-    status = HidP_GetUsages(HidP_Input, HID_USAGE_PAGE_BUTTON, 0, buttons, &button_length, controller->hid.preparsed, report_buf, report_len);
+-    if (status != HIDP_STATUS_SUCCESS) WARN("HidP_GetUsages HID_USAGE_PAGE_BUTTON returned %#lx\n", status);
+-
+-    state.Gamepad.wButtons = 0;
+-    for (i = 0; i < button_length; i++)
+-    {
+-        switch (buttons[i])
+-        {
+-        case 1: state.Gamepad.wButtons |= XINPUT_GAMEPAD_A; break;
+-        case 2: state.Gamepad.wButtons |= XINPUT_GAMEPAD_B; break;
+-        case 3: state.Gamepad.wButtons |= XINPUT_GAMEPAD_X; break;
+-        case 4: state.Gamepad.wButtons |= XINPUT_GAMEPAD_Y; break;
+-        case 5: state.Gamepad.wButtons |= XINPUT_GAMEPAD_LEFT_SHOULDER; break;
+-        case 6: state.Gamepad.wButtons |= XINPUT_GAMEPAD_RIGHT_SHOULDER; break;
+-        case 7: state.Gamepad.wButtons |= XINPUT_GAMEPAD_BACK; break;
+-        case 8: state.Gamepad.wButtons |= XINPUT_GAMEPAD_START; break;
+-        case 9: state.Gamepad.wButtons |= XINPUT_GAMEPAD_LEFT_THUMB; break;
+-        case 10: state.Gamepad.wButtons |= XINPUT_GAMEPAD_RIGHT_THUMB; break;
+-        case 11: state.Gamepad.wButtons |= XINPUT_GAMEPAD_GUIDE; break;
 +    
 +    memcpy(&buttons, buffer + 6, 2);
 +    
@@ -746,11 +832,77 @@ diff -urN proton_10.0/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 +            case IDX_BUTTON_L3: state.Gamepad.wButtons |= XINPUT_GAMEPAD_LEFT_THUMB; break;
 +            case IDX_BUTTON_R3: state.Gamepad.wButtons |= XINPUT_GAMEPAD_RIGHT_THUMB; break;
 +            }
-+        }
-+    }
+         }
+     }
+-
+-    status = HidP_GetUsageValue(HidP_Input, HID_USAGE_PAGE_GENERIC, 0, HID_USAGE_GENERIC_HATSWITCH, &value, controller->hid.preparsed, report_buf, report_len);
+-    if (status != HIDP_STATUS_SUCCESS) WARN("HidP_GetUsageValue HID_USAGE_PAGE_GENERIC / HID_USAGE_GENERIC_HATSWITCH returned %#lx\n", status);
+-    else switch (value)
+-    {
+-    /* 8 1 2
+-     * 7 0 3
+-     * 6 5 4 */
+-    case 0: break;
+-    case 1: state.Gamepad.wButtons |= XINPUT_GAMEPAD_DPAD_UP; break;
+-    case 2: state.Gamepad.wButtons |= XINPUT_GAMEPAD_DPAD_UP | XINPUT_GAMEPAD_DPAD_RIGHT; break;
+-    case 3: state.Gamepad.wButtons |= XINPUT_GAMEPAD_DPAD_RIGHT; break;
+-    case 4: state.Gamepad.wButtons |= XINPUT_GAMEPAD_DPAD_RIGHT | XINPUT_GAMEPAD_DPAD_DOWN; break;
+-    case 5: state.Gamepad.wButtons |= XINPUT_GAMEPAD_DPAD_DOWN; break;
+-    case 6: state.Gamepad.wButtons |= XINPUT_GAMEPAD_DPAD_DOWN | XINPUT_GAMEPAD_DPAD_LEFT; break;
+-    case 7: state.Gamepad.wButtons |= XINPUT_GAMEPAD_DPAD_LEFT; break;
+-    case 8: state.Gamepad.wButtons |= XINPUT_GAMEPAD_DPAD_LEFT | XINPUT_GAMEPAD_DPAD_UP; break;
+-    }
+-
+-    status = HidP_GetUsageValue(HidP_Input, HID_USAGE_PAGE_GENERIC, 0, HID_USAGE_GENERIC_X, &value, controller->hid.preparsed, report_buf, report_len);
+-    if (status != HIDP_STATUS_SUCCESS) WARN("HidP_GetUsageValue HID_USAGE_PAGE_GENERIC / HID_USAGE_GENERIC_X returned %#lx\n", status);
+-    else state.Gamepad.sThumbLX = scale_value(value, &controller->hid.lx_caps, -32768, 32767);
+-
+-    status = HidP_GetUsageValue(HidP_Input, HID_USAGE_PAGE_GENERIC, 0, HID_USAGE_GENERIC_Y, &value, controller->hid.preparsed, report_buf, report_len);
+-    if (status != HIDP_STATUS_SUCCESS) WARN("HidP_GetUsageValue HID_USAGE_PAGE_GENERIC / HID_USAGE_GENERIC_Y returned %#lx\n", status);
+-    else state.Gamepad.sThumbLY = -scale_value(value, &controller->hid.ly_caps, -32768, 32767) - 1;
+-
+-    status = HidP_GetUsageValue(HidP_Input, HID_USAGE_PAGE_GENERIC, 0, HID_USAGE_GENERIC_RX, &value, controller->hid.preparsed, report_buf, report_len);
+-    if (status != HIDP_STATUS_SUCCESS) WARN("HidP_GetUsageValue HID_USAGE_PAGE_GENERIC / HID_USAGE_GENERIC_RX returned %#lx\n", status);
+-    else state.Gamepad.sThumbRX = scale_value(value, &controller->hid.rx_caps, -32768, 32767);
+-
+-    status = HidP_GetUsageValue(HidP_Input, HID_USAGE_PAGE_GENERIC, 0, HID_USAGE_GENERIC_RY, &value, controller->hid.preparsed, report_buf, report_len);
+-    if (status != HIDP_STATUS_SUCCESS) WARN("HidP_GetUsageValue HID_USAGE_PAGE_GENERIC / HID_USAGE_GENERIC_RY returned %#lx\n", status);
+-    else state.Gamepad.sThumbRY = -scale_value(value, &controller->hid.ry_caps, -32768, 32767) - 1;
+-
+-    status = HidP_GetUsageValue(HidP_Input, HID_USAGE_PAGE_GENERIC, 0, HID_USAGE_GENERIC_RZ, &value, controller->hid.preparsed, report_buf, report_len);
+-    if (status != HIDP_STATUS_SUCCESS) WARN("HidP_GetUsageValue HID_USAGE_PAGE_GENERIC / HID_USAGE_GENERIC_RZ returned %#lx\n", status);
+-    else state.Gamepad.bRightTrigger = scale_value(value, &controller->hid.rt_caps, 0, 255);
+-
+-    status = HidP_GetUsageValue(HidP_Input, HID_USAGE_PAGE_GENERIC, 0, HID_USAGE_GENERIC_Z, &value, controller->hid.preparsed, report_buf, report_len);
+-    if (status != HIDP_STATUS_SUCCESS) WARN("HidP_GetUsageValue HID_USAGE_PAGE_GENERIC / HID_USAGE_GENERIC_Z returned %#lx\n", status);
+-    else state.Gamepad.bLeftTrigger = scale_value(value, &controller->hid.lt_caps, 0, 255);
+-
+-    EnterCriticalSection(&controller->crit);
+-    if (controller->enabled)
+-    {
+-        state.dwPacketNumber = controller->state.dwPacketNumber + 1;
+-        controller->state = state;
+-        memset(&controller->hid.read_ovl, 0, sizeof(controller->hid.read_ovl));
+-        controller->hid.read_ovl.hEvent = controller->hid.read_event;
+-        ret = ReadFile(controller->device, report_buf, report_len, NULL, &controller->hid.read_ovl);
+-        if (!ret && GetLastError() != ERROR_IO_PENDING) controller_destroy(controller, TRUE);
+-    }
+-    LeaveCriticalSection(&controller->crit);
+-}
+-
+-static LRESULT CALLBACK xinput_devnotify_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
+-{
+-    if (msg == WM_DEVICECHANGE)
+-    {
+-        DEV_BROADCAST_DEVICEINTERFACE_W *iface = (DEV_BROADCAST_DEVICEINTERFACE_W *)lparam;
+-        if (wparam == DBT_DEVICEARRIVAL) try_add_device(iface->dbcc_name);
+-        if (wparam == DBT_DEVICEREMOVECOMPLETE) try_remove_device(iface->dbcc_name);
+-    }
+-
+-    return DefWindowProcW(hwnd, msg, wparam, lparam);
 +    
 +    if ((buttons & (1<<10))) state.Gamepad.bLeftTrigger = 255;
-+    if ((buttons & (1<<11))) state.Gamepad.bRightTrigger = 255
++    if ((buttons & (1<<11))) state.Gamepad.bRightTrigger = 255;
 +
 +    switch (dpad)
 +    {
@@ -776,10 +928,8 @@ diff -urN proton_10.0/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 +    LeaveCriticalSection(&controller.crit);
  }
  
- static void read_controller_state(struct xinput_controller *controller)
-@@ -691,86 +503,59 @@
- 
- static DWORD WINAPI hid_update_thread_proc(void *param)
+-static DWORD WINAPI hid_update_thread_proc(void *param)
++static DWORD WINAPI controller_update_thread_proc(void *param)
  {
 -    struct xinput_controller *devices[XUSER_MAX_COUNT + 1];
 -    HANDLE events[XUSER_MAX_COUNT + 1];
@@ -849,9 +999,9 @@ diff -urN proton_10.0/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 -    }
 -    while ((ret = MsgWaitForMultipleObjectsEx(count, events, 2000, QS_ALLINPUT, MWMO_ALERTABLE)) <= count ||
 -            ret == WAIT_TIMEOUT);
- 
--    ERR("wait failed in the update thread, ret %lu, error %lu\n", ret, GetLastError());
 -
+-    ERR("wait failed in the update thread, ret %lu, error %lu\n", ret, GetLastError());
+ 
 -    UnregisterDeviceNotification(notif);
 -    DestroyWindow(hwnd);
 -    UnregisterClassW(cls.lpszClassName, xinput_instance);
@@ -885,11 +1035,11 @@ diff -urN proton_10.0/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 -    if (!update_event) ERR("failed to create update event, error %lu\n", GetLastError());
 +    stop_event = CreateEventA(NULL, FALSE, FALSE, NULL);
 +    if (!stop_event) ERR("failed to create stop event, error %lu\n", GetLastError());
-+
-+    done_event = CreateEventA(NULL, FALSE, FALSE, NULL);
-+    if (!done_event) ERR("failed to create done event, error %lu\n", GetLastError());
  
 -    thread = CreateThread(NULL, 0, hid_update_thread_proc, NULL, 0, NULL);
++    done_event = CreateEventA(NULL, FALSE, FALSE, NULL);
++    if (!done_event) ERR("failed to create done event, error %lu\n", GetLastError());
++
 +    update_event = CreateEventA(NULL, TRUE, FALSE, NULL);
 +    if (!update_event) ERR("failed to create update event, error %lu\n", GetLastError());    
 +
@@ -897,13 +1047,12 @@ diff -urN proton_10.0/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
      if (!thread) ERR("failed to create update thread, error %lu\n", GetLastError());
      CloseHandle(thread);
  
-@@ -784,19 +569,9 @@
+@@ -784,24 +446,9 @@
      InitOnceExecuteOnce(&init_once, start_update_thread_once, NULL, NULL);
  }
  
 -static BOOL controller_lock(struct xinput_controller *controller)
-+static BOOL controller_is_connected(DWORD index)
- {
+-{
 -    if (!controller->device) return FALSE;
 -
 -    EnterCriticalSection(&controller->crit);
@@ -915,11 +1064,17 @@ diff -urN proton_10.0/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 -    }
 -
 -    return TRUE;
+-}
+-
+-static void controller_unlock(struct xinput_controller *controller)
++static BOOL controller_is_connected(DWORD index)
+ {
+-    LeaveCriticalSection(&controller->crit);
 +    return index == 0 && controller.connected;
  }
  
- static void controller_unlock(struct xinput_controller *controller)
-@@ -814,14 +589,16 @@
+ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved)
+@@ -814,14 +461,16 @@
          xinput_instance = inst;
          DisableThreadLibraryCalls(inst);
          break;
@@ -938,7 +1093,7 @@ diff -urN proton_10.0/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
      TRACE("enable %d.\n", enable);
  
      /* Setting to false will stop messages from XInputSetState being sent
-@@ -830,32 +607,24 @@
+@@ -830,32 +479,24 @@
      be sent */
      start_update_thread();
  
@@ -980,7 +1135,7 @@ diff -urN proton_10.0/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
  }
  
  /* Some versions of SteamOverlayRenderer hot-patch XInputGetStateEx() and call
-@@ -867,12 +636,13 @@
+@@ -867,12 +508,13 @@
      start_update_thread();
  
      if (index >= XUSER_MAX_COUNT) return ERROR_BAD_ARGUMENTS;
@@ -1000,7 +1155,7 @@ diff -urN proton_10.0/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
  
      return ERROR_SUCCESS;
  }
-@@ -932,8 +702,8 @@
+@@ -932,8 +574,8 @@
      }
  }
  
@@ -1011,7 +1166,7 @@ diff -urN proton_10.0/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
  {
      int cur_vk = 0, cur_x_st, cur_y_st;
      int last_vk = 0, last_x_st, last_y_st;
-@@ -958,7 +728,7 @@
+@@ -958,7 +600,7 @@
              keystroke->VirtualKey = last_vk;
              keystroke->Unicode = 0; /* unused */
              keystroke->Flags = XINPUT_KEYSTROKE_KEYUP;
@@ -1020,7 +1175,7 @@ diff -urN proton_10.0/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
              keystroke->HidCode = 0;
  
              *last_x = 0;
-@@ -971,7 +741,7 @@
+@@ -971,7 +613,7 @@
          keystroke->VirtualKey = cur_vk;
          keystroke->Unicode = 0; /* unused */
          keystroke->Flags = XINPUT_KEYSTROKE_KEYDOWN;
@@ -1029,7 +1184,7 @@ diff -urN proton_10.0/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
          keystroke->HidCode = 0;
  
          *last_x = *cur_x;
-@@ -991,9 +761,8 @@
+@@ -991,9 +633,8 @@
      return value > 30;
  }
  
@@ -1040,9 +1195,12 @@ diff -urN proton_10.0/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
      const XINPUT_GAMEPAD *cur;
      DWORD ret = ERROR_EMPTY;
      int i;
-@@ -1022,26 +791,26 @@
+@@ -1020,28 +661,28 @@
+         /* note: guide button does not send an event */
+     };
  
-     if (!controller_lock(controller)) return ERROR_DEVICE_NOT_CONNECTED;
+-    if (!controller_lock(controller)) return ERROR_DEVICE_NOT_CONNECTED;
++    if (!controller_is_connected(index)) return ERROR_DEVICE_NOT_CONNECTED;
  
 -    cur = &controller->state.Gamepad;
 +    cur = &controller.state.Gamepad;
@@ -1072,7 +1230,7 @@ diff -urN proton_10.0/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
              keystroke->HidCode = 0;
              ret = ERROR_SUCCESS;
              goto done;
-@@ -1049,14 +818,14 @@
+@@ -1049,65 +690,62 @@
      }
  
      /*** triggers ***/
@@ -1090,7 +1248,10 @@ diff -urN proton_10.0/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
          ret = ERROR_SUCCESS;
          goto done;
      }
-@@ -1066,48 +835,45 @@
+ 
+-    if (trigger_is_on(cur->bRightTrigger) ^ trigger_is_on(controller->last_keystroke.bRightTrigger))
++    if (trigger_is_on(cur->bRightTrigger) ^ trigger_is_on(controller.last_keystroke.bRightTrigger))
+     {
          keystroke->VirtualKey = VK_PAD_RTRIGGER;
          keystroke->Unicode = 0; /* unused */
          keystroke->Flags = trigger_is_on(cur->bRightTrigger) ? XINPUT_KEYSTROKE_KEYDOWN : XINPUT_KEYSTROKE_KEYUP;
@@ -1155,7 +1316,7 @@ diff -urN proton_10.0/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
  }
  
  DWORD WINAPI DECLSPEC_HOTPATCH XInputGetCapabilities(DWORD index, DWORD flags, XINPUT_CAPABILITIES *capabilities)
-@@ -1118,61 +884,47 @@
+@@ -1118,61 +756,47 @@
      ret = XInputGetCapabilitiesEx(1, index, flags, &caps_ex);
  
      if (!ret) *capabilities = caps_ex.Capabilities;
