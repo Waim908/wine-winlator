@@ -1,6 +1,6 @@
 diff -urN proton_10.0/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 --- proton_10.0/dlls/xinput1_3/main.c	2025-11-03 13:28:49.364233058 +0800
-+++ b/dlls/xinput1_3/main.c	2025-11-04 09:42:06.508179460 +0800
++++ b/dlls/xinput1_3/main.c	2025-11-04 16:21:23.625695991 +0800
 @@ -3,6 +3,7 @@
   * Copyright 2008 Andrew Fenn
   * Copyright 2018 Aric Stewart
@@ -55,7 +55,7 @@ diff -urN proton_10.0/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
  WINE_DEFAULT_DEBUG_CHANNEL(xinput);
  
  struct xinput_controller
-@@ -57,720 +75,364 @@
+@@ -57,720 +75,352 @@
      XINPUT_CAPABILITIES caps;
      XINPUT_STATE state;
      XINPUT_GAMEPAD last_keystroke;
@@ -497,10 +497,7 @@ diff -urN proton_10.0/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 +static void stop_update_thread(void)
  {
 -    HANDLE event = NULL;
-+    ResetEvent(update_event);
-+    SetEvent(stop_event);
-+    WaitForSingleObject(done_event, INFINITE);
- 
+-
 -    controller->hid.caps = *caps;
 -    if (!(controller->hid.feature_report_buf = calloc(1, controller->hid.caps.FeatureReportByteLength))) goto failed;
 -    if (!controller_check_caps(controller, device, preparsed)) goto failed;
@@ -531,14 +528,8 @@ diff -urN proton_10.0/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 -    memset(&controller->hid, 0, sizeof(controller->hid));
 -    CloseHandle(event);
 -    return FALSE;
-+    CloseHandle(start_event);
-+    CloseHandle(stop_event);
-+    CloseHandle(done_event);
-+    CloseHandle(update_event);
-+    
-+    controller_destroy();
- }
- 
+-}
+-
 -static void get_registry_keys(HKEY *defkey, HKEY *appkey)
 -{
 -    WCHAR buffer[MAX_PATH + 26], *name = buffer, *tmp;
@@ -642,12 +633,18 @@ diff -urN proton_10.0/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 -        if (*free_slot != XUSER_MAX_COUNT) open_device_at_index(controllers[i].device_path, *free_slot);
 -        *free_slot = i;
 -    }
--
++    ResetEvent(update_event);
++    SetEvent(stop_event);
++    WaitForSingleObject(done_event, INFINITE);
+ 
 -    return FALSE;
--}
-+static SOCKET server_sock = INVALID_SOCKET;
-+static BOOL winsock_loaded = FALSE;
-+static char xinput_min_index = 3;
++    CloseHandle(start_event);
++    CloseHandle(stop_event);
++    CloseHandle(done_event);
++    CloseHandle(update_event);
++    
++    controller_destroy();
+ }
  
 -static BOOL try_add_device(const WCHAR *device_path)
 +static void controller_enable(void)
@@ -670,18 +667,12 @@ diff -urN proton_10.0/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 -
 -    if (find_opened_device(device_path, &i))
 -        controller_destroy(&controllers[i], TRUE);
+-}
+-
+-static void update_controller_list(void)
 +    memset(&controller.state, 0, sizeof(controller.state));
 +    controller.enabled = FALSE;
 +    controller.connected = TRUE;
-+    controller_check_caps();
-+    
-+    EnterCriticalSection(&controller.crit);
-+    controller_enable();
-+    LeaveCriticalSection(&controller.crit);
- }
- 
--static void update_controller_list(void)
-+static void controller_check_connection(void)
  {
 -    char buffer[sizeof(SP_DEVICE_INTERFACE_DETAIL_DATA_W) + MAX_PATH * sizeof(WCHAR)];
 -    SP_DEVICE_INTERFACE_DETAIL_DATA_W *detail = (SP_DEVICE_INTERFACE_DETAIL_DATA_W *)buffer;
@@ -712,22 +703,14 @@ diff -urN proton_10.0/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
      }
 -
 -    SetupDiDestroyDeviceInfoList(set);
--}
--
+ }
+ 
 -static LONG sign_extend(ULONG value, const HIDP_VALUE_CAPS *caps)
--{
++static void reset_xinput_state(XINPUT_STATE *state)
+ {
 -    UINT sign = 1 << (caps->BitSize - 1);
 -    if (sign <= 1 || caps->LogicalMin >= 0) return value;
 -    return value - ((value & sign) << 1);
- }
- 
--static LONG scale_value(ULONG value, const HIDP_VALUE_CAPS *caps, LONG min, LONG max)
-+static void reset_xinput_state(XINPUT_STATE *state)
- {
--    LONG tmp = sign_extend(value, caps);
--    if (caps->LogicalMin > caps->LogicalMax) return 0;
--    if (caps->LogicalMin > tmp || caps->LogicalMax < tmp) return 0;
--    return min + MulDiv(tmp - caps->LogicalMin, max - min, caps->LogicalMax - caps->LogicalMin);
 +    state->Gamepad.wButtons = 0;
 +    state->Gamepad.bLeftTrigger = 0;
 +    state->Gamepad.bRightTrigger = 0;
@@ -737,9 +720,17 @@ diff -urN proton_10.0/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 +    state->Gamepad.sThumbRY = 0;
  }
  
--static void read_controller_state(struct xinput_controller *controller)
+-static LONG scale_value(ULONG value, const HIDP_VALUE_CAPS *caps, LONG min, LONG max)
 +static void read_controller_state(void)
  {
+-    LONG tmp = sign_extend(value, caps);
+-    if (caps->LogicalMin > caps->LogicalMax) return 0;
+-    if (caps->LogicalMin > tmp || caps->LogicalMax < tmp) return 0;
+-    return min + MulDiv(tmp - caps->LogicalMin, max - min, caps->LogicalMax - caps->LogicalMin);
+-}
+-
+-static void read_controller_state(struct xinput_controller *controller)
+-{
 -    ULONG read_len, report_len = controller->hid.caps.InputReportByteLength;
 -    char *report_buf = controller->hid.input_report_buf;
 +    char buffer[BUFFER_SIZE];
@@ -999,9 +990,9 @@ diff -urN proton_10.0/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 -    }
 -    while ((ret = MsgWaitForMultipleObjectsEx(count, events, 2000, QS_ALLINPUT, MWMO_ALERTABLE)) <= count ||
 -            ret == WAIT_TIMEOUT);
--
--    ERR("wait failed in the update thread, ret %lu, error %lu\n", ret, GetLastError());
  
+-    ERR("wait failed in the update thread, ret %lu, error %lu\n", ret, GetLastError());
+-
 -    UnregisterDeviceNotification(notif);
 -    DestroyWindow(hwnd);
 -    UnregisterClassW(cls.lpszClassName, xinput_instance);
@@ -1035,24 +1026,25 @@ diff -urN proton_10.0/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 -    if (!update_event) ERR("failed to create update event, error %lu\n", GetLastError());
 +    stop_event = CreateEventA(NULL, FALSE, FALSE, NULL);
 +    if (!stop_event) ERR("failed to create stop event, error %lu\n", GetLastError());
- 
--    thread = CreateThread(NULL, 0, hid_update_thread_proc, NULL, 0, NULL);
++
 +    done_event = CreateEventA(NULL, FALSE, FALSE, NULL);
 +    if (!done_event) ERR("failed to create done event, error %lu\n", GetLastError());
 +
 +    update_event = CreateEventA(NULL, TRUE, FALSE, NULL);
 +    if (!update_event) ERR("failed to create update event, error %lu\n", GetLastError());    
-+
+ 
+-    thread = CreateThread(NULL, 0, hid_update_thread_proc, NULL, 0, NULL);
 +    thread = CreateThread(NULL, 0, controller_update_thread_proc, NULL, 0, NULL);
      if (!thread) ERR("failed to create update thread, error %lu\n", GetLastError());
      CloseHandle(thread);
  
-@@ -784,24 +446,9 @@
+@@ -784,24 +434,9 @@
      InitOnceExecuteOnce(&init_once, start_update_thread_once, NULL, NULL);
  }
  
 -static BOOL controller_lock(struct xinput_controller *controller)
--{
++static BOOL controller_is_connected(DWORD index)
+ {
 -    if (!controller->device) return FALSE;
 -
 -    EnterCriticalSection(&controller->crit);
@@ -1067,14 +1059,13 @@ diff -urN proton_10.0/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 -}
 -
 -static void controller_unlock(struct xinput_controller *controller)
-+static BOOL controller_is_connected(DWORD index)
- {
+-{
 -    LeaveCriticalSection(&controller->crit);
 +    return index == 0 && controller.connected;
  }
  
  BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved)
-@@ -814,14 +461,16 @@
+@@ -814,14 +449,16 @@
          xinput_instance = inst;
          DisableThreadLibraryCalls(inst);
          break;
@@ -1093,7 +1084,7 @@ diff -urN proton_10.0/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
      TRACE("enable %d.\n", enable);
  
      /* Setting to false will stop messages from XInputSetState being sent
-@@ -830,32 +479,24 @@
+@@ -830,32 +467,24 @@
      be sent */
      start_update_thread();
  
@@ -1135,7 +1126,7 @@ diff -urN proton_10.0/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
  }
  
  /* Some versions of SteamOverlayRenderer hot-patch XInputGetStateEx() and call
-@@ -867,12 +508,13 @@
+@@ -867,12 +496,13 @@
      start_update_thread();
  
      if (index >= XUSER_MAX_COUNT) return ERROR_BAD_ARGUMENTS;
@@ -1155,7 +1146,7 @@ diff -urN proton_10.0/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
  
      return ERROR_SUCCESS;
  }
-@@ -932,8 +574,8 @@
+@@ -932,8 +562,8 @@
      }
  }
  
@@ -1166,7 +1157,7 @@ diff -urN proton_10.0/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
  {
      int cur_vk = 0, cur_x_st, cur_y_st;
      int last_vk = 0, last_x_st, last_y_st;
-@@ -958,7 +600,7 @@
+@@ -958,7 +588,7 @@
              keystroke->VirtualKey = last_vk;
              keystroke->Unicode = 0; /* unused */
              keystroke->Flags = XINPUT_KEYSTROKE_KEYUP;
@@ -1175,7 +1166,7 @@ diff -urN proton_10.0/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
              keystroke->HidCode = 0;
  
              *last_x = 0;
-@@ -971,7 +613,7 @@
+@@ -971,7 +601,7 @@
          keystroke->VirtualKey = cur_vk;
          keystroke->Unicode = 0; /* unused */
          keystroke->Flags = XINPUT_KEYSTROKE_KEYDOWN;
@@ -1184,7 +1175,7 @@ diff -urN proton_10.0/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
          keystroke->HidCode = 0;
  
          *last_x = *cur_x;
-@@ -991,9 +633,8 @@
+@@ -991,9 +621,8 @@
      return value > 30;
  }
  
@@ -1195,12 +1186,12 @@ diff -urN proton_10.0/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
      const XINPUT_GAMEPAD *cur;
      DWORD ret = ERROR_EMPTY;
      int i;
-@@ -1020,28 +661,28 @@
+@@ -1020,28 +649,28 @@
          /* note: guide button does not send an event */
      };
  
 -    if (!controller_lock(controller)) return ERROR_DEVICE_NOT_CONNECTED;
-+    if (!controller_is_connected(index)) return ERROR_DEVICE_NOT_CONNECTED;
++    // if (!controller_is_connected(index)) return ERROR_DEVICE_NOT_CONNECTED;
  
 -    cur = &controller->state.Gamepad;
 +    cur = &controller.state.Gamepad;
@@ -1230,7 +1221,7 @@ diff -urN proton_10.0/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
              keystroke->HidCode = 0;
              ret = ERROR_SUCCESS;
              goto done;
-@@ -1049,65 +690,62 @@
+@@ -1049,65 +678,62 @@
      }
  
      /*** triggers ***/
@@ -1316,7 +1307,7 @@ diff -urN proton_10.0/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
  }
  
  DWORD WINAPI DECLSPEC_HOTPATCH XInputGetCapabilities(DWORD index, DWORD flags, XINPUT_CAPABILITIES *capabilities)
-@@ -1118,61 +756,47 @@
+@@ -1118,61 +744,55 @@
      ret = XInputGetCapabilitiesEx(1, index, flags, &caps_ex);
  
      if (!ret) *capabilities = caps_ex.Capabilities;
@@ -1390,3 +1381,11 @@ diff -urN proton_10.0/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 -    return ret;
 +    return ERROR_SUCCESS;
  }
++/*
++ * The Wine project - Xinput Joystick Library
++ * Copyright 2008 Andrew Fenn
++ * Copyright 2018 Aric Stewart
++/*
++ * The Wine project - Xinput Joystick Library
++ * Copyright 2008 Andrew Fenn
++ * Copyright 2018 Aric Stewart
