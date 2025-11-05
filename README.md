@@ -10,6 +10,8 @@ winlator11 hostei mod wine  x86_64 补丁与releases
 
 ## 可能无法百分百保证游戏按键控制的兼容性
 
+## _bad后缀为临时性补丁，通过脚本生成
+
 # 此项目维护相对困难，其次winlator原作者并未开源wine10.10无法制作对应补丁，故可能存在兼容性问题
 
 # 鸣谢
@@ -20,6 +22,6 @@ winlator11 hostei mod wine  x86_64 补丁与releases
 
  - [brunodev85/wine-9.2-custom](https://github.com/brunodev85/wine-9.2-custom)
 
-### 项目
+### termux 相关补丁
 
  - [Waim908/wine-termux](https://github.com/Waim908/wine-termux)
