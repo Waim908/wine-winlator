@@ -4,8 +4,8 @@ rm -rf /tmp/output-whp
 rm -rf /data/data/com.winlator/files/rootfs/tmp
 mkdir -p /data/data/com.winlator/files/rootfs/tmp/shm
 mkdir -p /data/data/com.winlator/files/rootfs/home/xuser/.wine
-if [[ -z $wineVer ]]; then
-  echo "你必须声明wineVer变量"
+if [[ -z $1 ]]; then
+  echo "你必须声明wineVer参数"
   echo "内容只能由数字或小数和-组成"
   exit 1
 fi
@@ -28,20 +28,24 @@ if [[ -z $winePath ]]; then
 else
   export USER=xuser
   if [[ $useBox64 == 1 ]]; then
-    echo "使用box64执行"
-    box64 $winePath/wineboot 2>&1 >/dev/tty &
-    wait
+      echo "使用box64执行"
+      box64 $winePath/wineboot 2>&1 >/dev/tty &
+      wine_pid=$!
   else
-    $winePath/wineboot 2>&1 >/dev/tty &
-    wait
+      $winePath/wineboot 2>&1 >/dev/tty &
+      wine_pid=$!
+  fi
+  wait $wine_pid
+  exit_status=$?
+  if [[ $exit_status -eq 0 ]]; then
+      echo "wineboot 执行成功"
+  else
+      echo "wineboot 执行失败，退出码: $exit_status"
+      # 这里可以添加失败处理逻辑
+      exit 1
   fi
 fi
 sleep 2
-if [[ $useBox64 == 1 ]]; then
-  wineVersion=$(box64 $winePath/wine --version)
-else
-  wineVersion=$($winePath/wine --version)
-fi
 cat > '/data/data/com.winlator/files/rootfs/home/xuser/.wine/drive_c/ProgramData/Microsoft/Windows/Start Menu/TkG-version.bat' << 'EOF'
 @echo off
 winver
