@@ -8,7 +8,7 @@ winlator11 hostei mod wine  x86_64 补丁与releases
 
 # proton wine
 
-## 可能无法百分百保证xinput的兼容性，这是针对wine-9.2-custom以及proton wine10.0所尽力制作的补丁
+## 可能无法百分百保证游戏按键控制的兼容性
 
 # 此项目维护相对困难，其次winlator原作者并未开源wine10.10无法制作对应补丁，故可能存在兼容性问题
 

@@ -1,6 +1,6 @@
-diff -urN proton10_wine/dlls/xinput1_1/Makefile.in b/dlls/xinput1_1/Makefile.in
---- proton10_wine/dlls/xinput1_1/Makefile.in	2025-10-26 19:03:18.924765957 +0800
-+++ b/dlls/xinput1_1/Makefile.in	2025-10-26 23:52:09.232757281 +0800
+diff -urN wine/dlls/xinput1_1/Makefile.in b/dlls/xinput1_1/Makefile.in
+--- wine/dlls/xinput1_1/Makefile.in	2025-11-05 17:27:20.826950114 +0800
++++ b/dlls/xinput1_1/Makefile.in	2025-11-05 19:59:07.986180430 +0800
 @@ -1,5 +1,5 @@
  MODULE    = xinput1_1.dll
 -IMPORTS   = hid setupapi advapi32 user32
@@ -8,9 +8,9 @@ diff -urN proton10_wine/dlls/xinput1_1/Makefile.in b/dlls/xinput1_1/Makefile.in
  PARENTSRC = ../xinput1_3
  
  SOURCES = \
-diff -urN proton10_wine/dlls/xinput1_2/Makefile.in b/dlls/xinput1_2/Makefile.in
---- proton10_wine/dlls/xinput1_2/Makefile.in	2025-10-26 19:03:18.925765955 +0800
-+++ b/dlls/xinput1_2/Makefile.in	2025-10-26 23:52:48.868688650 +0800
+diff -urN wine/dlls/xinput1_2/Makefile.in b/dlls/xinput1_2/Makefile.in
+--- wine/dlls/xinput1_2/Makefile.in	2025-11-05 17:27:20.826950114 +0800
++++ b/dlls/xinput1_2/Makefile.in	2025-11-05 19:59:07.987180428 +0800
 @@ -1,5 +1,5 @@
  MODULE    = xinput1_2.dll
 -IMPORTS   = hid setupapi advapi32 user32
@@ -18,9 +18,9 @@ diff -urN proton10_wine/dlls/xinput1_2/Makefile.in b/dlls/xinput1_2/Makefile.in
  PARENTSRC = ../xinput1_3
  
  SOURCES = \
-diff -urN proton10_wine/dlls/xinput1_3/Makefile.in b/dlls/xinput1_3/Makefile.in
---- proton10_wine/dlls/xinput1_3/Makefile.in	2025-10-26 19:03:18.925765955 +0800
-+++ b/dlls/xinput1_3/Makefile.in	2025-10-26 23:50:11.665960855 +0800
+diff -urN wine/dlls/xinput1_3/Makefile.in b/dlls/xinput1_3/Makefile.in
+--- wine/dlls/xinput1_3/Makefile.in	2025-11-05 17:27:20.827950113 +0800
++++ b/dlls/xinput1_3/Makefile.in	2025-11-05 19:59:07.988180427 +0800
 @@ -1,6 +1,6 @@
  MODULE    = xinput1_3.dll
  IMPORTLIB = xinput
@@ -29,9 +29,9 @@ diff -urN proton10_wine/dlls/xinput1_3/Makefile.in b/dlls/xinput1_3/Makefile.in
  
  SOURCES = \
  	main.c \
-diff -urN proton10_wine/dlls/xinput1_4/Makefile.in b/dlls/xinput1_4/Makefile.in
---- proton10_wine/dlls/xinput1_4/Makefile.in	2025-10-26 19:03:18.926765954 +0800
-+++ b/dlls/xinput1_4/Makefile.in	2025-10-26 23:53:43.905593352 +0800
+diff -urN wine/dlls/xinput1_4/Makefile.in b/dlls/xinput1_4/Makefile.in
+--- wine/dlls/xinput1_4/Makefile.in	2025-11-05 17:27:20.828950111 +0800
++++ b/dlls/xinput1_4/Makefile.in	2025-11-05 19:59:07.990180423 +0800
 @@ -1,5 +1,5 @@
  MODULE    = xinput1_4.dll
 -IMPORTS   = hid setupapi advapi32 user32
@@ -39,9 +39,19 @@ diff -urN proton10_wine/dlls/xinput1_4/Makefile.in b/dlls/xinput1_4/Makefile.in
  PARENTSRC = ../xinput1_3
  
  SOURCES = \
-diff -urN proton10_wine/dlls/xinputuap/Makefile.in b/dlls/xinputuap/Makefile.in
---- proton10_wine/dlls/xinputuap/Makefile.in	2025-10-26 19:03:18.927765952 +0800
-+++ b/dlls/xinputuap/Makefile.in	2025-10-26 23:54:00.650564359 +0800
+diff -urN wine/dlls/xinput9_1_0/Makefile.in b/dlls/xinput9_1_0/Makefile.in
+--- wine/dlls/xinput9_1_0/Makefile.in	2025-11-05 17:27:20.829950109 +0800
++++ b/dlls/xinput9_1_0/Makefile.in	2025-11-05 19:59:45.232115939 +0800
+@@ -1,5 +1,5 @@
+ MODULE    = xinput9_1_0.dll
+-IMPORTS   = hid setupapi advapi32 user32
++IMPORTS   = hid setupapi advapi32 user32 ws2_32
+ PARENTSRC = ../xinput1_3
+ 
+ SOURCES = \
+diff -urN wine/dlls/xinputuap/Makefile.in b/dlls/xinputuap/Makefile.in
+--- wine/dlls/xinputuap/Makefile.in	2025-11-05 17:27:20.829950109 +0800
++++ b/dlls/xinputuap/Makefile.in	2025-11-05 19:59:07.991180422 +0800
 @@ -1,5 +1,5 @@
  MODULE    = xinputuap.dll
 -IMPORTS   = hid setupapi advapi32 user32
