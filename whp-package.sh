@@ -48,9 +48,10 @@ fi
 sleep 2
 cat > '/data/data/com.winlator/files/rootfs/home/xuser/.wine/drive_c/ProgramData/Microsoft/Windows/Start Menu/TkG-version.bat' << 'EOF'
 @echo off
-winver
+strat winver
 echo More staging settings in winecfg
 echo [Waim908/wine-winlator](https://github.com/Waim908/wine-winlator)
+cmd
 EOF
 rm -rf $WINEPREFIX/dosdevices/*
 mkdir $WINEPREFIX/drive_x
