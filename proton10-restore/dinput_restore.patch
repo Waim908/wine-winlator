@@ -1,0 +1,2069 @@
+diff -urN wine_proton10/dlls/dinput/dinput_main.c wine-10.0/dlls/dinput/dinput_main.c
+--- wine_proton10/dlls/dinput/dinput_main.c	2025-11-05 17:27:18.566954028 +0800
++++ wine-10.0/dlls/dinput/dinput_main.c	2025-01-22 00:42:16.000000000 +0800
+@@ -508,8 +508,6 @@
+     MsgWaitForMultipleObjectsEx(0, NULL, 0, QS_ALLINPUT, 0);
+ }
+ 
+-HANDLE steam_overlay_event;
+-
+ BOOL WINAPI DllMain( HINSTANCE inst, DWORD reason, void *reserved )
+ {
+     TRACE( "inst %p, reason %lu, reserved %p.\n", inst, reason, reserved );
+@@ -518,14 +516,12 @@
+     {
+       case DLL_PROCESS_ATTACH:
+         DisableThreadLibraryCalls(inst);
+-        steam_overlay_event = CreateEventA(NULL, TRUE, FALSE, "__wine_steamclient_GameOverlayActivated");
+         DINPUT_instance = inst;
+         register_di_em_win_class();
+         break;
+       case DLL_PROCESS_DETACH:
+         if (reserved) break;
+         unregister_di_em_win_class();
+-        CloseHandle(steam_overlay_event);
+         break;
+     }
+     return TRUE;
+diff -urN wine_proton10/dlls/dinput/dinput_private.h wine-10.0/dlls/dinput/dinput_private.h
+--- wine_proton10/dlls/dinput/dinput_private.h	2025-11-05 17:27:18.566954028 +0800
++++ wine-10.0/dlls/dinput/dinput_private.h	2025-01-22 00:42:16.000000000 +0800
+@@ -46,7 +46,6 @@
+ 
+ extern const IDirectInput7AVtbl dinput7_a_vtbl;
+ extern const IDirectInput8AVtbl dinput8_a_vtbl;
+-extern HANDLE steam_overlay_event;
+ 
+ extern void dinput_internal_addref( struct dinput *dinput );
+ extern void dinput_internal_release( struct dinput *dinput );
+diff -urN wine_proton10/dlls/dinput/joystick_hid.c wine-10.0/dlls/dinput/joystick_hid.c
+--- wine_proton10/dlls/dinput/joystick_hid.c	2025-11-05 17:27:18.567954026 +0800
++++ wine-10.0/dlls/dinput/joystick_hid.c	2025-01-22 00:42:16.000000000 +0800
+@@ -47,9 +47,6 @@
+ #include "wine/debug.h"
+ #include "wine/hid.h"
+ 
+-#define VID_LOGITECH 0x046D
+-#define PID_LOGITECH_G920 0xC262
+-
+ WINE_DEFAULT_DEBUG_CHANNEL(dinput);
+ 
+ DEFINE_GUID( GUID_DEVINTERFACE_WINEXINPUT,0x6c53d5fd,0x6480,0x440f,0xb6,0x18,0x47,0x67,0x50,0xc5,0xe1,0xa6 );
+@@ -175,7 +172,6 @@
+ struct hid_joystick
+ {
+     struct dinput_device base;
+-    BOOL wgi_device;
+ 
+     HANDLE device;
+     OVERLAPPED read_ovl;
+@@ -243,51 +239,6 @@
+     char *set_envelope_buf;
+ };
+ 
+-struct joystick_device
+-{
+-    WCHAR device_path[MAX_PATH];
+-};
+-
+-static CRITICAL_SECTION joystick_devices_crit;
+-static CRITICAL_SECTION_DEBUG joystick_devices_crit_debug =
+-{
+-    0, 0, &joystick_devices_crit,
+-    { &joystick_devices_crit_debug.ProcessLocksList, &joystick_devices_crit_debug.ProcessLocksList },
+-      0, 0, { (DWORD_PTR)(__FILE__ ": joystick_devices_crit") }
+-};
+-static CRITICAL_SECTION joystick_devices_crit = { &joystick_devices_crit_debug, -1, 0, 0, 0, 0 };
+-
+-static struct joystick_device *joystick_devices;
+-static unsigned int joystick_device_count;
+-
+-static unsigned int get_joystick_index( const WCHAR *device_path )
+-{
+-    unsigned int i;
+-
+-    EnterCriticalSection( &joystick_devices_crit );
+-    for (i = 0; i < joystick_device_count; ++i)
+-        if (!wcsicmp( joystick_devices[i].device_path, device_path )) break;
+-
+-    if (i == joystick_device_count)
+-    {
+-        ++joystick_device_count;
+-        joystick_devices = realloc( joystick_devices, sizeof(*joystick_devices) * joystick_device_count );
+-        wcscpy( joystick_devices[i].device_path, device_path );
+-    }
+-    LeaveCriticalSection( &joystick_devices_crit );
+-    return i;
+-}
+-
+-static BOOL get_default_joystick_device_path( WCHAR *device_path )
+-{
+-    BOOL ret;
+-
+-    EnterCriticalSection( &joystick_devices_crit );
+-    if ((ret = !!joystick_device_count)) wcscpy( device_path, joystick_devices[0].device_path );
+-    LeaveCriticalSection( &joystick_devices_crit );
+-    return ret;
+-}
+-
+ static inline struct hid_joystick_effect *impl_from_IDirectInputEffect( IDirectInputEffect *iface )
+ {
+     return CONTAINING_RECORD( iface, struct hid_joystick_effect, IDirectInputEffect_iface );
+@@ -465,9 +416,6 @@
+     case MAKELONG(PID_USAGE_STATE_REPORT, HID_USAGE_PAGE_PID): return L"PID State Report";
+     case MAKELONG(PID_USAGE_TRIGGER_BUTTON, HID_USAGE_PAGE_PID): return L"Trigger Button";
+ 
+-    case MAKELONG(PID_USAGE_SET_CONSTANT_FORCE_REPORT, HID_USAGE_PAGE_PID): return L"Set Constant Force Report";
+-    case MAKELONG(PID_USAGE_SET_RAMP_FORCE_REPORT, HID_USAGE_PAGE_PID): return L"Set Ramp Force Report";
+-
+     case MAKELONG(HID_USAGE_SIMULATION_RUDDER, HID_USAGE_PAGE_SIMULATION): return L"Rudder";
+     case MAKELONG(HID_USAGE_SIMULATION_THROTTLE, HID_USAGE_PAGE_SIMULATION): return L"Throttle";
+     case MAKELONG(HID_USAGE_SIMULATION_ACCELERATOR, HID_USAGE_PAGE_SIMULATION): return L"Accelerator";
+@@ -592,8 +540,6 @@
+     struct hid_collection_node *node, *node_end;
+     WORD version = impl->base.dinput->dwVersion;
+     BOOL ret, seen_axis[6] = {0};
+-    const GUID *hack_guid;
+-    const WCHAR *hack_name;
+     const WCHAR *tmp;
+ 
+     button_ofs += impl->caps.NumberInputValueCaps * sizeof(LONG);
+@@ -613,8 +559,6 @@
+             value_ofs += (caps->usage_max - caps->usage_min + 1) * sizeof(LONG);
+         else for (j = caps->usage_min; j <= caps->usage_max; ++j)
+         {
+-            hack_name = NULL;
+-            hack_guid = NULL;
+             instance.dwOfs = value_ofs;
+             switch (MAKELONG(j, caps->usage_page))
+             {
+@@ -624,38 +568,7 @@
+             case MAKELONG(HID_USAGE_GENERIC_RX, HID_USAGE_PAGE_GENERIC):
+             case MAKELONG(HID_USAGE_GENERIC_RY, HID_USAGE_PAGE_GENERIC):
+             case MAKELONG(HID_USAGE_GENERIC_RZ, HID_USAGE_PAGE_GENERIC):
+-                if (!impl->wgi_device && impl->attrs.VendorID == VID_LOGITECH && impl->attrs.ProductID == PID_LOGITECH_G920)
+-                {
+-                    if (j == HID_USAGE_GENERIC_X)
+-                    {
+-                        set_axis_type( &instance, seen_axis, 0, &axis );
+-                        hack_guid = &GUID_XAxis;
+-                        hack_name = L"Wheel axis";
+-                    }
+-                    else if (j == HID_USAGE_GENERIC_Y)
+-                    {
+-                        set_axis_type( &instance, seen_axis, 2, &axis );
+-                        hack_guid = &GUID_YAxis;
+-                        hack_name = L"Accelerator";
+-                    }
+-                    else if (j == HID_USAGE_GENERIC_Z)
+-                    {
+-                        set_axis_type( &instance, seen_axis, 5, &axis );
+-                        hack_guid = &GUID_RzAxis;
+-                        hack_name = L"Brake";
+-                    }
+-                    else if (j == HID_USAGE_GENERIC_RZ)
+-                    {
+-                        instance.dwType = DIDFT_ABSAXIS | DIDFT_MAKEINSTANCE( 6 + axis++ );
+-                        hack_guid = &GUID_Slider;
+-                        hack_name = L"Clutch";
+-                    }
+-                    else WARN("unknown axis usage page %x usage %lx for Logitech G920\n", caps->usage_page, j);
+-                }
+-                else
+-                {
+-                    set_axis_type( &instance, seen_axis, j - HID_USAGE_GENERIC_X, &axis );
+-                }
++                set_axis_type( &instance, seen_axis, j - HID_USAGE_GENERIC_X, &axis );
+                 instance.dwFlags = DIDOI_ASPECTPOSITION;
+                 break;
+             case MAKELONG(HID_USAGE_SIMULATION_STEERING, HID_USAGE_PAGE_SIMULATION):
+@@ -692,16 +605,12 @@
+             }
+             instance.wUsagePage = caps->usage_page;
+             instance.wUsage = j;
+-            if (hack_guid)
+-                instance.guidType = *hack_guid;
+-            else
+-                instance.guidType = *object_usage_to_guid( instance.wUsagePage, instance.wUsage );
++            instance.guidType = *object_usage_to_guid( instance.wUsagePage, instance.wUsage );
+             instance.wReportId = caps->report_id;
+             instance.wCollectionNumber = caps->link_collection;
+             instance.dwDimension = caps->units;
+             instance.wExponent = caps->units_exp;
+-            if (hack_name) lstrcpynW( instance.tszName, hack_name, MAX_PATH );
+-            else if ((tmp = object_usage_to_string( &instance ))) lstrcpynW( instance.tszName, tmp, MAX_PATH );
++            if ((tmp = object_usage_to_string( &instance ))) lstrcpynW( instance.tszName, tmp, MAX_PATH );
+             else swprintf( instance.tszName, MAX_PATH, L"Unknown %u", DIDFT_GETINSTANCE( instance.dwType ) );
+             check_pid_effect_axis_caps( impl, &instance );
+             ret = enum_object( impl, filter, flags, callback, object, caps, &instance, data );
+@@ -840,10 +749,22 @@
+ {
+     ULONG report_len = impl->caps.OutputReportByteLength;
+     PHIDP_PREPARSED_DATA preparsed = impl->preparsed;
++    LONG log_min, log_max, phy_min, phy_max;
+     NTSTATUS status;
+ 
+     if (!caps) return;
+ 
++    log_min = caps->logical_min;
++    log_max = caps->logical_max;
++    phy_min = caps->physical_min;
++    phy_max = caps->physical_max;
++
++    if (phy_max || phy_min)
++    {
++        if (value > phy_max || value < phy_min) value = -1;
++        else value = log_min + (value - phy_min) * (log_max - log_min) / (phy_max - phy_min);
++    }
++
+     status = HidP_SetUsageValue( HidP_Output, caps->usage_page, caps->link_collection,
+                                  caps->usage_min, value, preparsed, report_buf, report_len );
+     if (status != HIDP_STATUS_SUCCESS) WARN( "HidP_SetUsageValue %04x:%04x returned %#lx\n",
+@@ -893,23 +814,13 @@
+     case (DWORD_PTR)DIPROP_JOYSTICKID:
+     {
+         DIPROPDWORD *value = (DIPROPDWORD *)header;
+-        value->dwData = get_joystick_index( impl->device_path );
++        value->dwData = impl->base.instance.guidInstance.Data3;
+         return DI_OK;
+     }
+     case (DWORD_PTR)DIPROP_GUIDANDPATH:
+     {
+         DIPROPGUIDANDPATH *value = (DIPROPGUIDANDPATH *)header;
+         value->guidClass = GUID_DEVCLASS_HIDCLASS;
+-
+-        /* CW-Bug-Id: #23185 Emulate Steam Input native hooks for native SDL */
+-        if (impl->attrs.VendorID == 0x28de && impl->attrs.ProductID == 0x11ff)
+-        {
+-            const WCHAR *tmp;
+-            if ((tmp = wcschr( impl->device_path, '#' ))) tmp = wcschr( tmp + 1, '#' );
+-            lstrcpynW( value->wszPath, impl->device_path, tmp - impl->device_path + 1 );
+-            return DI_OK;
+-        }
+-
+         lstrcpynW( value->wszPath, impl->device_path, MAX_PATH );
+         return DI_OK;
+     }
+@@ -926,37 +837,6 @@
+     return DIERR_UNSUPPORTED;
+ }
+ 
+-static LONG scale_to_logical_value( LONG value, struct hid_value_caps *caps )
+-{
+-    LONG log_min, log_max, phy_min, phy_max;
+-
+-    if (!caps) return value;
+-
+-    log_min = caps->logical_min;
+-    log_max = caps->logical_max;
+-    phy_min = caps->physical_min;
+-    phy_max = caps->physical_max;
+-
+-    if (phy_max || phy_min)
+-    {
+-        if (value > phy_max || value < phy_min) value = -1;
+-        else value = log_min + (value - phy_min) * (log_max - log_min) / (phy_max - phy_min);
+-    }
+-
+-    return value;
+-}
+-
+-static LONG clamp_to_physical_value( LONG value, struct hid_value_caps *caps )
+-{
+-    LONG phy_min, phy_max;
+-
+-    if (!caps) return value;
+-
+-    phy_min = caps->physical_min;
+-    phy_max = caps->physical_max;
+-    return max( min( value, phy_max ), phy_min );
+-}
+-
+ static HRESULT hid_joystick_send_device_gain( IDirectInputDevice8W *iface, LONG device_gain )
+ {
+     struct hid_joystick *impl = impl_from_IDirectInputDevice8W( iface );
+@@ -972,8 +852,6 @@
+     status = HidP_InitializeReportForID( HidP_Output, report->id, impl->preparsed, report_buf, report_len );
+     if (status != HIDP_STATUS_SUCCESS) return status;
+ 
+-    device_gain = clamp_to_physical_value( device_gain, report->device_gain_caps );
+-    device_gain = scale_to_logical_value( device_gain, report->device_gain_caps );
+     set_report_value( impl, report_buf, report->device_gain_caps, device_gain );
+ 
+     if (!WriteFile( impl->device, report_buf, report_len, NULL, NULL )) return DIERR_INPUTLOST;
+@@ -1223,7 +1101,6 @@
+ {
+     BYTE old_state[DEVICE_STATE_MAX_SIZE];
+     BYTE buttons[128];
+-    BOOL reset_state;
+     DWORD time;
+     DWORD seq;
+ };
+@@ -1239,8 +1116,6 @@
+ 
+     value = params->buttons[instance->wUsage - 1];
+     old_value = params->old_state[instance->dwOfs];
+-    if (params->reset_state) value = 0;
+-
+     device->device_state[instance->dwOfs] = value;
+     if (old_value != value) queue_event( iface, index, value, params->time, params->seq );
+ 
+@@ -1326,16 +1201,6 @@
+     if (instance->dwType & DIDFT_AXIS) value = scale_axis_value( logical_value, properties );
+     else value = scale_value( logical_value, properties );
+ 
+-    if (params->reset_state)
+-    {
+-        if (instance->dwType & DIDFT_POV) value = -1;
+-        else if (instance->dwType & DIDFT_AXIS)
+-        {
+-            if (!properties->range_min) value = properties->range_max / 2;
+-            else value = round( (properties->range_min + properties->range_max) / 2.0 );
+-        }
+-    }
+-
+     old_value = *(LONG *)(params->old_state + instance->dwOfs);
+     *(LONG *)(impl->base.device_state + instance->dwOfs) = value;
+     if (old_value != value) queue_event( iface, index, value, params->time, params->seq );
+@@ -1365,11 +1230,6 @@
+ 
+     ret = GetOverlappedResult( impl->device, &impl->read_ovl, &count, FALSE );
+ 
+-    if (WaitForSingleObject(steam_overlay_event, 0) == WAIT_OBJECT_0) /* steam overlay is enabled */
+-        params.reset_state = TRUE;
+-    else
+-        params.reset_state = FALSE;
+-
+     EnterCriticalSection( &impl->base.crit );
+     while (ret)
+     {
+@@ -1676,9 +1536,6 @@
+         break;
+     }
+ 
+-    if (attrs->VendorID == VID_LOGITECH && attrs->ProductID == PID_LOGITECH_G920)
+-        type = DI8DEVTYPE_DRIVING | (DI8DEVTYPEDRIVING_DUALPEDALS << 8);
+-
+     instance->dwDevType = device_type_for_version( type, version ) | DIDEVTYPE_HID;
+     TRACE("detected device type %#lx\n", instance->dwDevType);
+ 
+@@ -1745,8 +1602,6 @@
+                                                      attrs, caps, instance, version )))
+                 continue;
+         }
+-        /* Assign joystick index if the device path is first seen. */
+-        get_joystick_index( detail->DevicePath );
+ 
+         /* enumerate device by GUID */
+         if (IsEqualGUID( guid, &instance->guidProduct ) || IsEqualGUID( guid, &instance->guidInstance )) break;
+@@ -2163,18 +2018,10 @@
+     impl->base.read_event = CreateEventW( NULL, TRUE, FALSE, NULL );
+ 
+     if (memcmp( device_path_guid.Data4, guid->Data4, sizeof(device_path_guid.Data4) ))
+-    {
+-        /* Let hid_joystick_device_open() populate joystick devices before checking for default joystick GUID. */
+         hr = hid_joystick_device_open( -1, guid, &impl->base.instance, impl->device_path, &impl->device, &impl->preparsed,
+                                        &attrs, &impl->caps, dinput->dwVersion );
+-        if (hr == DIERR_DEVICENOTREG && IsEqualGUID( guid, &GUID_Joystick )
+-            && get_default_joystick_device_path( impl->device_path ))
+-            hr = hid_joystick_device_try_open( impl->device_path, &impl->device, &impl->preparsed, &attrs,
+-                                               &impl->caps, &impl->base.instance, dinput->dwVersion );
+-    }
+     else
+     {
+-        impl->wgi_device = TRUE;
+         wcscpy( impl->device_path, *(const WCHAR **)guid );
+         hr = hid_joystick_device_try_open( impl->device_path, &impl->device, &impl->preparsed, &attrs,
+                                            &impl->caps, &impl->base.instance, dinput->dwVersion );
+@@ -2963,17 +2810,9 @@
+ static void set_parameter_value( struct hid_joystick_effect *impl, char *report_buf,
+                                  struct hid_value_caps *caps, LONG value )
+ {
+-    value = scale_to_logical_value( value, caps );
+     return set_report_value( impl->joystick, report_buf, caps, value );
+ }
+ 
+-static void set_parameter_value_clamp( struct hid_joystick_effect *impl, char *report_buf,
+-                                       struct hid_value_caps *caps, LONG value )
+-{
+-    value = clamp_to_physical_value( value, caps );
+-    return set_parameter_value( impl, report_buf, caps, value );
+-}
+-
+ static void set_parameter_value_angle( struct hid_joystick_effect *impl, char *report_buf,
+                                        struct hid_value_caps *caps, LONG value )
+ {
+@@ -2983,23 +2822,19 @@
+     if (caps->units != 0x14) WARN( "unknown angle unit caps %#lx\n", caps->units );
+     else if (exp < -2) while (exp++ < -2) value *= 10;
+     else if (exp > -2) while (exp-- > -2) value /= 10;
+-    set_parameter_value_clamp( impl, report_buf, caps, value );
++    set_parameter_value( impl, report_buf, caps, value );
+ }
+ 
+ static void set_parameter_value_us( struct hid_joystick_effect *impl, char *report_buf,
+                                     struct hid_value_caps *caps, LONG value )
+ {
+     LONG exp;
+-
+     if (!caps) return;
+-    if (value == INFINITE) return set_report_value( impl->joystick, report_buf, caps, caps->physical_min - 1 );
+-
+     exp = caps->units_exp;
+-    if (caps->units != 0x1003) WARN( "unknown time unit caps %#lx\n", caps->units );
++    if (value == INFINITE) value = caps->physical_min - 1;
++    else if (caps->units != 0x1003) WARN( "unknown time unit caps %#lx\n", caps->units );
+     else if (exp < -6) while (exp++ < -6) value *= 10;
+     else if (exp > -6) while (exp-- > -6) value /= 10;
+-
+-    /* testing shows that duration values are not clamped, any out-of-range values becomes -1 */
+     set_parameter_value( impl, report_buf, caps, value );
+ }
+ 
+@@ -3069,14 +2904,14 @@
+         case PID_USAGE_ET_SAWTOOTH_DOWN:
+             if (!(impl->modified & DIEP_TYPESPECIFICPARAMS)) break;
+ 
+-            set_parameter_value_clamp( impl, impl->type_specific_buf, set_periodic->magnitude_caps,
+-                                       impl->periodic.dwMagnitude );
++            set_parameter_value( impl, impl->type_specific_buf, set_periodic->magnitude_caps,
++                                 impl->periodic.dwMagnitude );
+             set_parameter_value_us( impl, impl->type_specific_buf, set_periodic->period_caps,
+                                     impl->periodic.dwPeriod );
+-            set_parameter_value_clamp( impl, impl->type_specific_buf, set_periodic->phase_caps,
+-                                       impl->periodic.dwPhase );
+-            set_parameter_value_clamp( impl, impl->type_specific_buf, set_periodic->offset_caps,
+-                                       impl->periodic.lOffset );
++            set_parameter_value( impl, impl->type_specific_buf, set_periodic->phase_caps,
++                                 impl->periodic.dwPhase );
++            set_parameter_value( impl, impl->type_specific_buf, set_periodic->offset_caps,
++                                 impl->periodic.lOffset );
+ 
+             if (!WriteFile( device, impl->type_specific_buf, report_len, NULL, NULL )) hr = DIERR_INPUTLOST;
+             else impl->modified &= ~DIEP_TYPESPECIFICPARAMS;
+@@ -3093,21 +2928,18 @@
+                                              i, impl->joystick->preparsed, impl->type_specific_buf, report_len );
+                 if (status != HIDP_STATUS_SUCCESS) WARN( "HidP_SetUsageValue %04x:%04x returned %#lx\n",
+                                                          HID_USAGE_PAGE_PID, PID_USAGE_PARAMETER_BLOCK_OFFSET, status );
+-                set_parameter_value_clamp( impl, impl->type_specific_buf, set_condition->center_point_offset_caps,
+-                                           impl->condition[i].lOffset );
+-                set_parameter_value_clamp( impl, impl->type_specific_buf, set_condition->positive_coefficient_caps,
+-                                           impl->condition[i].lPositiveCoefficient );
+-                set_parameter_value_clamp( impl, impl->type_specific_buf, set_condition->negative_coefficient_caps,
+-                                           impl->condition[i].lNegativeCoefficient );
+-
+-                /* testing shows that saturation values are not clamped, any out-of-range values becomes -1 */
++                set_parameter_value( impl, impl->type_specific_buf, set_condition->center_point_offset_caps,
++                                     impl->condition[i].lOffset );
++                set_parameter_value( impl, impl->type_specific_buf, set_condition->positive_coefficient_caps,
++                                     impl->condition[i].lPositiveCoefficient );
++                set_parameter_value( impl, impl->type_specific_buf, set_condition->negative_coefficient_caps,
++                                     impl->condition[i].lNegativeCoefficient );
+                 set_parameter_value( impl, impl->type_specific_buf, set_condition->positive_saturation_caps,
+                                      impl->condition[i].dwPositiveSaturation );
+                 set_parameter_value( impl, impl->type_specific_buf, set_condition->negative_saturation_caps,
+                                      impl->condition[i].dwNegativeSaturation );
+-
+-                set_parameter_value_clamp( impl, impl->type_specific_buf, set_condition->dead_band_caps,
+-                                           impl->condition[i].lDeadBand );
++                set_parameter_value( impl, impl->type_specific_buf, set_condition->dead_band_caps,
++                                     impl->condition[i].lDeadBand );
+ 
+                 if (!WriteFile( device, impl->type_specific_buf, report_len, NULL, NULL )) hr = DIERR_INPUTLOST;
+                 else impl->modified &= ~DIEP_TYPESPECIFICPARAMS;
+@@ -3116,8 +2948,8 @@
+         case PID_USAGE_ET_CONSTANT_FORCE:
+             if (!(impl->modified & DIEP_TYPESPECIFICPARAMS)) break;
+ 
+-            set_parameter_value_clamp( impl, impl->type_specific_buf, set_constant_force->magnitude_caps,
+-                                       impl->constant_force.lMagnitude );
++            set_parameter_value( impl, impl->type_specific_buf, set_constant_force->magnitude_caps,
++                                 impl->constant_force.lMagnitude );
+ 
+             if (!WriteFile( device, impl->type_specific_buf, report_len, NULL, NULL )) hr = DIERR_INPUTLOST;
+             else impl->modified &= ~DIEP_TYPESPECIFICPARAMS;
+@@ -3125,10 +2957,10 @@
+         case PID_USAGE_ET_RAMP:
+             if (!(impl->modified & DIEP_TYPESPECIFICPARAMS)) break;
+ 
+-            set_parameter_value_clamp( impl, impl->type_specific_buf, set_ramp_force->start_caps,
+-                                       impl->ramp_force.lStart );
+-            set_parameter_value_clamp( impl, impl->type_specific_buf, set_ramp_force->end_caps,
+-                                       impl->ramp_force.lEnd );
++            set_parameter_value( impl, impl->type_specific_buf, set_ramp_force->start_caps,
++                                 impl->ramp_force.lStart );
++            set_parameter_value( impl, impl->type_specific_buf, set_ramp_force->end_caps,
++                                 impl->ramp_force.lEnd );
+ 
+             if (!WriteFile( device, impl->type_specific_buf, report_len, NULL, NULL )) hr = DIERR_INPUTLOST;
+             else impl->modified &= ~DIEP_TYPESPECIFICPARAMS;
+@@ -3150,12 +2982,12 @@
+             if (!(impl->flags & DIEP_ENVELOPE)) break;
+             if (!(impl->modified & DIEP_ENVELOPE)) break;
+ 
+-            set_parameter_value_clamp( impl, impl->set_envelope_buf, set_envelope->attack_level_caps,
+-                                       impl->envelope.dwAttackLevel );
++            set_parameter_value( impl, impl->set_envelope_buf, set_envelope->attack_level_caps,
++                                 impl->envelope.dwAttackLevel );
+             set_parameter_value_us( impl, impl->set_envelope_buf, set_envelope->attack_time_caps,
+                                     impl->envelope.dwAttackTime );
+-            set_parameter_value_clamp( impl, impl->set_envelope_buf, set_envelope->fade_level_caps,
+-                                       impl->envelope.dwFadeLevel );
++            set_parameter_value( impl, impl->set_envelope_buf, set_envelope->fade_level_caps,
++                                 impl->envelope.dwFadeLevel );
+             set_parameter_value_us( impl, impl->set_envelope_buf, set_envelope->fade_time_caps,
+                                     impl->envelope.dwFadeTime );
+ 
+@@ -3169,8 +3001,8 @@
+     {
+         set_parameter_value_us( impl, impl->effect_update_buf, effect_update->duration_caps,
+                                 impl->params.dwDuration );
+-        set_parameter_value_clamp( impl, impl->effect_update_buf, effect_update->gain_caps,
+-                                   impl->params.dwGain );
++        set_parameter_value( impl, impl->effect_update_buf, effect_update->gain_caps,
++                             impl->params.dwGain );
+         set_parameter_value_us( impl, impl->effect_update_buf, effect_update->sample_period_caps,
+                                 impl->params.dwSamplePeriod );
+         set_parameter_value_us( impl, impl->effect_update_buf, effect_update->start_delay_caps,
+diff -urN wine_proton10/dlls/dinput/tests/device8.c wine-10.0/dlls/dinput/tests/device8.c
+--- wine_proton10/dlls/dinput/tests/device8.c	2025-11-05 17:27:18.570954021 +0800
++++ wine-10.0/dlls/dinput/tests/device8.c	2025-01-22 00:42:16.000000000 +0800
+@@ -50,17 +50,6 @@
+     };
+ };
+ 
+-static void pump_messages(void)
+-{
+-    MSG msg;
+-
+-    while (PeekMessageA( &msg, 0, 0, 0, PM_REMOVE ))
+-    {
+-        TranslateMessage( &msg );
+-        DispatchMessageA( &msg );
+-    }
+-}
+-
+ static void flush_events(void)
+ {
+     int min_timeout = 100, diff = 200;
+@@ -1780,121 +1769,13 @@
+ 
+ static UINT pointer_enter_count;
+ static UINT pointer_up_count;
+-static HANDLE touchdown_event, touchmoved_event, touchleave_event;
++static HANDLE touchdown_event, touchleave_event;
+ static WPARAM pointer_wparam[16];
+ static WPARAM pointer_lparam[16];
+ static UINT pointer_count;
+-static int touch_test_line;
+-static POINT last_cursor_pos;
+-static const BOOL *skip_defwnd_for_pointer_message;
+-BOOL skip_touch_mouse_tests, touch_missing_leave_todo;
+-
+-#define start_touch_test(a) start_touch_test_( __LINE__, a )
+-static void start_touch_test_( int line, const BOOL *skip_defwnd )
+-{
+-    pointer_enter_count = pointer_up_count = pointer_count = 0;
+-    memset( pointer_wparam, 0, sizeof(pointer_wparam) );
+-    memset( pointer_lparam, 0, sizeof(pointer_lparam) );
+-
+-    skip_defwnd_for_pointer_message = skip_defwnd;
+-    SetCursorPos( 0, 0 );
+-    GetCursorPos( &last_cursor_pos );
+-    touch_test_line = line;
+-}
+-
+-static BOOL get_touch_mouse_message( HWND hwnd, MSG *msg )
+-{
+-    while (PeekMessageW( msg, NULL, WM_MOUSEFIRST, WM_MOUSELAST, PM_REMOVE ))
+-    {
+-        if (msg->message != WM_MOUSEMOVE || (GetMessageExtraInfo() & ~(ULONG_PTR)0xff) == 0xff515700) return TRUE;
+-    }
+-    return FALSE;
+-}
+-
+-static BOOL touch_mouse_message_matches( UINT msg, UINT expect_msg )
+-{
+-    /* Pointer quick up / downs, holds are used to simulate right mouse button and double clicks on Windows. That
+-     * is randomly triggered with the tests. Since currently that is neither avoided nor consciously emulated
+-     * in tests just accept that all. */
+-    if (expect_msg == WM_LBUTTONDOWN)
+-        return msg == WM_LBUTTONDOWN || msg == WM_RBUTTONDOWN || msg == WM_LBUTTONDBLCLK;
+-    if (expect_msg == WM_LBUTTONUP)
+-        return msg == WM_LBUTTONUP || msg == WM_RBUTTONUP;
+-    return msg == expect_msg;
+-}
+-
+-#define expect_touch_mouse_message(a, b, c) expect_touch_mouse_message_( __LINE__, a, b, c )
+-static BOOL expect_touch_mouse_message_( int line, HWND hwnd, UINT expect_msg, BOOL optional )
+-{
+-    INPUT_MESSAGE_SOURCE source;
+-    LPARAM extra;
+-    DWORD pos;
+-    BOOL bret;
+-    POINT cp;
+-    MSG msg;
+-
+-    if (skip_touch_mouse_tests) return TRUE;
+-
+-    if (!(bret = get_touch_mouse_message( hwnd, &msg )) && !optional)
+-    {
+-        MsgWaitForMultipleObjects( 0, NULL, FALSE, 100, QS_MOUSE );
+-        bret = get_touch_mouse_message( hwnd, &msg );
+-    }
+-
+-    if (!optional)
+-        ok_(__FILE__, line)( bret, "did not receive mouse message, expected %#x.\n", expect_msg );
+-    if (!bret) return FALSE;
+-
+-    if (optional && !touch_mouse_message_matches( msg.message, expect_msg ))
+-    {
+-        trace_(__FILE__, line)( "got message %#x instead of optional %#x.\n", msg.message, expect_msg );
+-        return FALSE;
+-    }
+-
+-    ok_(__FILE__, line)( touch_mouse_message_matches( msg.message, expect_msg ),
+-                         "got message %#x, expected %#x.\n", msg.message, expect_msg );
+-
+-    bret = GetCurrentInputMessageSource( &source );
+-    ok_(__FILE__, line)( bret, "got error %ld.\n", GetLastError() );
+-    ok_(__FILE__, line)( source.deviceType == IMDT_TOUCH, "got deviceType %#x, expected %#x.\n",
+-                         source.deviceType, IMDT_TOUCH );
+-    ok_(__FILE__, line)( source.originId == IMO_HARDWARE, "got originId %#x, expected %#x.\n",
+-                         source.originId, IMO_HARDWARE );
+-
+-    cp = last_cursor_pos;
+-    pos = msg.lParam;
+-    ok_(__FILE__, line)( pos == MAKELPARAM(cp.x, cp.y), "got coords (%d, %d), expected (%ld, %ld).\n",
+-                         LOWORD(pos), HIWORD(pos), cp.x, cp.y );
+-    pos = GetMessagePos();
+-    ok_(__FILE__, line)( pos == MAKELPARAM(cp.x, cp.y), "got coords (%d, %d), expected (%ld, %ld).\n",
+-                         LOWORD(pos), HIWORD(pos), cp.x, cp.y );
+-
+-    extra = GetMessageExtraInfo();
+-    ok_(__FILE__, line)( (extra & ~(ULONG_PTR)0xff) == 0xff515700, "got message extra info %#Ix, expected %#x.\n",
+-                         extra, 0xff515700 );
+-    return TRUE;
+-}
+ 
+ static LRESULT CALLBACK touch_screen_wndproc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam )
+ {
+-    static struct
+-    {
+-        UINT pointerid;
+-        BOOL tracking_started;
+-        POINT curr_pos;
+-    }
+-    state[64];
+-    static unsigned int active_touch_count, total_touch_count;
+-
+-    BOOL pointer_moved, curpos_changed;
+-    UINT expect_message_after;
+-    unsigned int i;
+-    UINT pointerid;
+-    LRESULT ret;
+-    MSG message;
+-    BOOL bret;
+-    POINT pt;
+-
+     if (msg == WM_POINTERENTER)
+     {
+         pointer_wparam[pointer_count] = wparam;
+@@ -1902,6 +1783,8 @@
+         pointer_count++;
+         pointer_enter_count++;
+     }
++    if (msg == WM_POINTERDOWN) ReleaseSemaphore( touchdown_event, 1, NULL );
++
+     if (msg == WM_POINTERUP)
+     {
+         pointer_wparam[pointer_count] = wparam;
+@@ -1909,182 +1792,9 @@
+         pointer_count++;
+         pointer_up_count++;
+     }
+-
+-    if (!skip_touch_mouse_tests && msg >= WM_MOUSEFIRST && msg <= WM_MOUSELAST)
+-    {
+-        INPUT_MESSAGE_SOURCE source;
+-        GetCurrentInputMessageSource( &source );
+-        ok( source.deviceType != IMDT_TOUCH, "got touch mouse message %#x outside of state tracking.\n", msg );
+-    }
+-
+-    if (!(msg >= WM_POINTERUPDATE && msg <= WM_POINTERLEAVE))
+-        return DefWindowProcW( hwnd, msg, wparam, lparam );
+-
+-    pointerid = GET_POINTERID_WPARAM( wparam );
+-    winetest_push_context( "line %d, pointer msg %#x, wp %#Ix, lp %#Ix, pointerid %#x",
+-                           touch_test_line, msg, wparam, lparam, pointerid );
+-    for (i = 0; i < ARRAY_SIZE(state); ++i)
+-    {
+-        if (state[i].pointerid == pointerid) break;
+-    }
+-    if (msg == WM_POINTERENTER)
+-    {
+-        todo_wine_if(touch_missing_leave_todo) ok( i == ARRAY_SIZE(state), "Duplicate WM_POINTERDOWN for id %#x.\n", pointerid );
+-        touch_missing_leave_todo = FALSE;
+-        if (i == ARRAY_SIZE(state))
+-        {
+-            for (i = 0; i < ARRAY_SIZE(state); ++i)
+-            {
+-                if (!state[i].pointerid) break;
+-            }
+-        }
+-        else
+-        {
+-            ok( active_touch_count == 1, "got %u.\n", active_touch_count );
+-            ok( total_touch_count == 1, "got %u.\n", total_touch_count );
+-            if (!--active_touch_count) total_touch_count = 0;
+-        }
+-        ok( i < ARRAY_SIZE(state), "No free space in state table.\n" );
+-        state[i].pointerid = pointerid;
+-        state[i].tracking_started = FALSE;
+-        state[i].curr_pos.x = LOWORD(lparam);
+-        state[i].curr_pos.y = HIWORD(lparam);
+-        ++active_touch_count;
+-        ++total_touch_count;
+-    }
+-    else if (msg != WM_POINTERLEAVE)
+-    {
+-        ok( i < ARRAY_SIZE(state), "Missed WM_POINTERDOWN for id %#x.\n", pointerid );
+-    }
+-
+-    pointer_moved = LOWORD(lparam) != state[i].curr_pos.x || HIWORD(lparam) != state[i].curr_pos.y;
+-    curpos_changed = LOWORD(lparam) != last_cursor_pos.x || HIWORD(lparam) != last_cursor_pos.y;
+-    expect_message_after = 0;
+-
+-        if (winetest_debug > 1)
+-            trace( "msg %#x, msgpos (%d, %d), tracking %d, t %ld, pointer_moved %d, curpos_changed %d.\n",
+-                    msg, LOWORD(lparam), HIWORD(lparam), state[i].tracking_started, GetTickCount(),
+-                    pointer_moved, curpos_changed);
+-
+-    if (state[i].tracking_started)
+-    {
+-        if (msg == WM_POINTERUPDATE && (pointer_moved || curpos_changed)
+-            && active_touch_count && total_touch_count == 1)
+-        {
+-            state[i].curr_pos.x = LOWORD(lparam);
+-            state[i].curr_pos.y = HIWORD(lparam);
+-            last_cursor_pos = state[i].curr_pos;
+-            expect_touch_mouse_message( hwnd, WM_MOUSEMOVE, FALSE );
+-        }
+-        else if (msg == WM_POINTERUP)
+-        {
+-            if (pointer_moved || curpos_changed)
+-            {
+-                state[i].curr_pos.x = LOWORD(lparam);
+-                state[i].curr_pos.y = HIWORD(lparam);
+-                last_cursor_pos = state[i].curr_pos;
+-                expect_touch_mouse_message( hwnd, WM_MOUSEMOVE, FALSE );
+-            }
+-            if (!expect_touch_mouse_message( hwnd, WM_LBUTTONUP, TRUE ))
+-            {
+-                /* This message arrives here most of the time, but sometimes it is delayed until after DefWindowProc
+-                 * call, maybe based on timing between WM_POINTERUPDATE which changed the position first time
+-                 * and WM_POINTERUP. */
+-                expect_message_after = WM_LBUTTONUP;
+-            }
+-        }
+-    }
+-    else
+-    {
+-        if (!skip_touch_mouse_tests) do
+-        {
+-            bret = get_touch_mouse_message( hwnd, &message );
+-
+-            ok( !bret, "got mouse message before DefWindowProc, msg  %#x, wp %#Ix, lp %#Ix.\n",
+-                       message.message, message.wParam, message.lParam );
+-        } while (bret);
+-    }
+-
+-    if (skip_defwnd_for_pointer_message && skip_defwnd_for_pointer_message[msg - WM_POINTERUPDATE])
+-    {
+-        ret = 0;
+-    }
+-    else
+-    {
+-        /* The handling in DefWindowProc() doesn't depend on pointer flags in wparam and position in lparam */
+-        ret = DefWindowProcW( hwnd, msg, LOWORD(wparam), 0 );
+-        ok( !ret, "got %Id from DefWindowProcW.\n", ret );
+-
+-        if (skip_defwnd_for_pointer_message && skip_defwnd_for_pointer_message[WM_POINTERDOWN - WM_POINTERUPDATE])
+-        {
+-            /* No mouse messages al all if DefWindowProcW() wasn't called for WM_POINTERDOWN. */
+-        }
+-        else if (msg == WM_POINTERUPDATE && pointer_moved && !state[i].tracking_started && active_touch_count && total_touch_count == 1)
+-        {
+-            last_cursor_pos = state[i].curr_pos;
+-            expect_touch_mouse_message( hwnd, WM_MOUSEMOVE, FALSE );
+-            state[i].curr_pos.x = LOWORD(lparam);
+-            state[i].curr_pos.y = HIWORD(lparam);
+-            if (!state[i].tracking_started)
+-            {
+-                state[i].tracking_started = TRUE;
+-                expect_touch_mouse_message( hwnd, WM_LBUTTONDOWN, FALSE );
+-                last_cursor_pos = state[i].curr_pos;
+-                expect_touch_mouse_message( hwnd, WM_MOUSEMOVE, FALSE );
+-            }
+-        }
+-        else if (msg == WM_POINTERUP && active_touch_count == 1 && total_touch_count == 1)
+-        {
+-            if (!state[i].tracking_started)
+-            {
+-                last_cursor_pos = state[i].curr_pos;
+-                if (!expect_touch_mouse_message( hwnd, WM_MOUSEMOVE, TRUE ))
+-                {
+-                    /* A lot of details go different before Win10, so don't perform the rest of mouse message tests. */
+-                    win_skip( "Old behaviour detected, skipping remaining mouse tracking tests.\n" );
+-                    skip_touch_mouse_tests = TRUE;
+-                }
+-                expect_touch_mouse_message( hwnd, WM_LBUTTONDOWN, FALSE );
+-                expect_touch_mouse_message( hwnd, WM_LBUTTONUP, FALSE );
+-            }
+-        }
+-
+-        if (!skip_touch_mouse_tests)
+-        {
+-            GetCursorPos( &pt );
+-            /* This is flaky because GetCursorPos() currently periodically updated from mouse position from
+-             * display driver. While we try to update that on mouse position update from pointer that may
+-             * still fail. */
+-            flaky_wine ok( pt.x == last_cursor_pos.x && pt.y == last_cursor_pos.y, "got (%ld, %ld), expected (%ld, %ld).\n",
+-                           pt.x, pt.y, last_cursor_pos.x, last_cursor_pos.y );
+-        }
+-    }
+-
+-    if (expect_message_after) expect_touch_mouse_message( hwnd, expect_message_after, FALSE );
+-    if (msg == WM_POINTERDOWN && total_touch_count > 1)
+-    {
+-        /* With double touch, depending on WM_POINTERDOWN / WM_POINTERUPDATE timing, we may get mouse down message
+-         * here (both on Windows and Wine). Then we are going to get mouse up before DefWindowProc which will be
+-         * handled by our test state tracker with 'tracking_started' set. */
+-        if (expect_touch_mouse_message( hwnd, WM_LBUTTONDOWN, TRUE ))
+-        {
+-            trace( "Got WM_LBUTTONDOWN on WM_POINTERDOWN.\n" );
+-            state[i].tracking_started = TRUE;
+-        }
+-    }
+-
+-    if (msg == WM_POINTERUP)
+-    {
+-        state[i].pointerid = 0;
+-        ok( active_touch_count, "got 0.\n" );
+-        if (!--active_touch_count) total_touch_count = 0;
+-    }
+-
+-    winetest_pop_context();
+-    if (msg == WM_POINTERUPDATE && pointer_moved) SetEvent( touchmoved_event );
+-    if (msg == WM_POINTERDOWN) ReleaseSemaphore( touchdown_event, 1, NULL );
+     if (msg == WM_POINTERLEAVE) ReleaseSemaphore( touchleave_event, 1, NULL );
+-    return ret;
++
++    return DefWindowProcW( hwnd, msg, wparam, lparam );
+ }
+ 
+ static void test_hid_touch_screen(void)
+@@ -2200,16 +1910,6 @@
+         .code = IOCTL_HID_READ_REPORT,
+         .report_buf = {1, 1, 0x01,0x02,0x08,0x10},
+     };
+-    struct hid_expect touch_single2 =
+-    {
+-        .code = IOCTL_HID_READ_REPORT,
+-        .report_buf = {1, 1, 0x01,0x02,0x18,0x20},
+-    };
+-    struct hid_expect touch_single3 =
+-    {
+-        .code = IOCTL_HID_READ_REPORT,
+-        .report_buf = {1, 1, 0x01,0x02,0x40,0x50},
+-    };
+     struct hid_expect touch_multiple =
+     {
+         .code = IOCTL_HID_READ_REPORT,
+@@ -2228,26 +1928,11 @@
+         .report_buf = {1,0x02},
+     };
+ 
+-    static struct
+-    {
+-        BOOL skip_message[5];
+-    }
+-    mouse_tests[] =
+-    {
+-        /* WM_POINTERUPDATE, WM_POINTERDOWN, WM_POINTERUP, WM_POINTERENTER, WM_POINTERLEAVE */
+-        {{ FALSE }},
+-        {{ FALSE, TRUE }},
+-        {{ TRUE }},
+-        {{ FALSE, FALSE, TRUE }},
+-        {{ TRUE, FALSE, TRUE }},
+-    };
+-
+     RAWINPUTDEVICE rawdevice = {.usUsagePage = HID_USAGE_PAGE_DIGITIZER, .usUsage = HID_USAGE_DIGITIZER_TOUCH_SCREEN};
+     UINT rawbuffer_count, rawbuffer_size, expect_flags, id, width, height;
+     WCHAR device_path[MAX_PATH];
+     char rawbuffer[1024];
+     RAWINPUT *rawinput;
+-    unsigned int i, j;
+     HANDLE file;
+     DWORD res;
+     HWND hwnd;
+@@ -2258,8 +1943,6 @@
+ 
+     touchdown_event = CreateSemaphoreW( NULL, 0, LONG_MAX, NULL );
+     ok( !!touchdown_event, "CreateSemaphoreW failed, error %lu\n", GetLastError() );
+-    touchmoved_event = CreateEventW( NULL, FALSE, FALSE, NULL );
+-    ok( !!touchmoved_event, "CreateEventW failed, error %lu\n", GetLastError() );
+     touchleave_event = CreateSemaphoreW( NULL, 0, LONG_MAX, NULL );
+     ok( !!touchleave_event, "CreateSemaphoreW failed, error %lu\n", GetLastError() );
+ 
+@@ -2303,13 +1986,17 @@
+ 
+     /* check basic touch_screen input injection to window message */
+ 
++    SetCursorPos( 0, 0 );
++
+     hwnd = create_foreground_window( TRUE );
+     SetWindowLongPtrW( hwnd, GWLP_WNDPROC, (LONG_PTR)touch_screen_wndproc );
+ 
+ 
+     /* a single touch is automatically released if we don't send continuous updates */
+ 
+-    start_touch_test( NULL );
++    pointer_enter_count = pointer_up_count = pointer_count = 0;
++    memset( pointer_wparam, 0, sizeof(pointer_wparam) );
++    memset( pointer_lparam, 0, sizeof(pointer_lparam) );
+     bus_send_hid_input( file, &desc, &touch_single, sizeof(touch_single) );
+ 
+     res = MsgWaitForMultipleObjects( 0, NULL, FALSE, 500, QS_POINTER );
+@@ -2346,8 +2033,6 @@
+     todo_wine
+     ok( HIWORD( pointer_lparam[1] ) * 128 / height == 0x10, "got lparam %#Ix\n", pointer_lparam[1] );
+ 
+-    /* Wine is currently missing WM_POINTERUP generation in this case. */
+-    touch_missing_leave_todo = TRUE;
+ 
+     /* test that we receive HID rawinput type with the touchscreen */
+ 
+@@ -2458,7 +2143,9 @@
+ 
+     /* now the touch is continuously updated */
+ 
+-    start_touch_test( NULL );
++    pointer_enter_count = pointer_up_count = pointer_count = 0;
++    memset( pointer_wparam, 0, sizeof(pointer_wparam) );
++    memset( pointer_lparam, 0, sizeof(pointer_lparam) );
+     bus_send_hid_input( file, &desc, &touch_single, sizeof(touch_single) );
+ 
+     res = msg_wait_for_events( 1, &touchdown_event, 1000 );
+@@ -2507,14 +2194,12 @@
+     pointer_enter_count = pointer_up_count = pointer_count = 0;
+     memset( pointer_wparam, 0, sizeof(pointer_wparam) );
+     memset( pointer_lparam, 0, sizeof(pointer_lparam) );
+-
+     bus_send_hid_input( file, &desc, &touch_multiple, sizeof(touch_multiple) );
+ 
+     res = msg_wait_for_events( 1, &touchdown_event, 1000 );
+     ok( res == 0, "WaitForSingleObject returned %#lx\n", res );
+     res = msg_wait_for_events( 1, &touchdown_event, 1000 );
+     ok( res == 0, "WaitForSingleObject returned %#lx\n", res );
+-
+     res = msg_wait_for_events( 1, &touchleave_event, 10 );
+     ok( res == WAIT_TIMEOUT, "WaitForSingleObject returned %#lx\n", res );
+     ok( pointer_enter_count == 2, "got pointer_enter_count %u\n", pointer_enter_count );
+@@ -2571,57 +2256,7 @@
+     ok( LOWORD( pointer_lparam[1] ) * 128 / width == 0x18, "got lparam %#Ix\n", pointer_lparam[1] );
+     ok( HIWORD( pointer_lparam[1] ) * 128 / height == 0x20, "got lparam %#Ix\n", pointer_lparam[1] );
+ 
+-    /* Test mouse messages generation. */
+-    SetCapture( hwnd );
+-    pump_messages();
+-    for (i = 0; i < ARRAY_SIZE(mouse_tests); ++i)
+-    {
+-        for (j = 0; j < 2; ++j)
+-        {
+-            winetest_push_context( "test %u, %u", i, j );
+-
+-            res = WaitForSingleObject( touchdown_event, 0 );
+-            ok( res == WAIT_TIMEOUT, "WaitForSingleObject returned %#lx\n", res );
+-            res = WaitForSingleObject( touchleave_event, 0 );
+-            ok( res == WAIT_TIMEOUT, "WaitForSingleObject returned %#lx\n", res );
+-
+-            start_touch_test( mouse_tests[i].skip_message );
+-            bus_send_hid_input( file, &desc, &touch_single, sizeof(touch_single) );
+-            ResetEvent( touchmoved_event );
+-            res = msg_wait_for_events( 1, &touchdown_event, 1000 );
+-            ok( res == 0, "WaitForSingleObject returned %#lx\n", res );
+-
+-            if (j)
+-            {
+-                /* Current cursor positon affects WM_MOUSEMOVE messages. */
+-                start_touch_test( mouse_tests[i].skip_message );
+-            }
+-            ResetEvent( touchmoved_event );
+-            bus_send_hid_input( file, &desc, &touch_single2, sizeof(touch_single2) );
+-
+-            res = msg_wait_for_events( 1, &touchmoved_event, 1000 );
+-            ok( res == 0, "WaitForSingleObject returned %#lx\n", res );
+-
+-            if (j) start_touch_test( mouse_tests[i].skip_message );
+-            ResetEvent( touchmoved_event );
+-            bus_send_hid_input( file, &desc, &touch_single3, sizeof(touch_single3) );
+-            res = msg_wait_for_events( 1, &touchmoved_event, 1000 );
+-            ok( res == 0, "WaitForSingleObject returned %#lx\n", res );
+-
+-            if (j) start_touch_test( mouse_tests[i].skip_message );
+-            bus_send_hid_input( file, & desc, &touch_release, sizeof(touch_release) );
+-            res = msg_wait_for_events( 1, &touchleave_event, 1000 );
+-            ok( res == 0, "WaitForSingleObject returned %#lx\n", res );
+-
+-            start_touch_test( NULL );
+-            pump_messages();
+-
+-            winetest_pop_context();
+-        }
+-    }
+ 
+-    ret = ReleaseCapture();
+-    ok( ret, "ReleaseCapture() failed.\n" );
+     DestroyWindow( hwnd );
+ 
+     CloseHandle( file );
+@@ -2630,7 +2265,6 @@
+     hid_device_stop( &desc, 1 );
+ 
+     CloseHandle( touchdown_event );
+-    CloseHandle( touchmoved_event );
+     CloseHandle( touchleave_event );
+ }
+ 
+diff -urN wine_proton10/dlls/dinput/tests/driver_bus.c wine-10.0/dlls/dinput/tests/driver_bus.c
+--- wine_proton10/dlls/dinput/tests/driver_bus.c	2025-11-05 17:27:18.571954019 +0800
++++ wine-10.0/dlls/dinput/tests/driver_bus.c	2025-01-22 00:42:16.000000000 +0800
+@@ -563,7 +563,7 @@
+     for (i = 0; i < impl->devices->Count; ++i)
+         if (impl->devices->Objects[i] == device) break;
+     if (i == impl->devices->Count) status = STATUS_NOT_FOUND;
+-    else impl->devices->Objects[i] = impl->devices->Objects[--impl->devices->Count];
++    else impl->devices->Objects[i] = impl->devices->Objects[impl->devices->Count--];
+     KeReleaseSpinLock( &impl->base.lock, irql );
+ 
+     return status;
+diff -urN wine_proton10/dlls/dinput/tests/driver_hid.c wine-10.0/dlls/dinput/tests/driver_hid.c
+--- wine_proton10/dlls/dinput/tests/driver_hid.c	2025-11-05 17:27:18.571954019 +0800
++++ wine-10.0/dlls/dinput/tests/driver_hid.c	2025-01-22 00:42:16.000000000 +0800
+@@ -57,6 +57,8 @@
+ 
+     ok( device == impl->expect_hid_fdo, "got device %p\n", device );
+     ok( device->DriverObject == expect_driver, "got DriverObject %p\n", device->DriverObject );
++    if (!device->NextDevice) ok( device == impl->expect_hid_fdo, "got device %p\n", device );
++    else ok( device->NextDevice == impl->expect_hid_fdo, "got NextDevice %p\n", device->NextDevice );
+     ok( !device->AttachedDevice, "got AttachedDevice %p\n", device->AttachedDevice );
+ 
+     ok( ext->MiniDeviceExtension == impl->expect_hid_ext, "got MiniDeviceExtension %p\n", ext->MiniDeviceExtension );
+diff -urN wine_proton10/dlls/dinput/tests/force_feedback.c wine-10.0/dlls/dinput/tests/force_feedback.c
+--- wine_proton10/dlls/dinput/tests/force_feedback.c	2025-11-05 17:27:18.573954016 +0800
++++ wine-10.0/dlls/dinput/tests/force_feedback.c	2025-01-22 00:42:16.000000000 +0800
+@@ -1610,40 +1610,6 @@
+             .report_buf = {0x03,0x01,0x03,0x08,0x01,0x00,version >= 0x700 ? 0x06 : 0x00,0x00,0x01,0x55,0x00},
+         },
+     };
+-    struct hid_expect expect_create_4[] =
+-    {
+-        /* set condition, saturation 5000 */
+-        {
+-            .code = IOCTL_HID_WRITE_REPORT,
+-            .report_id = 7,
+-            .report_len = 8,
+-            .report_buf = {0x07,0x00,0xa6,0x19,0xd9,0x7f,0x7f,0x19},
+-        },
+-        /* update effect */
+-        {
+-            .code = IOCTL_HID_WRITE_REPORT,
+-            .report_id = 3,
+-            .report_len = 11,
+-            .report_buf = {0x03,0x01,0x03,0x08,0x01,0x00,version >= 0x700 ? 0x06 : 0x00,0x00,0x01,0x3f,0x00},
+-        },
+-    };
+-    struct hid_expect expect_create_5[] =
+-    {
+-        /* set condition, saturation out-of-bounds (-1) */
+-        {
+-            .code = IOCTL_HID_WRITE_REPORT,
+-            .report_id = 7,
+-            .report_len = 8,
+-            .report_buf = {0x07,0x00,0xa6,0x19,0xd9,0xff,0xff,0x19},
+-        },
+-        /* update effect */
+-        {
+-            .code = IOCTL_HID_WRITE_REPORT,
+-            .report_id = 3,
+-            .report_len = 11,
+-            .report_buf = {0x03,0x01,0x03,0x08,0x01,0x00,version >= 0x700 ? 0x06 : 0x00,0x00,0x01,0x3f,0x00},
+-        },
+-    };
+     struct hid_expect expect_destroy =
+     {
+         .code = IOCTL_HID_WRITE_REPORT,
+@@ -1670,7 +1636,7 @@
+         .dwFadeLevel = 3000,
+         .dwFadeTime = 4000,
+     };
+-    static const DICONDITION expect_condition[4] =
++    static const DICONDITION expect_condition[3] =
+     {
+         {
+             .lOffset = -500,
+@@ -1690,19 +1656,11 @@
+         },
+         {
+             .lOffset = -7000,
+-            .lPositiveCoefficient = 2000,
+-            .lNegativeCoefficient = -3000,
+-            .dwPositiveSaturation = 5000,
+-            .dwNegativeSaturation = 5000,
+-            .lDeadBand = 1000,
+-        },
+-        {
+-            .lOffset = -7000,
+-            .lPositiveCoefficient = 2000,
+-            .lNegativeCoefficient = -3000,
+-            .dwPositiveSaturation = 11000,
+-            .dwNegativeSaturation = -11000,
+-            .lDeadBand = 1000,
++            .lPositiveCoefficient = -8000,
++            .lNegativeCoefficient = 9000,
++            .dwPositiveSaturation = 10000,
++            .dwNegativeSaturation = 11000,
++            .lDeadBand = -12000,
+         },
+     };
+     const DIEFFECT expect_desc =
+@@ -1870,292 +1828,8 @@
+     ok( desc.cbTypeSpecificParams == 0 * sizeof(DICONDITION), "got %lu\n", desc.cbTypeSpecificParams );
+     ref = IDirectInputEffect_Release( effect );
+     ok( ref == 0, "Release returned %ld\n", ref );
+-
+-
+-    /* check saturation coefficients */
+-    desc = expect_desc;
+-    desc.cAxes = 1;
+-    desc.cbTypeSpecificParams = 1 * sizeof(DICONDITION);
+-    desc.lpvTypeSpecificParams = (void *)&expect_condition[2];
+-
+-    set_hid_expect( file, expect_create_4, sizeof(expect_create_4) );
+-    hr = IDirectInputDevice8_CreateEffect( device, &GUID_Spring, &desc, &effect, NULL );
+-    ok( hr == DI_OK, "CreateEffect returned %#lx\n", hr );
+-    set_hid_expect( file, NULL, 0 );
+-
+-    set_hid_expect( file, &expect_destroy, sizeof(expect_destroy) );
+-    ref = IDirectInputEffect_Release( effect );
+-    ok( ref == 0, "Release returned %ld\n", ref );
+-    set_hid_expect( file, NULL, 0 );
+-
+-    desc = expect_desc;
+-    desc.cAxes = 1;
+-    desc.cbTypeSpecificParams = 1 * sizeof(DICONDITION);
+-    desc.lpvTypeSpecificParams = (void *)&expect_condition[3];
+-
+-    set_hid_expect( file, expect_create_5, sizeof(expect_create_5) );
+-    hr = IDirectInputDevice8_CreateEffect( device, &GUID_Spring, &desc, &effect, NULL );
+-    ok( hr == DI_OK, "CreateEffect returned %#lx\n", hr );
+-    set_hid_expect( file, NULL, 0 );
+-
+-    set_hid_expect( file, &expect_destroy, sizeof(expect_destroy) );
+-    ref = IDirectInputEffect_Release( effect );
+-    ok( ref == 0, "Release returned %ld\n", ref );
+-    set_hid_expect( file, NULL, 0 );
+-}
+-
+-static void test_constantforce_effect( IDirectInputDevice8W *device, HANDLE file, DWORD version )
+-{
+-    struct hid_expect expect_create_0[] =
+-    {
+-        /* set constant force, magnitude 5000 */
+-        {
+-            .code = IOCTL_HID_WRITE_REPORT,
+-            .report_id = 9,
+-            .report_len = 3,
+-            .report_buf = {0x09,0x88,0x13},
+-        },
+-        /* set envelope */
+-        {
+-            .code = IOCTL_HID_WRITE_REPORT,
+-            .report_id = 6,
+-            .report_len = 7,
+-            .report_buf = {0x06,0x19,0x4c,0x02,0x00,0x04,0x00},
+-        },
+-        /* update effect */
+-        {
+-            .code = IOCTL_HID_WRITE_REPORT,
+-            .report_id = 3,
+-            .report_len = 11,
+-            .report_buf = {0x03,0x01,0x04,0x08,0x01,0x00,version >= 0x700 ? 0x06 : 0x00,0x00,0x01,0x55,0x00},
+-        },
+-    };
+-    struct hid_expect expect_create_1[] =
+-    {
+-        /* set constantforce, magnitude 10000 */
+-        {
+-            .code = IOCTL_HID_WRITE_REPORT,
+-            .report_id = 9,
+-            .report_len = 3,
+-            .report_buf = {0x09,0x10,0x27},
+-        },
+-        /* update envelope */
+-        {
+-            .code = IOCTL_HID_WRITE_REPORT,
+-            .report_id = 6,
+-            .report_len = 7,
+-            .report_buf = {0x06,0x19,0x4c,0x02,0x00,0x04,0x00},
+-        },
+-        /* update effect */
+-        {
+-            .code = IOCTL_HID_WRITE_REPORT,
+-            .report_id = 3,
+-            .report_len = 11,
+-            .report_buf = {0x03,0x01,0x04,0x08,0x01,0x00,version >= 0x700 ? 0x06 : 0x00,0x00,0x01,0x3f,0x00},
+-        },
+-    };
+-
+-    struct hid_expect expect_create_2[] =
+-    {
+-        /* set constantforce, magnitude -10000 */
+-        {
+-            .code = IOCTL_HID_WRITE_REPORT,
+-            .report_id = 9,
+-            .report_len = 3,
+-            .report_buf = {0x09,0xf0,0xd8},
+-        },
+-        /* update envelope */
+-        {
+-            .code = IOCTL_HID_WRITE_REPORT,
+-            .report_id = 6,
+-            .report_len = 7,
+-            .report_buf = {0x06,0x19,0x4c,0x02,0x00,0x04,0x00},
+-        },
+-        /* update effect */
+-        {
+-            .code = IOCTL_HID_WRITE_REPORT,
+-            .report_id = 3,
+-            .report_len = 11,
+-            .report_buf = {0x03,0x01,0x04,0x08,0x01,0x00,version >= 0x700 ? 0x06 : 0x00,0x00,0x01,0x3f,0x00},
+-        },
+-    };
+-    struct hid_expect expect_destroy =
+-    {
+-        .code = IOCTL_HID_WRITE_REPORT,
+-        .report_id = 2,
+-        .report_len = 4,
+-        .report_buf = {0x02, 0x01, 0x03, 0x00},
+-    };
+-    static const DWORD expect_axes[3] =
+-    {
+-        DIDFT_ABSAXIS | DIDFT_MAKEINSTANCE( 0 ) | DIDFT_FFACTUATOR,
+-        DIDFT_ABSAXIS | DIDFT_MAKEINSTANCE( 2 ) | DIDFT_FFACTUATOR,
+-        DIDFT_ABSAXIS | DIDFT_MAKEINSTANCE( 1 ) | DIDFT_FFACTUATOR,
+-    };
+-    static const LONG expect_directions[3] = {
+-        +3000,
+-        0,
+-        0,
+-    };
+-    static const DIENVELOPE expect_envelope =
+-    {
+-        .dwSize = sizeof(DIENVELOPE),
+-        .dwAttackLevel = 1000,
+-        .dwAttackTime = 2000,
+-        .dwFadeLevel = 3000,
+-        .dwFadeTime = 4000,
+-    };
+-    static const DICONSTANTFORCE input_constant_force[4] =
+-    {
+-        {
+-            .lMagnitude = 5000
+-        },
+-        {
+-            .lMagnitude = 10000
+-        },
+-        {
+-            .lMagnitude = 16000
+-        },
+-        {
+-            .lMagnitude = -16000
+-        },
+-    };
+-    const DIEFFECT expect_desc =
+-    {
+-        .dwSize = version >= 0x700 ? sizeof(DIEFFECT_DX6) : sizeof(DIEFFECT_DX5),
+-        .dwFlags = DIEFF_SPHERICAL | DIEFF_OBJECTIDS,
+-        .dwDuration = 1000,
+-        .dwSamplePeriod = 2000,
+-        .dwGain = 3000,
+-        .dwTriggerButton = DIDFT_PSHBUTTON | DIDFT_MAKEINSTANCE( 0 ) | DIDFT_FFEFFECTTRIGGER,
+-        .dwTriggerRepeatInterval = 5000,
+-        .cAxes = 3,
+-        .rgdwAxes = (void *)expect_axes,
+-        .rglDirection = (void *)expect_directions,
+-        .lpEnvelope = (void *)&expect_envelope,
+-        .cbTypeSpecificParams = sizeof(DICONSTANTFORCE),
+-        .lpvTypeSpecificParams = (void *)input_constant_force,
+-        .dwStartDelay = 6000,
+-    };
+-    struct check_created_effect_params check_params = {0};
+-    DIENVELOPE envelope = {.dwSize = sizeof(DIENVELOPE)};
+-    DICONSTANTFORCE constant_force[1] = {{0}};
+-    IDirectInputEffect *effect;
+-    LONG directions[3] = {0,0,0};
+-    DWORD axes[3] = {0,0,0};
+-    DIEFFECT desc =
+-    {
+-        .dwSize = version >= 0x700 ? sizeof(DIEFFECT_DX6) : sizeof(DIEFFECT_DX5),
+-        .dwFlags = DIEFF_SPHERICAL | DIEFF_OBJECTIDS,
+-        .cAxes = 3,
+-        .rgdwAxes = axes,
+-        .rglDirection = directions,
+-        .lpEnvelope = &envelope,
+-        .cbTypeSpecificParams = sizeof(DICONSTANTFORCE),
+-        .lpvTypeSpecificParams = constant_force,
+-    };
+-    HRESULT hr;
+-    ULONG ref;
+-    GUID guid;
+-
+-    set_hid_expect( file, expect_create_0, sizeof(expect_create_0) );
+-    hr = IDirectInputDevice8_CreateEffect( device, &GUID_ConstantForce, &expect_desc, &effect, NULL );
+-    ok( hr == DI_OK, "CreateEffect returned %#lx\n", hr );
+-    set_hid_expect( file, NULL, 0 );
+-
+-    check_params.expect_effect = effect;
+-    hr = IDirectInputDevice8_EnumCreatedEffectObjects( device, check_created_effect_objects, &check_params, 0 );
+-    ok( hr == DI_OK, "EnumCreatedEffectObjects returned %#lx\n", hr );
+-    ok( check_params.count == 1, "got count %lu, expected 1\n", check_params.count );
+-
+-    hr = IDirectInputEffect_GetEffectGuid( effect, &guid );
+-    ok( hr == DI_OK, "GetEffectGuid returned %#lx\n", hr );
+-    ok( IsEqualGUID( &guid, &GUID_ConstantForce ), "got guid %s, expected %s\n", debugstr_guid( &guid ),
+-        debugstr_guid( &GUID_ConstantForce ) );
+-
+-    hr = IDirectInputEffect_GetParameters( effect, &desc, version >= 0x700 ? DIEP_ALLPARAMS : DIEP_ALLPARAMS_DX5 );
+-    ok( hr == DI_OK, "GetParameters returned %#lx\n", hr );
+-    check_member( desc, expect_desc, "%lu", dwDuration );
+-    check_member( desc, expect_desc, "%lu", dwSamplePeriod );
+-    check_member( desc, expect_desc, "%lu", dwGain );
+-    check_member( desc, expect_desc, "%#lx", dwTriggerButton );
+-    check_member( desc, expect_desc, "%lu", dwTriggerRepeatInterval );
+-    check_member( desc, expect_desc, "%lu", cAxes );
+-    check_member( desc, expect_desc, "%#lx", rgdwAxes[0] );
+-    check_member( desc, expect_desc, "%#lx", rgdwAxes[1] );
+-    check_member( desc, expect_desc, "%ld", rglDirection[0] );
+-    check_member( desc, expect_desc, "%ld", rglDirection[1] );
+-    check_member( desc, expect_desc, "%lu", cbTypeSpecificParams );
+-    if (version >= 0x700) check_member( desc, expect_desc, "%lu", dwStartDelay );
+-    else ok( desc.dwStartDelay == 0, "got dwStartDelay %#lx\n", desc.dwStartDelay );
+-    check_member( envelope, expect_envelope, "%lu", dwAttackLevel );
+-    check_member( envelope, expect_envelope, "%lu", dwAttackTime );
+-    check_member( envelope, expect_envelope, "%lu", dwFadeLevel );
+-    check_member( envelope, expect_envelope, "%lu", dwFadeTime );
+-    check_member( constant_force[0], input_constant_force[0], "%ld", lMagnitude );
+-
+-    set_hid_expect( file, &expect_destroy, sizeof(expect_destroy) );
+-    ref = IDirectInputEffect_Release( effect );
+-    ok( ref == 0, "Release returned %ld\n", ref );
+-    set_hid_expect( file, NULL, 0 );
+-
+-    desc = expect_desc;
+-    desc.cAxes = 1;
+-    desc.cbTypeSpecificParams = 2 * sizeof(DICONSTANTFORCE);
+-    hr = IDirectInputDevice8_CreateEffect( device, &GUID_ConstantForce, &desc, &effect, NULL );
+-    ok( hr == DIERR_INVALIDPARAM, "CreateEffect returned %#lx\n", hr );
+-    set_hid_expect( file, NULL, 0 );
+-
+-
+-    desc = expect_desc;
+-    desc.cAxes = 1;
+-    desc.cbTypeSpecificParams = sizeof(DICONSTANTFORCE);
+-    desc.lpvTypeSpecificParams = (void *)&input_constant_force[1];
+-
+-    set_hid_expect( file, expect_create_1, sizeof(expect_create_1) );
+-    hr = IDirectInputDevice8_CreateEffect( device, &GUID_ConstantForce, &desc, &effect, NULL );
+-    ok( hr == DI_OK, "CreateEffect returned %#lx\n", hr );
+-    set_hid_expect( file, NULL, 0 );
+-
+-    set_hid_expect( file, &expect_destroy, sizeof(expect_destroy) );
+-    ref = IDirectInputEffect_Release( effect );
+-    ok( ref == 0, "Release returned %ld\n", ref );
+-    set_hid_expect( file, NULL, 0 );
+-
+-
+-    desc = expect_desc;
+-    desc.cAxes = 1;
+-    desc.cbTypeSpecificParams = sizeof(DICONSTANTFORCE);
+-    desc.lpvTypeSpecificParams = (void *)&input_constant_force[2];
+-
+-    set_hid_expect( file, expect_create_1, sizeof(expect_create_1) );
+-    hr = IDirectInputDevice8_CreateEffect( device, &GUID_ConstantForce, &desc, &effect, NULL );
+-    ok( hr == DI_OK, "CreateEffect returned %#lx\n", hr );
+-    set_hid_expect( file, NULL, 0 );
+-
+-    set_hid_expect( file, &expect_destroy, sizeof(expect_destroy) );
+-    ref = IDirectInputEffect_Release( effect );
+-    ok( ref == 0, "Release returned %ld\n", ref );
+-    set_hid_expect( file, NULL, 0 );
+-
+-
+-    desc = expect_desc;
+-    desc.cAxes = 1;
+-    desc.cbTypeSpecificParams = sizeof(DICONSTANTFORCE);
+-    desc.lpvTypeSpecificParams = (void *)&input_constant_force[3];
+-
+-    set_hid_expect( file, expect_create_2, sizeof(expect_create_2) );
+-    hr = IDirectInputDevice8_CreateEffect( device, &GUID_ConstantForce, &desc, &effect, NULL );
+-    ok( hr == DI_OK, "CreateEffect returned %#lx\n", hr );
+-    set_hid_expect( file, NULL, 0 );
+-
+-    set_hid_expect( file, &expect_destroy, sizeof(expect_destroy) );
+-    ref = IDirectInputEffect_Release( effect );
+-    ok( ref == 0, "Release returned %ld\n", ref );
+-    set_hid_expect( file, NULL, 0 );
+ }
+ 
+-
+ static BOOL test_force_feedback_joystick( DWORD version )
+ {
+ #include "psh_hid_macros.h"
+@@ -2302,11 +1976,10 @@
+                     USAGE(1, PID_USAGE_ET_SQUARE),
+                     USAGE(1, PID_USAGE_ET_SINE),
+                     USAGE(1, PID_USAGE_ET_SPRING),
+-                    USAGE(1, PID_USAGE_ET_CONSTANT_FORCE),
+                     LOGICAL_MINIMUM(1, 1),
+-                    LOGICAL_MAXIMUM(1, 4),
++                    LOGICAL_MAXIMUM(1, 3),
+                     PHYSICAL_MINIMUM(1, 1),
+-                    PHYSICAL_MAXIMUM(1, 4),
++                    PHYSICAL_MAXIMUM(1, 3),
+                     REPORT_SIZE(1, 8),
+                     REPORT_COUNT(1, 1),
+                     OUTPUT(1, Data|Ary|Abs),
+@@ -2491,21 +2164,6 @@
+                 REPORT_COUNT(1, 1),
+                 OUTPUT(1, Data|Var|Abs),
+             END_COLLECTION,
+-
+-            USAGE(1, PID_USAGE_SET_CONSTANT_FORCE_REPORT),
+-            COLLECTION(1, Logical),
+-                REPORT_ID(1, 9),
+-
+-                USAGE(1, PID_USAGE_MAGNITUDE),
+-                LOGICAL_MINIMUM(2, 0xd8f0),
+-                LOGICAL_MAXIMUM(2, 0x2710),
+-                PHYSICAL_MINIMUM(2, 0xd8f0),
+-                PHYSICAL_MAXIMUM(2, 0x2710),
+-                REPORT_SIZE(1, 16),
+-                REPORT_COUNT(1, 1),
+-                OUTPUT(1, Data|Var|Abs),
+-            END_COLLECTION,
+-
+         END_COLLECTION,
+     };
+     C_ASSERT(sizeof(report_descriptor) < MAX_HID_DESCRIPTOR_LEN);
+@@ -2720,7 +2378,7 @@
+         {
+             .dwSize = sizeof(DIDEVICEOBJECTINSTANCEW),
+             .guidType = GUID_Button,
+-            .dwOfs = version >= 0x800 ? 0x6c : 0x10,
++            .dwOfs = version >= 0x800 ? 0x68 : 0x10,
+             .dwType = DIDFT_PSHBUTTON|DIDFT_MAKEINSTANCE(0)|DIDFT_FFEFFECTTRIGGER,
+             .dwFlags = DIDOI_FFEFFECTTRIGGER,
+             .tszName = L"Button 0",
+@@ -2732,7 +2390,7 @@
+         {
+             .dwSize = sizeof(DIDEVICEOBJECTINSTANCEW),
+             .guidType = GUID_Button,
+-            .dwOfs = version >= 0x800 ? 0x6d : 0x11,
++            .dwOfs = version >= 0x800 ? 0x69 : 0x11,
+             .dwType = DIDFT_PSHBUTTON|DIDFT_MAKEINSTANCE(1)|DIDFT_FFEFFECTTRIGGER,
+             .dwFlags = DIDOI_FFEFFECTTRIGGER,
+             .tszName = L"Button 1",
+@@ -2744,7 +2402,7 @@
+         {
+             .dwSize = sizeof(DIDEVICEOBJECTINSTANCEW),
+             .guidType = GUID_Unknown,
+-            .dwOfs = version >= 0x800 ? 0x74 : 0,
++            .dwOfs = version >= 0x800 ? 0x70 : 0,
+             .dwType = DIDFT_NODATA|DIDFT_MAKEINSTANCE(12)|DIDFT_OUTPUT,
+             .dwFlags = 0x80008000,
+             .tszName = L"DC Device Reset",
+@@ -2756,7 +2414,7 @@
+         {
+             .dwSize = sizeof(DIDEVICEOBJECTINSTANCEW),
+             .guidType = GUID_Unknown,
+-            .dwOfs = version >= 0x800 ? 0x75 : 0,
++            .dwOfs = version >= 0x800 ? 0x71 : 0,
+             .dwType = DIDFT_NODATA|DIDFT_MAKEINSTANCE(13)|DIDFT_OUTPUT,
+             .dwFlags = 0x80008000,
+             .tszName = L"DC Stop All Effects",
+@@ -2780,7 +2438,7 @@
+         {
+             .dwSize = sizeof(DIDEVICEOBJECTINSTANCEW),
+             .guidType = GUID_Unknown,
+-            .dwOfs = version >= 0x800 ? 0x76 : 0,
++            .dwOfs = version >= 0x800 ? 0x72 : 0,
+             .dwType = DIDFT_NODATA|DIDFT_MAKEINSTANCE(15)|DIDFT_OUTPUT,
+             .dwFlags = 0x80008000,
+             .tszName = L"Op Effect Start",
+@@ -2792,7 +2450,7 @@
+         {
+             .dwSize = sizeof(DIDEVICEOBJECTINSTANCEW),
+             .guidType = GUID_Unknown,
+-            .dwOfs = version >= 0x800 ? 0x77 : 0,
++            .dwOfs = version >= 0x800 ? 0x73 : 0,
+             .dwType = DIDFT_NODATA|DIDFT_MAKEINSTANCE(16)|DIDFT_OUTPUT,
+             .dwFlags = 0x80008000,
+             .tszName = L"Op Effect Start Solo",
+@@ -2804,7 +2462,7 @@
+         {
+             .dwSize = sizeof(DIDEVICEOBJECTINSTANCEW),
+             .guidType = GUID_Unknown,
+-            .dwOfs = version >= 0x800 ? 0x78 : 0,
++            .dwOfs = version >= 0x800 ? 0x74 : 0,
+             .dwType = DIDFT_NODATA|DIDFT_MAKEINSTANCE(17)|DIDFT_OUTPUT,
+             .dwFlags = 0x80008000,
+             .tszName = L"Op Effect Stop",
+@@ -2840,7 +2498,7 @@
+         {
+             .dwSize = sizeof(DIDEVICEOBJECTINSTANCEW),
+             .guidType = GUID_Unknown,
+-            .dwOfs = version >= 0x800 ? 0x79 : 0,
++            .dwOfs = version >= 0x800 ? 0x75 : 0,
+             .dwType = DIDFT_NODATA|DIDFT_MAKEINSTANCE(20)|DIDFT_OUTPUT,
+             .dwFlags = 0x80008000,
+             .tszName = L"ET Square",
+@@ -2852,7 +2510,7 @@
+         {
+             .dwSize = sizeof(DIDEVICEOBJECTINSTANCEW),
+             .guidType = GUID_Unknown,
+-            .dwOfs = version >= 0x800 ? 0x7a : 0,
++            .dwOfs = version >= 0x800 ? 0x76 : 0,
+             .dwType = DIDFT_NODATA|DIDFT_MAKEINSTANCE(21)|DIDFT_OUTPUT,
+             .dwFlags = 0x80008000,
+             .tszName = L"ET Sine",
+@@ -2864,7 +2522,7 @@
+         {
+             .dwSize = sizeof(DIDEVICEOBJECTINSTANCEW),
+             .guidType = GUID_Unknown,
+-            .dwOfs = version >= 0x800 ? 0x7b : 0,
++            .dwOfs = version >= 0x800 ? 0x77 : 0,
+             .dwType = DIDFT_NODATA|DIDFT_MAKEINSTANCE(22)|DIDFT_OUTPUT,
+             .dwFlags = 0x80008000,
+             .tszName = L"ET Spring",
+@@ -2876,21 +2534,9 @@
+         {
+             .dwSize = sizeof(DIDEVICEOBJECTINSTANCEW),
+             .guidType = GUID_Unknown,
+-            .dwOfs = version >= 0x800 ? 0x7c : 0,
++            .dwOfs = version >= 0x800 ? 0x78 : 0,
+             .dwType = DIDFT_NODATA|DIDFT_MAKEINSTANCE(23)|DIDFT_OUTPUT,
+             .dwFlags = 0x80008000,
+-            .tszName = L"ET Constant Force",
+-            .wCollectionNumber = 8,
+-            .wUsagePage = HID_USAGE_PAGE_PID,
+-            .wUsage = PID_USAGE_ET_CONSTANT_FORCE,
+-            .wReportId = 3,
+-        },
+-        {
+-            .dwSize = sizeof(DIDEVICEOBJECTINSTANCEW),
+-            .guidType = GUID_Unknown,
+-            .dwOfs = version >= 0x800 ? 0x7d : 0,
+-            .dwType = DIDFT_NODATA|DIDFT_MAKEINSTANCE(24)|DIDFT_OUTPUT,
+-            .dwFlags = 0x80008000,
+             .tszName = L"Z Axis",
+             .wCollectionNumber = 9,
+             .wUsagePage = HID_USAGE_PAGE_GENERIC,
+@@ -2900,8 +2546,8 @@
+         {
+             .dwSize = sizeof(DIDEVICEOBJECTINSTANCEW),
+             .guidType = GUID_Unknown,
+-            .dwOfs = version >= 0x800 ? 0x7e : 0,
+-            .dwType = DIDFT_NODATA|DIDFT_MAKEINSTANCE(25)|DIDFT_OUTPUT,
++            .dwOfs = version >= 0x800 ? 0x79 : 0,
++            .dwType = DIDFT_NODATA|DIDFT_MAKEINSTANCE(24)|DIDFT_OUTPUT,
+             .dwFlags = 0x80008000,
+             .tszName = L"Y Axis",
+             .wCollectionNumber = 9,
+@@ -2912,8 +2558,8 @@
+         {
+             .dwSize = sizeof(DIDEVICEOBJECTINSTANCEW),
+             .guidType = GUID_Unknown,
+-            .dwOfs = version >= 0x800 ? 0x7f : 0,
+-            .dwType = DIDFT_NODATA|DIDFT_MAKEINSTANCE(26)|DIDFT_OUTPUT,
++            .dwOfs = version >= 0x800 ? 0x7a : 0,
++            .dwType = DIDFT_NODATA|DIDFT_MAKEINSTANCE(25)|DIDFT_OUTPUT,
+             .dwFlags = 0x80008000,
+             .tszName = L"X Axis",
+             .wCollectionNumber = 9,
+@@ -2924,8 +2570,8 @@
+         {
+             .dwSize = sizeof(DIDEVICEOBJECTINSTANCEW),
+             .guidType = GUID_Unknown,
+-            .dwOfs = version >= 0x800 ? 0x80 : 0,
+-            .dwType = DIDFT_NODATA|DIDFT_MAKEINSTANCE(27)|DIDFT_OUTPUT,
++            .dwOfs = version >= 0x800 ? 0x7b : 0,
++            .dwType = DIDFT_NODATA|DIDFT_MAKEINSTANCE(26)|DIDFT_OUTPUT,
+             .dwFlags = 0x80008000,
+             .tszName = L"Direction Enable",
+             .wCollectionNumber = 7,
+@@ -2937,7 +2583,7 @@
+             .dwSize = sizeof(DIDEVICEOBJECTINSTANCEW),
+             .guidType = GUID_Unknown,
+             .dwOfs = version >= 0x800 ? 0x1c : 0,
+-            .dwType = DIDFT_NODATA|DIDFT_MAKEINSTANCE(28)|DIDFT_OUTPUT,
++            .dwType = DIDFT_NODATA|DIDFT_MAKEINSTANCE(27)|DIDFT_OUTPUT,
+             .dwFlags = 0x80008000,
+             .tszName = L"Start Delay",
+             .wCollectionNumber = 7,
+@@ -2951,7 +2597,7 @@
+             .dwSize = sizeof(DIDEVICEOBJECTINSTANCEW),
+             .guidType = GUID_Unknown,
+             .dwOfs = version >= 0x800 ? 0x20 : 0,
+-            .dwType = DIDFT_NODATA|DIDFT_MAKEINSTANCE(29)|DIDFT_OUTPUT,
++            .dwType = DIDFT_NODATA|DIDFT_MAKEINSTANCE(28)|DIDFT_OUTPUT,
+             .dwFlags = 0x80008000,
+             .tszName = L"Duration",
+             .wCollectionNumber = 7,
+@@ -2965,7 +2611,7 @@
+             .dwSize = sizeof(DIDEVICEOBJECTINSTANCEW),
+             .guidType = GUID_Unknown,
+             .dwOfs = version >= 0x800 ? 0x24 : 0,
+-            .dwType = DIDFT_NODATA|DIDFT_MAKEINSTANCE(30)|DIDFT_OUTPUT,
++            .dwType = DIDFT_NODATA|DIDFT_MAKEINSTANCE(29)|DIDFT_OUTPUT,
+             .dwFlags = 0x80008000,
+             .tszName = L"Trigger Button",
+             .wCollectionNumber = 7,
+@@ -2977,9 +2623,9 @@
+             .dwSize = sizeof(DIDEVICEOBJECTINSTANCEW),
+             .guidType = GUID_Unknown,
+             .dwOfs = version >= 0x800 ? 0x28 : 0,
+-            .dwType = DIDFT_NODATA|DIDFT_MAKEINSTANCE(31)|DIDFT_OUTPUT,
++            .dwType = DIDFT_NODATA|DIDFT_MAKEINSTANCE(30)|DIDFT_OUTPUT,
+             .dwFlags = 0x80008000,
+-            .tszName = L"Unknown 31",
++            .tszName = L"Unknown 30",
+             .wCollectionNumber = 10,
+             .wUsagePage = HID_USAGE_PAGE_ORDINAL,
+             .wUsage = 2,
+@@ -2990,9 +2636,9 @@
+             .dwSize = sizeof(DIDEVICEOBJECTINSTANCEW),
+             .guidType = GUID_Unknown,
+             .dwOfs = version >= 0x800 ? 0x2c : 0,
+-            .dwType = DIDFT_NODATA|DIDFT_MAKEINSTANCE(32)|DIDFT_OUTPUT,
++            .dwType = DIDFT_NODATA|DIDFT_MAKEINSTANCE(31)|DIDFT_OUTPUT,
+             .dwFlags = 0x80008000,
+-            .tszName = L"Unknown 32",
++            .tszName = L"Unknown 31",
+             .wCollectionNumber = 10,
+             .wUsagePage = HID_USAGE_PAGE_ORDINAL,
+             .wUsage = 1,
+@@ -3003,7 +2649,7 @@
+             .dwSize = sizeof(DIDEVICEOBJECTINSTANCEW),
+             .guidType = GUID_Unknown,
+             .dwOfs = version >= 0x800 ? 0x30 : 0,
+-            .dwType = DIDFT_NODATA|DIDFT_MAKEINSTANCE(33)|DIDFT_OUTPUT,
++            .dwType = DIDFT_NODATA|DIDFT_MAKEINSTANCE(32)|DIDFT_OUTPUT,
+             .dwFlags = 0x80008000,
+             .tszName = L"Magnitude",
+             .wCollectionNumber = 11,
+@@ -3015,7 +2661,7 @@
+             .dwSize = sizeof(DIDEVICEOBJECTINSTANCEW),
+             .guidType = GUID_Unknown,
+             .dwOfs = version >= 0x800 ? 0x34 : 0,
+-            .dwType = DIDFT_NODATA|DIDFT_MAKEINSTANCE(34)|DIDFT_OUTPUT,
++            .dwType = DIDFT_NODATA|DIDFT_MAKEINSTANCE(33)|DIDFT_OUTPUT,
+             .dwFlags = 0x80008000,
+             .tszName = L"Fade Level",
+             .wCollectionNumber = 12,
+@@ -3027,7 +2673,7 @@
+             .dwSize = sizeof(DIDEVICEOBJECTINSTANCEW),
+             .guidType = GUID_Unknown,
+             .dwOfs = version >= 0x800 ? 0x38 : 0,
+-            .dwType = DIDFT_NODATA|DIDFT_MAKEINSTANCE(35)|DIDFT_OUTPUT,
++            .dwType = DIDFT_NODATA|DIDFT_MAKEINSTANCE(34)|DIDFT_OUTPUT,
+             .dwFlags = 0x80008000,
+             .tszName = L"Attack Level",
+             .wCollectionNumber = 12,
+@@ -3039,7 +2685,7 @@
+             .dwSize = sizeof(DIDEVICEOBJECTINSTANCEW),
+             .guidType = GUID_Unknown,
+             .dwOfs = version >= 0x800 ? 0x3c : 0,
+-            .dwType = DIDFT_NODATA|DIDFT_MAKEINSTANCE(36)|DIDFT_OUTPUT,
++            .dwType = DIDFT_NODATA|DIDFT_MAKEINSTANCE(35)|DIDFT_OUTPUT,
+             .dwFlags = 0x80008000,
+             .tszName = L"Fade Time",
+             .wCollectionNumber = 12,
+@@ -3053,7 +2699,7 @@
+             .dwSize = sizeof(DIDEVICEOBJECTINSTANCEW),
+             .guidType = GUID_Unknown,
+             .dwOfs = version >= 0x800 ? 0x40 : 0,
+-            .dwType = DIDFT_NODATA|DIDFT_MAKEINSTANCE(37)|DIDFT_OUTPUT,
++            .dwType = DIDFT_NODATA|DIDFT_MAKEINSTANCE(36)|DIDFT_OUTPUT,
+             .dwFlags = 0x80008000,
+             .tszName = L"Attack Time",
+             .wCollectionNumber = 12,
+@@ -3067,9 +2713,9 @@
+             .dwSize = sizeof(DIDEVICEOBJECTINSTANCEW),
+             .guidType = GUID_Unknown,
+             .dwOfs = version >= 0x800 ? 0x44 : 0,
+-            .dwType = DIDFT_NODATA|DIDFT_MAKEINSTANCE(38)|DIDFT_OUTPUT,
++            .dwType = DIDFT_NODATA|DIDFT_MAKEINSTANCE(37)|DIDFT_OUTPUT,
+             .dwFlags = 0x80008000,
+-            .tszName = L"Unknown 38",
++            .tszName = L"Unknown 37",
+             .wCollectionNumber = 14,
+             .wUsagePage = HID_USAGE_PAGE_ORDINAL,
+             .wUsage = 2,
+@@ -3079,9 +2725,9 @@
+             .dwSize = sizeof(DIDEVICEOBJECTINSTANCEW),
+             .guidType = GUID_Unknown,
+             .dwOfs = version >= 0x800 ? 0x48 : 0,
+-            .dwType = DIDFT_NODATA|DIDFT_MAKEINSTANCE(39)|DIDFT_OUTPUT,
++            .dwType = DIDFT_NODATA|DIDFT_MAKEINSTANCE(38)|DIDFT_OUTPUT,
+             .dwFlags = 0x80008000,
+-            .tszName = L"Unknown 39",
++            .tszName = L"Unknown 38",
+             .wCollectionNumber = 14,
+             .wUsagePage = HID_USAGE_PAGE_ORDINAL,
+             .wUsage = 1,
+@@ -3091,7 +2737,7 @@
+             .dwSize = sizeof(DIDEVICEOBJECTINSTANCEW),
+             .guidType = GUID_Unknown,
+             .dwOfs = version >= 0x800 ? 0x4c : 0,
+-            .dwType = DIDFT_NODATA|DIDFT_MAKEINSTANCE(40)|DIDFT_OUTPUT,
++            .dwType = DIDFT_NODATA|DIDFT_MAKEINSTANCE(39)|DIDFT_OUTPUT,
+             .dwFlags = 0x80008000,
+             .tszName = L"CP Offset",
+             .wCollectionNumber = 13,
+@@ -3103,7 +2749,7 @@
+             .dwSize = sizeof(DIDEVICEOBJECTINSTANCEW),
+             .guidType = GUID_Unknown,
+             .dwOfs = version >= 0x800 ? 0x50 : 0,
+-            .dwType = DIDFT_NODATA|DIDFT_MAKEINSTANCE(41)|DIDFT_OUTPUT,
++            .dwType = DIDFT_NODATA|DIDFT_MAKEINSTANCE(40)|DIDFT_OUTPUT,
+             .dwFlags = 0x80008000,
+             .tszName = L"Negative Coefficient",
+             .wCollectionNumber = 13,
+@@ -3115,7 +2761,7 @@
+             .dwSize = sizeof(DIDEVICEOBJECTINSTANCEW),
+             .guidType = GUID_Unknown,
+             .dwOfs = version >= 0x800 ? 0x54 : 0,
+-            .dwType = DIDFT_NODATA|DIDFT_MAKEINSTANCE(42)|DIDFT_OUTPUT,
++            .dwType = DIDFT_NODATA|DIDFT_MAKEINSTANCE(41)|DIDFT_OUTPUT,
+             .dwFlags = 0x80008000,
+             .tszName = L"Positive Coefficient",
+             .wCollectionNumber = 13,
+@@ -3127,7 +2773,7 @@
+             .dwSize = sizeof(DIDEVICEOBJECTINSTANCEW),
+             .guidType = GUID_Unknown,
+             .dwOfs = version >= 0x800 ? 0x58 : 0,
+-            .dwType = DIDFT_NODATA|DIDFT_MAKEINSTANCE(43)|DIDFT_OUTPUT,
++            .dwType = DIDFT_NODATA|DIDFT_MAKEINSTANCE(42)|DIDFT_OUTPUT,
+             .dwFlags = 0x80008000,
+             .tszName = L"Negative Saturation",
+             .wCollectionNumber = 13,
+@@ -3139,7 +2785,7 @@
+             .dwSize = sizeof(DIDEVICEOBJECTINSTANCEW),
+             .guidType = GUID_Unknown,
+             .dwOfs = version >= 0x800 ? 0x5c : 0,
+-            .dwType = DIDFT_NODATA|DIDFT_MAKEINSTANCE(44)|DIDFT_OUTPUT,
++            .dwType = DIDFT_NODATA|DIDFT_MAKEINSTANCE(43)|DIDFT_OUTPUT,
+             .dwFlags = 0x80008000,
+             .tszName = L"Positive Saturation",
+             .wCollectionNumber = 13,
+@@ -3151,7 +2797,7 @@
+             .dwSize = sizeof(DIDEVICEOBJECTINSTANCEW),
+             .guidType = GUID_Unknown,
+             .dwOfs = version >= 0x800 ? 0x60 : 0,
+-            .dwType = DIDFT_NODATA|DIDFT_MAKEINSTANCE(45)|DIDFT_OUTPUT,
++            .dwType = DIDFT_NODATA|DIDFT_MAKEINSTANCE(44)|DIDFT_OUTPUT,
+             .dwFlags = 0x80008000,
+             .tszName = L"Dead Band",
+             .wCollectionNumber = 13,
+@@ -3163,7 +2809,7 @@
+             .dwSize = sizeof(DIDEVICEOBJECTINSTANCEW),
+             .guidType = GUID_Unknown,
+             .dwOfs = version >= 0x800 ? 0x64 : 0,
+-            .dwType = DIDFT_NODATA|DIDFT_MAKEINSTANCE(46)|DIDFT_OUTPUT,
++            .dwType = DIDFT_NODATA|DIDFT_MAKEINSTANCE(45)|DIDFT_OUTPUT,
+             .dwFlags = 0x80008000,
+             .tszName = L"Device Gain",
+             .wCollectionNumber = 15,
+@@ -3174,18 +2820,6 @@
+         {
+             .dwSize = sizeof(DIDEVICEOBJECTINSTANCEW),
+             .guidType = GUID_Unknown,
+-            .dwOfs = version >= 0x800 ? 0x68 : 0,
+-            .dwType = DIDFT_NODATA|DIDFT_MAKEINSTANCE(47)|DIDFT_OUTPUT,
+-            .dwFlags = 0x80008000,
+-            .tszName = L"Magnitude",
+-            .wCollectionNumber = 16,
+-            .wUsagePage = HID_USAGE_PAGE_PID,
+-            .wUsage = PID_USAGE_MAGNITUDE,
+-            .wReportId = 9,
+-        },
+-        {
+-            .dwSize = sizeof(DIDEVICEOBJECTINSTANCEW),
+-            .guidType = GUID_Unknown,
+             .dwType = DIDFT_COLLECTION|DIDFT_NODATA|DIDFT_MAKEINSTANCE(0),
+             .tszName = L"Collection 0 - Joystick",
+             .wUsagePage = HID_USAGE_PAGE_GENERIC,
+@@ -3317,29 +2951,11 @@
+             .wUsagePage = HID_USAGE_PAGE_PID,
+             .wUsage = PID_USAGE_DEVICE_GAIN_REPORT,
+         },
+-        {
+-            .dwSize = sizeof(DIDEVICEOBJECTINSTANCEW),
+-            .guidType = GUID_Unknown,
+-            .dwType = DIDFT_COLLECTION|DIDFT_NODATA|DIDFT_MAKEINSTANCE(16),
+-            .tszName = L"Collection 16 - Set Constant Force Report",
+-            .wUsagePage = HID_USAGE_PAGE_PID,
+-            .wUsage = PID_USAGE_SET_CONSTANT_FORCE_REPORT,
+-        },
+     };
+     const DIEFFECTINFOW expect_effects[] =
+     {
+         {
+             .dwSize = sizeof(DIEFFECTINFOW),
+-            .guid = GUID_ConstantForce,
+-            .dwEffType = DIEFT_CONSTANTFORCE | DIEFT_STARTDELAY | DIEFT_FFFADE | DIEFT_FFATTACK,
+-            .dwStaticParams = DIEP_AXES | DIEP_DIRECTION | DIEP_TYPESPECIFICPARAMS | DIEP_STARTDELAY |
+-                              DIEP_DURATION | DIEP_TRIGGERBUTTON | DIEP_ENVELOPE,
+-            .dwDynamicParams = DIEP_AXES | DIEP_DIRECTION | DIEP_TYPESPECIFICPARAMS | DIEP_STARTDELAY |
+-                              DIEP_DURATION | DIEP_TRIGGERBUTTON | DIEP_ENVELOPE,
+-            .tszName = L"GUID_ConstantForce",
+-        },
+-        {
+-            .dwSize = sizeof(DIEFFECTINFOW),
+             .guid = GUID_Square,
+             .dwEffType = DIEFT_PERIODIC | DIEFT_STARTDELAY | DIEFT_FFFADE | DIEFT_FFATTACK,
+             .dwStaticParams = DIEP_AXES | DIEP_DIRECTION | DIEP_TYPESPECIFICPARAMS | DIEP_STARTDELAY |
+@@ -3486,16 +3102,7 @@
+         check_effects_params.expect_count - check_effects_params.index );
+ 
+     effectinfo.dwSize = sizeof(DIEFFECTINFOW);
+-    hr = IDirectInputDevice8_GetEffectInfo( device, &effectinfo, &GUID_ConstantForce );
+-    ok( hr == DI_OK, "GetEffectInfo returned %#lx\n", hr );
+-    check_member_guid( effectinfo, expect_effects[0], guid );
+-    check_member( effectinfo, expect_effects[0], "%#lx", dwEffType );
+-    check_member( effectinfo, expect_effects[0], "%#lx", dwStaticParams );
+-    check_member( effectinfo, expect_effects[0], "%#lx", dwDynamicParams );
+-    check_member_wstr( effectinfo, expect_effects[0], tszName );
+-
+-    effectinfo.dwSize = sizeof(DIEFFECTINFOW);
+-    hr = IDirectInputDevice8_GetEffectInfo( device, &effectinfo, &GUID_Square );
++    hr = IDirectInputDevice8_GetEffectInfo( device, &effectinfo, &GUID_Sine );
+     ok( hr == DI_OK, "GetEffectInfo returned %#lx\n", hr );
+     check_member_guid( effectinfo, expect_effects[1], guid );
+     check_member( effectinfo, expect_effects[1], "%#lx", dwEffType );
+@@ -3636,7 +3243,6 @@
+     if (version < 0x800) ok( hr == DI_OK, "SendDeviceData returned %#lx\n", hr );
+     else todo_wine ok( hr == DIERR_INVALIDPARAM, "SendDeviceData returned %#lx\n", hr );
+ 
+-    test_constantforce_effect( device, file, version );
+     test_periodic_effect( device, file, version );
+     test_condition_effect( device, file, version );
+ 
+diff -urN wine_proton10/dlls/dinput/tests/hid.c wine-10.0/dlls/dinput/tests/hid.c
+--- wine_proton10/dlls/dinput/tests/hid.c	2025-11-05 17:27:18.575954012 +0800
++++ wine-10.0/dlls/dinput/tests/hid.c	2025-01-22 00:42:16.000000000 +0800
+@@ -719,8 +719,7 @@
+                            NULL, OPEN_EXISTING, 0, NULL );
+     ok( control != INVALID_HANDLE_VALUE, "CreateFile failed, error %lu\n", GetLastError() );
+     ret = sync_ioctl( control, IOCTL_WINETEST_REMOVE_DEVICE, desc, sizeof(*desc), NULL, 0, 5000 );
+-    ok( ret || (GetLastError() == ERROR_FILE_NOT_FOUND || GetLastError() == ERROR_NO_SUCH_DEVICE),
+-        "IOCTL_WINETEST_REMOVE_DEVICE failed, last error %lu\n", GetLastError() );
++    ok( ret || GetLastError() == ERROR_FILE_NOT_FOUND, "IOCTL_WINETEST_REMOVE_DEVICE failed, last error %lu\n", GetLastError() );
+     CloseHandle( control );
+ 
+     if (!ret) return;
+diff -urN wine_proton10/dlls/dinput/tests/joystick8.c wine-10.0/dlls/dinput/tests/joystick8.c
+--- wine_proton10/dlls/dinput/tests/joystick8.c	2025-11-05 17:27:18.577954009 +0800
++++ wine-10.0/dlls/dinput/tests/joystick8.c	2025-01-22 00:42:16.000000000 +0800
+@@ -2077,6 +2077,7 @@
+     prop_dword.dwData = 0xdeadbeef;
+     hr = IDirectInputDevice8_GetProperty( device, DIPROP_JOYSTICKID, &prop_dword.diph );
+     ok( hr == DI_OK, "GetProperty DIPROP_JOYSTICKID returned %#lx\n", hr );
++    todo_wine
+     ok( prop_dword.dwData == 0, "got %#lx expected 0\n", prop_dword.dwData );
+ 
+     prop_dword.dwData = 0xdeadbeef;
+@@ -5969,158 +5970,6 @@
+     DestroyWindow( hwnd );
+ }
+ 
+-struct select_default_instance_data
+-{
+-    IDirectInput8W *di8;
+-    DIDEVICEINSTANCEW default_instance;
+-    BOOL default_instance_found;
+-};
+-
+-static BOOL CALLBACK select_default_instance( const DIDEVICEINSTANCEW *devinst, void *context )
+-{
+-    DIPROPGUIDANDPATH prop_guid_path =
+-    {
+-        .diph =
+-        {
+-            .dwSize = sizeof(DIPROPGUIDANDPATH),
+-            .dwHeaderSize = sizeof(DIPROPHEADER),
+-            .dwHow = DIPH_DEVICE,
+-        },
+-    };
+-
+-    DIPROPDWORD prop_dword =
+-    {
+-        .diph =
+-        {
+-            .dwSize = sizeof(DIPROPDWORD),
+-            .dwHeaderSize = sizeof(DIPROPHEADER),
+-            .dwHow = DIPH_DEVICE,
+-        },
+-    };
+-    struct select_default_instance_data *d = context;
+-    IDirectInputDevice8W *device;
+-    HRESULT hr;
+-
+-    hr = IDirectInput8_CreateDevice( d->di8, &devinst->guidInstance, &device, NULL );
+-    ok( hr == DI_OK, "got hr %#lx.\n", hr );
+-    hr = IDirectInputDevice8_GetProperty( device, DIPROP_JOYSTICKID, &prop_dword.diph );
+-    ok( hr == DI_OK, "got hr %#lx.\n", hr );
+-    ok( prop_dword.dwData < 100, "got %lu.\n", prop_dword.dwData );
+-
+-    hr = IDirectInputDevice8_GetProperty( device, DIPROP_GUIDANDPATH, &prop_guid_path.diph );
+-    ok( hr == DI_OK, "got hr %#lx.\n", hr );
+-    trace( "%s, id %lu, inst %s, path %s.\n", debugstr_w(devinst->tszInstanceName), prop_dword.dwData,
+-           debugstr_guid(&devinst->guidInstance), debugstr_w(prop_guid_path.wszPath) );
+-    if (!prop_dword.dwData)
+-    {
+-        ok( !d->default_instance_found, "duplicate joystick with id 0.\n" );
+-        d->default_instance = *devinst;
+-        d->default_instance_found = TRUE;
+-    }
+-    IDirectInputDevice8_Release( device );
+-    return DIENUM_CONTINUE;
+-}
+-
+-static void test_joystick_id(void)
+-{
+-#include "psh_hid_macros.h"
+-    const unsigned char report_desc[] =
+-    {
+-        USAGE_PAGE(1, HID_USAGE_PAGE_GENERIC),
+-        USAGE(1, HID_USAGE_GENERIC_JOYSTICK),
+-        COLLECTION(1, Application),
+-            USAGE(1, HID_USAGE_GENERIC_JOYSTICK),
+-            COLLECTION(1, Physical),
+-                USAGE_PAGE(1, HID_USAGE_PAGE_BUTTON),
+-                USAGE_MINIMUM(1, 1),
+-                USAGE_MAXIMUM(1, 6),
+-                LOGICAL_MINIMUM(1, 0),
+-                LOGICAL_MAXIMUM(1, 1),
+-                PHYSICAL_MINIMUM(1, 0),
+-                PHYSICAL_MAXIMUM(1, 1),
+-                REPORT_SIZE(1, 1),
+-                REPORT_COUNT(1, 8),
+-                INPUT(1, Data|Var|Abs),
+-            END_COLLECTION,
+-        END_COLLECTION,
+-    };
+-    C_ASSERT(sizeof(report_desc) < MAX_HID_DESCRIPTOR_LEN);
+-#include "pop_hid_macros.h"
+-    struct hid_device_desc desc =
+-    {
+-        .use_report_id = TRUE,
+-        .caps = { .InputReportByteLength = 1 },
+-    };
+-    struct hid_device_desc desc2;
+-
+-    DIPROPDWORD prop_dword =
+-    {
+-        .diph =
+-        {
+-            .dwSize = sizeof(DIPROPDWORD),
+-            .dwHeaderSize = sizeof(DIPROPHEADER),
+-            .dwHow = DIPH_DEVICE,
+-        },
+-    };
+-    struct select_default_instance_data d = { NULL };
+-    IDirectInputDevice8W *device;
+-    IDirectInput8W *di8;
+-    HRESULT hr;
+-
+-    cleanup_registry_keys();
+-
+-    hr = DirectInput8Create( instance, DIRECTINPUT_VERSION, &IID_IDirectInput8W, (void **)&di8, NULL );
+-    if (FAILED(hr))
+-    {
+-        win_skip( "DirectInput8Create returned %#lx.\n", hr );
+-        return;
+-    }
+-
+-    desc.report_descriptor_len = sizeof(report_desc);
+-    memcpy( desc.report_descriptor_buf, report_desc, sizeof(report_desc) );
+-    fill_context( desc.context, ARRAY_SIZE(desc.context) );
+-
+-    desc.attributes = default_attributes;
+-    desc2 = desc;
+-    desc2.attributes.ProductID++;
+-    if (!hid_device_start( &desc, 1 )) goto done;
+-    if (!hid_device_start( &desc2, 1 )) goto done;
+-
+-    d.di8 = di8;
+-    hr = IDirectInput8_EnumDevices( di8, DI8DEVCLASS_GAMECTRL, select_default_instance, &d, DIEDFL_ALLDEVICES );
+-    ok( hr == DI_OK, "got hr %#lx.\n", hr );
+-
+-    hr = IDirectInput8_CreateDevice( di8, &GUID_Joystick, &device, NULL );
+-    if (d.default_instance_found)
+-    {
+-        ok( hr == DI_OK, "got %#lx.\n", hr );
+-        hr = IDirectInputDevice8_GetProperty( device, DIPROP_JOYSTICKID, &prop_dword.diph );
+-        ok( hr == DI_OK, "got hr %#lx.\n", hr );
+-        ok( !prop_dword.dwData, "got %lu.\n", prop_dword.dwData );
+-        IDirectInputDevice8_Release( device );
+-    }
+-    else
+-    {
+-        ok( hr == DIERR_DEVICENOTREG, "got %#lx.\n", hr );
+-    }
+-
+-    hid_device_stop( &desc, 1 );
+-
+-    memset( &d, 0, sizeof(d) );
+-    d.di8 = di8;
+-    hr = IDirectInput8_EnumDevices( di8, DI8DEVCLASS_GAMECTRL, select_default_instance, &d, DIEDFL_ALLDEVICES );
+-    ok( hr == DI_OK, "got hr %#lx.\n", hr );
+-    ok( !d.default_instance_found, "found joystick id 0.\n" );
+-    hr = IDirectInput8_CreateDevice( di8, &GUID_Joystick, &device, NULL );
+-    ok( hr == DIERR_DEVICENOTREG, "got %#lx.\n", hr );
+-
+-done:
+-    IDirectInput8_Release( di8 );
+-    hid_device_stop( &desc, 1 );
+-    hid_device_stop( &desc2, 1 );
+-    cleanup_registry_keys();
+-}
+-
+ START_TEST( joystick8 )
+ {
+     char **argv;
+@@ -6132,11 +5981,11 @@
+ 
+     dinput_test_init();
+     if (!bus_device_start()) goto done;
++
+     winetest_mute_threshold = 3;
+ 
+     if (test_device_types( 0x800 ))
+     {
+-        test_joystick_id();
+         /* This needs to be done before doing anything involving dinput.dll
+          * on Windows, or the tests will fail, dinput8.dll is fine though. */
+         test_winmm_joystick();
