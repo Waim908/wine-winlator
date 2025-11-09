@@ -1,0 +1,48 @@
+diff -urN wine-10.15/dlls/ntdll/unix/virtual.c b/dlls/ntdll/unix/virtual.c
+--- wine-10.15/dlls/ntdll/unix/virtual.c	2025-09-13 03:36:38.000000000 +0800
++++ b/dlls/ntdll/unix/virtual.c	2025-11-09 17:10:10.150289686 +0800
+@@ -188,9 +188,9 @@
+ static void *address_space_start = (void *)0x10000;
+ #endif
+ #ifdef _WIN64
+-static void *address_space_limit = (void *)0x7fffffff0000;  /* top of the total available address space */
+-static void *user_space_limit    = (void *)0x7fffffff0000;  /* top of the user address space */
+-static void *working_set_limit   = (void *)0x7fffffff0000;  /* top of the current working set */
++static void *address_space_limit = (void *)0x7fffff0000;  /* top of the total available address space */
++static void *user_space_limit    = (void *)0x7fffff0000;  /* top of the user address space */
++static void *working_set_limit   = (void *)0x7fffff0000;  /* top of the current working set */
+ #else
+ static void *address_space_limit = (void *)0xc0000000;
+ static void *user_space_limit    = (void *)0x7fff0000;
+@@ -751,7 +751,7 @@
+     /* if we don't have a preloader, try to reserve the space now */
+     reserve_area( (void *)0x000000010000, (void *)0x000068000000 );
+     reserve_area( (void *)0x00007f000000, (void *)0x00007fff0000 );
+-    reserve_area( (void *)0x7ffffe000000, (void *)0x7fffffff0000 );
++    reserve_area( (void *)0x7ffffe000000, (void *)0x7fffff0000 );
+ 
+ #endif
+ }
+@@ -2405,10 +2405,6 @@
+         case EACCES:
+         case EPERM:  /* noexec filesystem, fall back to read() */
+             if (vprot & VPROT_WRITE)
+-            {
+-                if (prot & PROT_EXEC) ERR( "failed to set PROT_EXEC on file map, noexec filesystem?\n" );
+-                return STATUS_ACCESS_DENIED;
+-            }
+             if (prot & PROT_EXEC) WARN( "failed to set PROT_EXEC on file map, noexec filesystem?\n" );
+             break;
+         default:
+diff -urN wine-10.15/loader/preloader.c b/loader/preloader.c
+--- wine-10.15/loader/preloader.c	2025-09-13 03:36:38.000000000 +0800
++++ b/loader/preloader.c	2025-11-09 17:11:13.015180831 +0800
+@@ -1449,7 +1449,7 @@
+         {
+             /* don't warn for low 64k */
+             if (preload_info[i].addr >= (void *)0x10000
+-#ifdef __aarch64__
++#if 1
+                 && preload_info[i].addr < (void *)0x7fffffffff /* ARM64 address space might end here*/
+ #endif
+             )

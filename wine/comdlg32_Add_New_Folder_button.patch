@@ -1,0 +1,110 @@
+From a4ef2bf8963fe4bfab390eebf73336364ce209bc Mon Sep 17 00:00:00 2001
+From: BrunoSX <brunodeveloper85@gmail.com>
+Date: Wed, 30 Jul 2025 17:11:27 -0300
+Subject: [PATCH] comdlg32: Add New Folder button
+
+---
+ dlls/comdlg32/itemdlg.c | 48 ++++++++++++++++++++++++++++++++++-------
+ 1 file changed, 40 insertions(+), 8 deletions(-)
+
+diff --git a/dlls/comdlg32/itemdlg.c b/dlls/comdlg32/itemdlg.c
+index 1cdebf8f..10fd0c27 100755
+--- a/dlls/comdlg32/itemdlg.c
++++ b/dlls/comdlg32/itemdlg.c
+@@ -39,6 +39,7 @@
+ #define IDC_NAVBACK          201
+ #define IDC_NAVFORWARD       202
+ #define IDC_NAVUP            203
++#define IDC_NAVNEWFOLDER        204
+ 
+ #include <initguid.h>
+ /* This seems to be another version of IID_IFileDialogCustomize. If
+@@ -1966,20 +1967,19 @@ static void init_toolbar(FileDialogImpl *This, HWND hwnd)
+ {
+     HWND htoolbar;
+     TBADDBITMAP tbab;
+-    TBBUTTON button[3];
++    TBBUTTON button[4];
+     int height;
+-    int navUpImgIndex;
++    int imgOffset;
+ 
+     htoolbar = CreateWindowExW(0, TOOLBARCLASSNAMEW, NULL, TBSTYLE_FLAT | WS_CHILD | WS_VISIBLE,
+                                0, 0, 0, 0,
+                                hwnd, (HMENU)IDC_NAV_TOOLBAR, NULL, NULL);
+ 
+     tbab.hInst = HINST_COMMCTRL;
+-    tbab.nID = IDB_HIST_LARGE_COLOR;
++    tbab.nID = IDB_HIST_SMALL_COLOR;
+     SendMessageW(htoolbar, TB_ADDBITMAP, 0, (LPARAM)&tbab);
+-    tbab.nID = IDB_VIEW_LARGE_COLOR;
+-    navUpImgIndex = SendMessageW(htoolbar, TB_ADDBITMAP, 0, (LPARAM)&tbab);
+-    navUpImgIndex += VIEW_PARENTFOLDER;
++    tbab.nID = IDB_VIEW_SMALL_COLOR;
++    imgOffset = SendMessageW(htoolbar, TB_ADDBITMAP, 0, (LPARAM)&tbab);
+ 
+     button[0].iBitmap = HIST_BACK;
+     button[0].idCommand = IDC_NAVBACK;
+@@ -1995,14 +1995,21 @@ static void init_toolbar(FileDialogImpl *This, HWND hwnd)
+     button[1].dwData = 0;
+     button[1].iString = 0;
+ 
+-    button[2].iBitmap = navUpImgIndex;
++    button[2].iBitmap = imgOffset + VIEW_PARENTFOLDER;
+     button[2].idCommand = IDC_NAVUP;
+     button[2].fsState = TBSTATE_ENABLED;
+     button[2].fsStyle = BTNS_BUTTON;
+     button[2].dwData = 0;
+     button[2].iString = 0;
+ 
+-    SendMessageW(htoolbar, TB_ADDBUTTONSW, 3, (LPARAM)button);
++    button[3].iBitmap = imgOffset + VIEW_NEWFOLDER;
++    button[3].idCommand = IDC_NAVNEWFOLDER;
++    button[3].fsState = TBSTATE_ENABLED;
++    button[3].fsStyle = BTNS_BUTTON;
++    button[3].dwData = 0;
++    button[3].iString = 0;
++
++    SendMessageW(htoolbar, TB_ADDBUTTONSW, 4, (LPARAM)button);
+     height = MulDiv(24, This->dpi_y, USER_DEFAULT_SCREEN_DPI);
+     SendMessageW(htoolbar, TB_SETBUTTONSIZE, 0, MAKELPARAM(height, height));
+     SendMessageW(htoolbar, TB_AUTOSIZE, 0, 0);
+@@ -2300,6 +2307,30 @@ static LRESULT on_browse_up(FileDialogImpl *This)
+     return FALSE;
+ }
+ 
++static LRESULT on_new_folder(FileDialogImpl *This)
++{
++    IShellView *psv;
++    IContextMenu *pcm;
++
++    TRACE("%p\n", This);
++
++    IExplorerBrowser_GetCurrentView(This->peb, &IID_IShellView, (void**)&psv);
++    if(SUCCEEDED(IShellView_GetItemObject(psv, SVGIO_BACKGROUND, &IID_IContextMenu, (LPVOID*)&pcm)))
++    {
++        CMINVOKECOMMANDINFO ci;
++        ZeroMemory(&ci, sizeof(CMINVOKECOMMANDINFO));
++        ci.cbSize = sizeof(CMINVOKECOMMANDINFO);
++        ci.lpVerb = CMDSTR_NEWFOLDERA;
++        ci.hwnd = This->dlg_hwnd;
++
++        IContextMenu_InvokeCommand(pcm, &ci);
++        IContextMenu_Release(pcm);
++    }
++
++    IShellView_Release(psv);
++    return FALSE;
++}
++
+ static LRESULT on_wm_command(FileDialogImpl *This, WPARAM wparam, LPARAM lparam)
+ {
+     switch(LOWORD(wparam))
+@@ -2311,6 +2342,7 @@ static LRESULT on_wm_command(FileDialogImpl *This, WPARAM wparam, LPARAM lparam)
+     case IDC_NAVFORWARD:      return on_browse_forward(This);
+     case IDC_FILETYPE:        return on_command_filetype(This, wparam, lparam);
+     case IDC_NAVUP:           return on_browse_up(This);
++    case IDC_NAVNEWFOLDER:    return on_new_folder(This);
+     default:                  TRACE("Unknown command.\n");
+     }
+     return FALSE;

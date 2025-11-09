@@ -1,0 +1,61 @@
+diff -urN wine-10.15/dlls/xinput1_1/Makefile.in b/dlls/xinput1_1/Makefile.in
+--- wine-10.15/dlls/xinput1_1/Makefile.in	2025-09-13 03:36:38.000000000 +0800
++++ b/dlls/xinput1_1/Makefile.in	2025-11-09 17:16:28.943633785 +0800
+@@ -1,5 +1,5 @@
+ MODULE    = xinput1_1.dll
+-IMPORTS   = hid setupapi advapi32 user32
++IMPORTS   = hid setupapi advapi32 user32 ws2_32
+ PARENTSRC = ../xinput1_3
+ 
+ SOURCES = \
+diff -urN wine-10.15/dlls/xinput1_2/Makefile.in b/dlls/xinput1_2/Makefile.in
+--- wine-10.15/dlls/xinput1_2/Makefile.in	2025-09-13 03:36:38.000000000 +0800
++++ b/dlls/xinput1_2/Makefile.in	2025-11-09 17:16:28.945633781 +0800
+@@ -1,5 +1,5 @@
+ MODULE    = xinput1_2.dll
+-IMPORTS   = hid setupapi advapi32 user32
++IMPORTS   = hid setupapi advapi32 user32 ws2_32
+ PARENTSRC = ../xinput1_3
+ 
+ SOURCES = \
+diff -urN wine-10.15/dlls/xinput1_3/Makefile.in b/dlls/xinput1_3/Makefile.in
+--- wine-10.15/dlls/xinput1_3/Makefile.in	2025-09-13 03:36:38.000000000 +0800
++++ b/dlls/xinput1_3/Makefile.in	2025-11-09 17:16:28.945633781 +0800
+@@ -1,6 +1,6 @@
+ MODULE    = xinput1_3.dll
+ IMPORTLIB = xinput
+-IMPORTS   = hid setupapi advapi32 user32
++IMPORTS   = hid setupapi advapi32 user32 ws2_32
+ 
+ SOURCES = \
+ 	main.c \
+diff -urN wine-10.15/dlls/xinput1_4/Makefile.in b/dlls/xinput1_4/Makefile.in
+--- wine-10.15/dlls/xinput1_4/Makefile.in	2025-09-13 03:36:38.000000000 +0800
++++ b/dlls/xinput1_4/Makefile.in	2025-11-09 17:16:28.945633781 +0800
+@@ -1,5 +1,5 @@
+ MODULE    = xinput1_4.dll
+-IMPORTS   = hid setupapi advapi32 user32
++IMPORTS   = hid setupapi advapi32 user32 ws2_32
+ PARENTSRC = ../xinput1_3
+ 
+ SOURCES = \
+diff -urN wine-10.15/dlls/xinput9_1_0/Makefile.in b/dlls/xinput9_1_0/Makefile.in
+--- wine-10.15/dlls/xinput9_1_0/Makefile.in	2025-09-13 03:36:38.000000000 +0800
++++ b/dlls/xinput9_1_0/Makefile.in	2025-11-09 17:19:32.708315582 +0800
+@@ -1,5 +1,5 @@
+ MODULE    = xinput9_1_0.dll
+-
++IMPORTS   = hid setupapi advapi32 user32 ws2_32
+ SOURCES = \
+ 	main.c \
+ 	version.rc
+diff -urN wine-10.15/dlls/xinputuap/Makefile.in b/dlls/xinputuap/Makefile.in
+--- wine-10.15/dlls/xinputuap/Makefile.in	2025-09-13 03:36:38.000000000 +0800
++++ b/dlls/xinputuap/Makefile.in	2025-11-09 17:16:28.945633781 +0800
+@@ -1,5 +1,5 @@
+ MODULE    = xinputuap.dll
+-IMPORTS   = hid setupapi advapi32 user32
++IMPORTS   = hid setupapi advapi32 user32 ws2_32
+ PARENTSRC = ../xinput1_3
+ 
+ SOURCES = \
