@@ -29,13 +29,11 @@ else
   export USER=xuser
   if [[ $useBox64 == 1 ]]; then
       echo "使用box64执行"
-      box64 $winePath/wineboot 2>&1 >/dev/tty &
-      wine_pid=$!
+      box64 $winePath/wineboot || exit 1
   else
-      $winePath/wineboot 2>&1 >/dev/tty &
-      wine_pid=$!
+      $winePath/wineboot || exit 1
   fi
-  wait $wine_pid
+  sleep 3
   exit_status=$?
   if [[ $exit_status -eq 0 ]]; then
       echo "wineboot 执行成功"
