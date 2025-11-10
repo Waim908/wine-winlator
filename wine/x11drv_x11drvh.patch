@@ -1,0 +1,22 @@
+diff -urN wine-10.15/dlls/winex11.drv/x11drv.h b/dlls/winex11.drv/x11drv.h
+--- wine-10.15/dlls/winex11.drv/x11drv.h	2025-09-13 03:36:38.000000000 +0800
++++ b/dlls/winex11.drv/x11drv.h	2025-11-10 20:20:26.842912647 +0800
+@@ -561,6 +561,9 @@
+     XATOM_text_rtf,
+     XATOM_text_richtext,
+     XATOM_text_uri_list,
++    XATOM__NET_WM_HWND,
++    XATOM__NET_WM_WOW64,
++    XATOM__NET_WM_SURFACE,
+     NB_XATOMS
+ };
+ 
+@@ -663,8 +666,6 @@
+     Window      embedder;       /* window id of embedder */
+     Pixmap         icon_pixmap;
+     Pixmap         icon_mask;
+-    unsigned long *icon_bits;
+-    unsigned int   icon_size;
+     Time           user_time;
+ 
+     struct window_state desired_state; /* window state tracking the desired / win32 state */

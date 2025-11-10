@@ -1,0 +1,40 @@
+diff -urN wine-9.2/dlls/winex11.drv/x11drv_main.c wine-9.2-custom-main/dlls/winex11.drv/x11drv_main.c
+--- wine-9.2/dlls/winex11.drv/x11drv_main.c	2024-02-10 05:46:52.000000000 +0800
++++ wine-9.2-custom-main/dlls/winex11.drv/x11drv_main.c	2025-07-31 04:11:27.000000000 +0800
+@@ -36,7 +36,6 @@
+ #include <dlfcn.h>
+ #include <X11/cursorfont.h>
+ #include <X11/Xlib.h>
+-#include <X11/XKBlib.h>
+ #ifdef HAVE_X11_EXTENSIONS_XRENDER_H
+ #include <X11/extensions/Xrender.h>
+ #endif
+@@ -215,7 +214,10 @@
+     "text/plain",
+     "text/rtf",
+     "text/richtext",
+-    "text/uri-list"
++    "text/uri-list",
++    "_NET_WM_HWND",
++    "_NET_WM_WOW64",
++    "_NET_WM_SURFACE"
+ };
+ 
+ /***********************************************************************
+@@ -699,7 +701,6 @@
+ #endif
+     X11DRV_XInput2_Init();
+ 
+-    XkbUseExtension( gdi_display, NULL, NULL );
+     X11DRV_InitKeyboard( gdi_display );
+     if (use_xim) use_xim = xim_init( input_style );
+ 
+@@ -778,8 +779,6 @@
+ 
+     fcntl( ConnectionNumber(data->display), F_SETFD, 1 ); /* set close on exec flag */
+ 
+-    XkbUseExtension( data->display, NULL, NULL );
+-    XkbSetDetectableAutoRepeat( data->display, True, NULL );
+     if (TRACE_ON(synchronous)) XSynchronize( data->display, True );
+ 
+     set_queue_display_fd( data->display );
