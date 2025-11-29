@@ -64,7 +64,7 @@ else
 fi
 cd $WINEPREFIX/..
 mkdir -p /tmp/output-whp
-tar -I 'zstd -T$(nproc)' -cvf /tmp/output-whp/container-pattern-$wineVer.tzst .wine
+tar -I 'zstd -T$(nproc) -9' -cvf /tmp/output-whp/container-pattern-$wineVer.tzst .wine
 cp -r -p $wineRoot /tmp/output-whp/
 baseName=$(basename $wineRoot)
 if [[ ! haveInclude == 1 ]]; then
@@ -72,5 +72,5 @@ if [[ ! haveInclude == 1 ]]; then
 fi
 cd /tmp/output-whp/
 mv $baseName wine-$wineVer-
-tar -I 'xz -T$(nproc)' -cvf /tmp/output-whp/wine-$wineVer.whp wine-$wineVer- container-pattern-$wineVer.tzst
+tar -I 'xz -T$(nproc) -9' -cvf /tmp/output-whp/wine-$wineVer.whp wine-$wineVer- container-pattern-$wineVer.tzst
 echo "Output=> /tmp/output-whp/wine-$wineVer.whp"
