@@ -49,7 +49,7 @@ if [[ $useBox64 == 1 ]]; then
 else
   wine_version=$($winePath/wine --version)
 fi
-cat > /data/data/com.winlator/files/rootfs/home/xuser/.wine/drive_c/ProgramData/Microsoft/Windows/Start Menu/TkG-version.bat << EOF
+cat > '/data/data/com.winlator/files/rootfs/home/xuser/.wine/drive_c/ProgramData/Microsoft/Windows/Start Menu/TkG-version.txt' << EOF
 Version: $wineVersion
 Others:
   More staging settings in winecfg
