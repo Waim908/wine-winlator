@@ -10,7 +10,6 @@ if [[ -z $1 ]]; then
   exit 1
 fi
 export WINEESYNC=1
-export WINEFSYNC=1
 export WINEPREFIX=/data/data/com.winlator/files/rootfs/home/xuser/.wine
 export winePath=$1/bin
 export wineRoot=$1
@@ -44,12 +43,17 @@ else
   fi
 fi
 sleep 2
-cat > '/data/data/com.winlator/files/rootfs/home/xuser/.wine/drive_c/ProgramData/Microsoft/Windows/Start Menu/TkG-version.bat' << 'EOF'
-@echo off
-start winver
-echo More staging settings in winecfg
-echo [Waim908/wine-winlator](https://github.com/Waim908/wine-winlator)
-cmd
+export WINEDEBUG=0
+if [[ $useBox64 == 1 ]]; then
+  wine_version=$(box64 $winePath/wine --version)
+else
+  wine_version=$($winePath/wine --version)
+fi
+cat > /data/data/com.winlator/files/rootfs/home/xuser/.wine/drive_c/ProgramData/Microsoft/Windows/Start Menu/TkG-version.bat << EOF
+Version: $wineVersion
+Others:
+  More staging settings in winecfg
+  [Waim908/wine-winlator](https://github.com/Waim908/wine-winlator)
 EOF
 rm -rf $WINEPREFIX/dosdevices/*
 mkdir $WINEPREFIX/drive_x
