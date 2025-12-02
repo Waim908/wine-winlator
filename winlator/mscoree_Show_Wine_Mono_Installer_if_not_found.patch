@@ -1,0 +1,38 @@
+From d4367559e9ba3ba5dc89bbd686b94bd49f191494 Mon Sep 17 00:00:00 2001
+From: BrunoSX <brunodeveloper85@gmail.com>
+Date: Thu, 17 Apr 2025 10:31:16 -0300
+Subject: [PATCH] mscoree: Show Wine Mono Installer if not found
+
+---
+ dlls/mscoree/metahost.c | 11 ++++++++++-
+ 1 file changed, 10 insertions(+), 1 deletion(-)
+
+diff --git a/dlls/mscoree/metahost.c b/dlls/mscoree/metahost.c
+index bb7e10ca..448e311b 100755
+--- a/dlls/mscoree/metahost.c
++++ b/dlls/mscoree/metahost.c
+@@ -400,6 +400,15 @@ static HRESULT WINAPI thread_unset_fn(void)
+     return S_OK;
+ }
+ 
++static void install_wine_mono(void)
++{
++    PROCESS_INFORMATION pi;
++    STARTUPINFOW si = {0};
++    WCHAR cmd_args[] = L"control.exe appwiz.cpl install_mono";
++
++    CreateProcessW(NULL, cmd_args, NULL, NULL, FALSE, DETACHED_PROCESS, NULL, NULL, &si, &pi);
++}
++
+ static HRESULT CLRRuntimeInfo_GetRuntimeHost(CLRRuntimeInfo *This, RuntimeHost **result)
+ {
+     HRESULT hr = S_OK;
+@@ -413,7 +422,7 @@ static HRESULT CLRRuntimeInfo_GetRuntimeHost(CLRRuntimeInfo *This, RuntimeHost *
+ 
+     if (!get_mono_path(mono_path, FALSE))
+     {
+-        ERR("Wine Mono is not installed\n");
++        install_wine_mono();
+         return CLR_E_SHIM_RUNTIME;
+     }
+ 

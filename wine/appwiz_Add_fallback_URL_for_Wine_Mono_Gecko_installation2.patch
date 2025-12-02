@@ -1,0 +1,74 @@
+--- wine-10.15/dlls/appwiz.cpl/addons.c	2025-09-13 03:36:38.000000000 +0800
++++ b/dlls/appwiz.cpl/addons.c	2025-12-02 11:29:09.220801557 +0800
+@@ -247,6 +247,21 @@
+     return res == ERROR_SUCCESS ? ret : NULL;
+ }
+ 
++static BOOL get_default_url(WCHAR* url, DWORD size)
++{
++    HKEY hkey;
++    DWORD res;
++    LONG returned_size = size;
++
++    res = RegOpenKeyW(HKEY_CURRENT_USER, L"Software\\Wine\\AddonsURL", &hkey);
++    if(res != ERROR_SUCCESS)
++        return FALSE;
++
++    RegQueryValueW(hkey, NULL, url, &returned_size);
++    RegCloseKey(hkey);
++    return TRUE;
++}
++
+ static enum install_res install_from_registered_dir(void)
+ {
+     static const WCHAR unix_prefix[8] = L"\\\\?\\unix";
+@@ -610,16 +625,21 @@
+     DWORD size = INTERNET_MAX_URL_LENGTH * sizeof(WCHAR);
+     DWORD len = lstrlenW(url);
+ 
+-    lstrcpyW(url+len, L"?arch=");
+-    len += lstrlenW(L"?arch=");
+-    len += MultiByteToWideChar(CP_ACP, 0, GECKO_ARCH, sizeof(GECKO_ARCH),
+-                               url+len, size/sizeof(WCHAR)-len)-1;
+-    lstrcpyW(url+len, L"&v=");
+-    len += lstrlenW(L"&v=");
+-    len += MultiByteToWideChar(CP_ACP, 0, addon->version, -1, url+len, size/sizeof(WCHAR)-len)-1;
+-    lstrcpyW(url+len, L"&winev=");
+-    len += lstrlenW(L"&winev=");
+-    MultiByteToWideChar(CP_ACP, 0, p_wine_get_version ? p_wine_get_version() : 0, -1, url+len, size/sizeof(WCHAR)-len);
++    if (wcsncmp(&url[len-1], L"/", 1) != 0)
++    {
++        lstrcpyW(url+len, L"?arch=");
++        len += lstrlenW(L"?arch=");
++        len += MultiByteToWideChar(CP_ACP, 0, GECKO_ARCH, sizeof(GECKO_ARCH),
++                                   url+len, size/sizeof(WCHAR)-len)-1;
++        lstrcpyW(url+len, L"&v=");
++        len += lstrlenW(L"&v=");
++        len += MultiByteToWideChar(CP_ACP, 0, addon->version, -1, url+len, size/sizeof(WCHAR)-len)-1;
++        lstrcpyW(url+len, L"&winev=");
++        len += lstrlenW(L"&winev=");
++        MultiByteToWideChar(CP_ACP, 0, p_wine_get_version() ? p_wine_get_version() : 0, -1, url+len, size/sizeof(WCHAR)-len);
++    }
++    else
++        lstrcpyW(url+len, addon->file_name);
+ }
+ 
+ static LPWSTR get_url(void)
+@@ -633,6 +653,7 @@
+     static const WCHAR httpW[] = {'h','t','t','p'};
+ 
+     url = malloc(size);
++    memset(url, 0, size);
+     returned_size = size;
+ 
+     hkey = open_config_key();
+@@ -643,7 +664,8 @@
+         if(res == ERROR_SUCCESS && type == REG_SZ) goto found;
+     }
+ 
+-    MultiByteToWideChar( CP_ACP, 0, addon->url_default, -1, url, size / sizeof(WCHAR) );
++    if (!get_default_url(url, size))
++        MultiByteToWideChar( CP_ACP, 0, addon->url_default, -1, url, size / sizeof(WCHAR) );
+ 
+ found:
+     if (returned_size > sizeof(httpW) && !memcmp(url, httpW, sizeof(httpW))) append_url_params( url );
