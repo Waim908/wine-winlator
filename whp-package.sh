@@ -43,14 +43,13 @@ else
   fi
 fi
 sleep 2
-export WINEDEBUG=0
 if [[ $useBox64 == 1 ]]; then
   wine_version=$(box64 $winePath/wine --version)
 else
   wine_version=$($winePath/wine --version)
 fi
 cat > '/data/data/com.winlator/files/rootfs/home/xuser/.wine/drive_c/ProgramData/Microsoft/Windows/Start Menu/TkG-version.txt' << EOF
-Version: $wineVersion
+Version: $wine_version
 Others:
   More staging settings in winecfg
   [Waim908/wine-winlator](https://github.com/Waim908/wine-winlator)
