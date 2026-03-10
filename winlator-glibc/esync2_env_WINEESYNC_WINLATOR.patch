@@ -1,0 +1,110 @@
+From 405b50de5e8815855c33220a240f1d60583c8681 Mon Sep 17 00:00:00 2001
+From: Junyu Long <877730493@qq.com>
+Date: Thu, 18 Jul 2024 19:24:05 +0800
+Subject: [PATCH] add WINEESYNC_WINLATOR to esync
+
+---
+ dlls/ntdll/unix/esync.c | 23 ++++++++++++++++++-----
+ server/esync.c          | 30 ++++++++++++++++++++++--------
+ 2 files changed, 40 insertions(+), 13 deletions(-)
+
+diff --git a/dlls/ntdll/unix/esync.c b/dlls/ntdll/unix/esync.c
+index bd91f1bcfc1..2bfd0aa1754 100644
+--- a/dlls/ntdll/unix/esync.c
++++ b/dlls/ntdll/unix/esync.c
+@@ -99,7 +99,8 @@ struct event
+ };
+ C_ASSERT(sizeof(struct event) == 8);
+ 
+-static char shm_name[29];
++static char shm_name[256];
++static int winlator_esync;
+ static int shm_fd;
+ static void **shm_addrs;
+ static int shm_addrs_size;  /* length of the allocated shm_addrs array */
+@@ -1303,12 +1304,24 @@ void esync_init(void)
+     if (stat( config_dir, &st ) == -1)
+         ERR("Cannot stat %s\n", config_dir);
+ 
+-    if (st.st_ino != (unsigned long)st.st_ino)
+-        sprintf( shm_name, "/data/data/com.winlator/files/imagefs/tmp/wine-%lx%08lx-esync", (unsigned long)((unsigned long long)st.st_ino >> 32), (unsigned long)st.st_ino );
++    winlator_esync = getenv("WINEESYNC_WINLATOR") && atoi(getenv("WINEESYNC_WINLATOR"));
++
++    if (winlator_esync)
++    {
++        if (st.st_ino != (unsigned long)st.st_ino)
++            sprintf( shm_name, "/data/data/com.winlator/files/imagefs/tmp/wine-%lx%08lx-esync", (unsigned long)((unsigned long long)st.st_ino >> 32), (unsigned long)st.st_ino );
++        else
++            sprintf( shm_name, "/data/data/com.winlator/files/imagefs/tmp/wine-%lx-esync", (unsigned long)st.st_ino );
++    }
+     else
+-        sprintf( shm_name, "/data/data/com.winlator/files/imagefs/tmp/wine-%lx-esync", (unsigned long)st.st_ino );
++    {
++        if (st.st_ino != (unsigned long)st.st_ino)
++            sprintf( shm_name, "/wine-%lx%08lx-esync", (unsigned long)((unsigned long long)st.st_ino >> 32), (unsigned long)st.st_ino );
++        else
++            sprintf( shm_name, "/wine-%lx-esync", (unsigned long)st.st_ino );
++    }
+ 
+-    if ((shm_fd = shm_open( shm_name, O_RDWR, 0644 )) == -1)
++    if ((winlator_esync && (shm_fd = open( shm_name, O_RDWR, 0644 )) == -1) || (!winlator_esync && (shm_fd = shm_open( shm_name, O_RDWR, 0644 )) == -1))
+     {
+         /* probably the server isn't running with WINEESYNC, tell the user and bail */
+         if (errno == ENOENT)
+diff --git a/server/esync.c b/server/esync.c
+index 2a39e7bcac4..9594f661fc5 100644
+--- a/server/esync.c
++++ b/server/esync.c
+@@ -57,7 +57,8 @@ int do_esync(void)
+ #endif
+ }
+ 
+-static char shm_name[29];
++static char shm_name[256];
++static int winlator_esync;
+ static int shm_fd;
+ static off_t shm_size;
+ static void **shm_addrs;
+@@ -67,7 +68,7 @@ static long pagesize;
+ static void shm_cleanup(void)
+ {
+     close( shm_fd );
+-    if (shm_unlink( shm_name ) == -1)
++    if ((winlator_esync && unlink( shm_name ) == -1) || (!winlator_esync && shm_unlink( shm_name ) == -1))
+         perror( "shm_unlink" );
+ }
+ 
+@@ -78,14 +79,27 @@ void esync_init(void)
+     if (fstat( config_dir_fd, &st ) == -1)
+         fatal_error( "cannot stat config dir\n" );
+ 
+-    if (st.st_ino != (unsigned long)st.st_ino)
+-        sprintf( shm_name, "/data/data/com.winlator/files/imagefs/tmp/wine-%lx%08lx-esync", (unsigned long)((unsigned long long)st.st_ino >> 32), (unsigned long)st.st_ino );
+-    else
+-        sprintf( shm_name, "/data/data/com.winlator/files/imagefs/tmp/wine-%lx-esync", (unsigned long)st.st_ino );
++    winlator_esync = getenv("WINEESYNC_WINLATOR") && atoi(getenv("WINEESYNC_WINLATOR"));
+ 
+-    shm_unlink( shm_name );
++    if (winlator_esync)
++    {
++        if (st.st_ino != (unsigned long)st.st_ino)
++            sprintf( shm_name, "/data/data/com.winlator/files/imagefs/tmp/wine-%lx%08lx-esync", (unsigned long)((unsigned long long)st.st_ino >> 32), (unsigned long)st.st_ino );
++        else
++            sprintf( shm_name, "/data/data/com.winlator/files/imagefs/tmp/wine-%lx-esync", (unsigned long)st.st_ino );
++        unlink( shm_name );
++        shm_fd = open( shm_name, O_RDWR | O_CREAT | O_EXCL, 0644 );
++    }
++    else
++    {
++        if (st.st_ino != (unsigned long)st.st_ino)
++            sprintf( shm_name, "/wine-%lx%08lx-esync", (unsigned long)((unsigned long long)st.st_ino >> 32), (unsigned long)st.st_ino );
++        else
++            sprintf( shm_name, "/wine-%lx-esync", (unsigned long)st.st_ino );
++        shm_unlink( shm_name );
++        shm_fd = shm_open( shm_name, O_RDWR | O_CREAT | O_EXCL, 0644 );
++    }
+ 
+-    shm_fd = shm_open( shm_name, O_RDWR | O_CREAT | O_EXCL, 0644 );
+     if (shm_fd == -1)
+         perror( "shm_open" );
+ 

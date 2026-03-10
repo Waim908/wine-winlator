@@ -1,0 +1,42 @@
+From 80645ae689b55ae21b3172551d76074efc57d32c Mon Sep 17 00:00:00 2001
+From: Junyu Long <877730493@qq.com>
+Date: Thu, 18 Jul 2024 17:35:11 +0800
+Subject: [PATCH] Change esync dirs to winlator's data dirs
+
+---
+ dlls/ntdll/unix/esync.c | 4 ++--
+ server/esync.c          | 4 ++--
+ 2 files changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/dlls/ntdll/unix/esync.c b/dlls/ntdll/unix/esync.c
+index 85d3db0cb8c..bd91f1bcfc1 100644
+--- a/dlls/ntdll/unix/esync.c
++++ b/dlls/ntdll/unix/esync.c
+@@ -1304,9 +1304,9 @@ void esync_init(void)
+         ERR("Cannot stat %s\n", config_dir);
+ 
+     if (st.st_ino != (unsigned long)st.st_ino)
+-        sprintf( shm_name, "/wine-%lx%08lx-esync", (unsigned long)((unsigned long long)st.st_ino >> 32), (unsigned long)st.st_ino );
++        sprintf( shm_name, "/data/data/com.winlator/files/imagefs/tmp/wine-%lx%08lx-esync", (unsigned long)((unsigned long long)st.st_ino >> 32), (unsigned long)st.st_ino );
+     else
+-        sprintf( shm_name, "/wine-%lx-esync", (unsigned long)st.st_ino );
++        sprintf( shm_name, "/data/data/com.winlator/files/imagefs/tmp/wine-%lx-esync", (unsigned long)st.st_ino );
+ 
+     if ((shm_fd = shm_open( shm_name, O_RDWR, 0644 )) == -1)
+     {
+diff --git a/server/esync.c b/server/esync.c
+index e193f61b3a7..2a39e7bcac4 100644
+--- a/server/esync.c
++++ b/server/esync.c
+@@ -79,9 +79,9 @@ void esync_init(void)
+         fatal_error( "cannot stat config dir\n" );
+ 
+     if (st.st_ino != (unsigned long)st.st_ino)
+-        sprintf( shm_name, "/wine-%lx%08lx-esync", (unsigned long)((unsigned long long)st.st_ino >> 32), (unsigned long)st.st_ino );
++        sprintf( shm_name, "/data/data/com.winlator/files/imagefs/tmp/wine-%lx%08lx-esync", (unsigned long)((unsigned long long)st.st_ino >> 32), (unsigned long)st.st_ino );
+     else
+-        sprintf( shm_name, "/wine-%lx-esync", (unsigned long)st.st_ino );
++        sprintf( shm_name, "/data/data/com.winlator/files/imagefs/tmp/wine-%lx-esync", (unsigned long)st.st_ino );
+ 
+     shm_unlink( shm_name );
+ 

@@ -1,0 +1,26 @@
+From 1ca241dd06c6745d23090d5b404eded45b9203b9 Mon Sep 17 00:00:00 2001
+From: Junyu Long <877730493@qq.com>
+Date: Mon, 5 Aug 2024 16:13:26 +0800
+Subject: [PATCH] xinput: add support for linear trigger
+
+---
+ dlls/xinput1_3/main.c | 6 ++++--
+ 1 file changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
+index 4538df7f38c..8421f675fc6 100644
+--- a/dlls/xinput1_3/main.c
++++ b/dlls/xinput1_3/main.c
+@@ -263,8 +263,10 @@ static void controller_update_state(char *buffer)
+         }
+     }
+     
+-    state->Gamepad.bLeftTrigger = (buttons & (1<<10)) ? 255 : 0;
+-    state->Gamepad.bRightTrigger = (buttons & (1<<11)) ? 255 : 0;
++    //state->Gamepad.bLeftTrigger = (buttons & (1<<10)) ? 255 : 0;
++    //state->Gamepad.bRightTrigger = (buttons & (1<<11)) ? 255 : 0;
++    state->Gamepad.bLeftTrigger = *(unsigned char*)(buffer + 17);
++    state->Gamepad.bRightTrigger = *(unsigned char*)(buffer + 18);
+ 
+     switch (dpad)
+     {

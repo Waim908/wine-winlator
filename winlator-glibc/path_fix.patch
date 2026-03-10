@@ -1,0 +1,96 @@
+From 0368bb128ffdd03d0daa8fc26f062fb91bbf2c2f Mon Sep 17 00:00:00 2001
+From: longjunyu2 <877730493@qq.com>
+Date: Thu, 18 Jul 2024 13:58:51 +0800
+Subject: [PATCH] Change dirs to Winlator's data dirs
+
+---
+ dlls/ntdll/unix/server.c                   | 4 ++--
+ programs/winebrowser/main.c                | 4 ++--
+ programs/winemenubuilder/winemenubuilder.c | 2 +-
+ server/request.c                           | 2 +-
+ server/unicode.c                           | 2 +-
+ 5 files changed, 7 insertions(+), 7 deletions(-)
+
+diff --git a/dlls/ntdll/unix/server.c b/dlls/ntdll/unix/server.c
+index f3ffd99c3fc..d5c5fcce456 100644
+--- a/dlls/ntdll/unix/server.c
++++ b/dlls/ntdll/unix/server.c
+@@ -1240,7 +1240,7 @@ static const char *init_server_dir( dev_t dev, ino_t ino )
+ #ifdef __ANDROID__  /* there's no /tmp dir on Android */
+     asprintf( &dir, "%s/.wineserver/server-%llx-%llx", config_dir, (unsigned long long)dev, (unsigned long long)ino );
+ #else
+-    asprintf( &dir, "/tmp/.wine-%u/server-%llx-%llx", getuid(), (unsigned long long)dev, (unsigned long long)ino );
++    asprintf( &dir, "/data/data/com.winlator/files/imagefs/tmp/.wine-%u/server-%llx-%llx", getuid(), (unsigned long long)dev, (unsigned long long)ino );
+ #endif
+     return dir;
+ }
+@@ -1283,7 +1283,7 @@ static int setup_config_dir(void)
+     {
+         mkdir( "drive_c", 0777 );
+         symlink( "../drive_c", "dosdevices/c:" );
+-        symlink( "/", "dosdevices/z:" );
++        symlink( "/data/data/com.winlator/files/imagefs", "dosdevices/z:" );
+     }
+     else if (errno != EEXIST) fatal_perror( "cannot create %s/dosdevices", config_dir );
+ 
+diff --git a/programs/winebrowser/main.c b/programs/winebrowser/main.c
+index 24416070152..4b804e0975f 100644
+--- a/programs/winebrowser/main.c
++++ b/programs/winebrowser/main.c
+@@ -116,7 +116,7 @@ static int open_http_url( const WCHAR *url )
+ {
+     static const WCHAR defaultbrowsers[] =
+         L"xdg-open\0"
+-        "/usr/bin/open\0"
++        "/data/data/com.winlator/files/imagefs/usr/glibc/bin/open\0"
+         "firefox\0"
+         "konqueror\0"
+         "mozilla\0"
+@@ -141,7 +141,7 @@ static int open_http_url( const WCHAR *url )
+ static int open_mailto_url( const WCHAR *url )
+ {
+     static const WCHAR defaultmailers[] =
+-        L"/usr/bin/open\0"
++        L"/data/data/com.winlator/files/imagefs/usr/glibc/bin/open\0"
+         "xdg-email\0"
+         "mozilla-thunderbird\0"
+         "thunderbird\0"
+diff --git a/programs/winemenubuilder/winemenubuilder.c b/programs/winemenubuilder/winemenubuilder.c
+index 36569fa9d5f..8b4095b1a7e 100644
+--- a/programs/winemenubuilder/winemenubuilder.c
++++ b/programs/winemenubuilder/winemenubuilder.c
+@@ -1724,7 +1724,7 @@ static BOOL build_native_mime_types(struct list *mime_types)
+     if (_wgetenv( L"XDG_DATA_DIRS" ))
+         dirs = xwcsdup( _wgetenv( L"XDG_DATA_DIRS" ));
+     else
+-        dirs = xwcsdup( L"/usr/local/share/:/usr/share/" );
++        dirs = xwcsdup( L"/data/data/com.winlator/files/imagefs/usr/glibc/local/share/:/data/data/com.winlator/files/imagefs/usr/glibc/share/:/data/data/com.winlator/files/imagefs/usr/local/share/:/data/data/com.winlator/files/imagefs/usr/share/" );
+ 
+     ret = add_mimes(xdg_data_dir, mime_types);
+     if (ret)
+diff --git a/server/request.c b/server/request.c
+index 2691e0c7cff..ed213664ad6 100644
+--- a/server/request.c
++++ b/server/request.c
+@@ -648,7 +648,7 @@ static char *create_server_dir( int force )
+     if (asprintf( &base_dir, "%s/.wineserver", config_dir ) == -1)
+         fatal_error( "out of memory\n" );
+ #else
+-    if (asprintf( &base_dir, "/tmp/.wine-%u", getuid() ) == -1)
++    if (asprintf( &base_dir, "/data/data/com.winlator/files/imagefs/tmp/.wine-%u", getuid() ) == -1)
+         fatal_error( "out of memory\n" );
+ #endif
+     create_dir( base_dir, &st2 );
+diff --git a/server/unicode.c b/server/unicode.c
+index b4864310f83..84038335e7c 100644
+--- a/server/unicode.c
++++ b/server/unicode.c
+@@ -313,7 +313,7 @@ static char *get_nls_dir(void)
+ /* load the case mapping table */
+ struct fd *load_intl_file(void)
+ {
+-    static const char *nls_dirs[] = { NULL, DATADIR "/wine/nls", "/usr/local/share/wine/nls", "/usr/share/wine/nls" };
++    static const char *nls_dirs[] = { NULL, DATADIR "/wine/nls", "/data/data/com.winlator/files/imagefs/usr/glibc/local/share/wine/nls", "/data/data/com.winlator/files/imagefs/usr/glibc/share/wine/nls", "/data/data/com.winlator/files/imagefs/usr/local/share/wine/nls", "/data/data/com.winlator/files/imagefs/usr/share/wine/nls" };
+     static const WCHAR nt_pathW[] = {'C',':','\\','w','i','n','d','o','w','s','\\',
+         's','y','s','t','e','m','3','2','\\','l','_','i','n','t','l','.','n','l','s',0};
+     static const struct unicode_str nt_name = { nt_pathW, sizeof(nt_pathW) };

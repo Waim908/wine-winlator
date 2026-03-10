@@ -8,6 +8,10 @@ winlator11 hostei mod wine  x86_64 补丁与releases
 
 # [关于部分wine问题的解决方法](#about)
 
+# Dir
+
+- *wine/* : 仅对wine10.15进行适配无法保证兼容性
+
 # proton wine
 
 ## 可能无法百分百保证游戏按键控制的兼容性

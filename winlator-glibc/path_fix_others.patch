@@ -1,0 +1,59 @@
+From b74591aeec29b7c5c839c7509ee7c98c7b366e4b Mon Sep 17 00:00:00 2001
+From: Junyu Long <877730493@qq.com>
+Date: Thu, 1 Aug 2024 14:16:40 +0800
+Subject: [PATCH] fix path
+
+---
+ programs/winebrowser/main.c                | 4 ++--
+ programs/winemenubuilder/winemenubuilder.c | 2 +-
+ server/unicode.c                           | 2 +-
+ 3 files changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/programs/winebrowser/main.c b/programs/winebrowser/main.c
+index 4b804e0975f..467fd5065ff 100644
+--- a/programs/winebrowser/main.c
++++ b/programs/winebrowser/main.c
+@@ -116,7 +116,7 @@ static int open_http_url( const WCHAR *url )
+ {
+     static const WCHAR defaultbrowsers[] =
+         L"xdg-open\0"
+-        "/data/data/com.winlator/files/imagefs/usr/glibc/bin/open\0"
++        "/data/data/com.winlator/files/imagefs/usr/bin/open\0"
+         "firefox\0"
+         "konqueror\0"
+         "mozilla\0"
+@@ -141,7 +141,7 @@ static int open_http_url( const WCHAR *url )
+ static int open_mailto_url( const WCHAR *url )
+ {
+     static const WCHAR defaultmailers[] =
+-        L"/data/data/com.winlator/files/imagefs/usr/glibc/bin/open\0"
++        L"/data/data/com.winlator/files/imagefs/usr/bin/open\0"
+         "xdg-email\0"
+         "mozilla-thunderbird\0"
+         "thunderbird\0"
+diff --git a/programs/winemenubuilder/winemenubuilder.c b/programs/winemenubuilder/winemenubuilder.c
+index 8b4095b1a7e..c3cab583064 100644
+--- a/programs/winemenubuilder/winemenubuilder.c
++++ b/programs/winemenubuilder/winemenubuilder.c
+@@ -1724,7 +1724,7 @@ static BOOL build_native_mime_types(struct list *mime_types)
+     if (_wgetenv( L"XDG_DATA_DIRS" ))
+         dirs = xwcsdup( _wgetenv( L"XDG_DATA_DIRS" ));
+     else
+-        dirs = xwcsdup( L"/data/data/com.winlator/files/imagefs/usr/glibc/local/share/:/data/data/com.winlator/files/imagefs/usr/glibc/share/:/data/data/com.winlator/files/imagefs/usr/local/share/:/data/data/com.winlator/files/imagefs/usr/share/" );
++        dirs = xwcsdup( L"/data/data/com.winlator/files/imagefs/usr/local/share/:/data/data/com.winlator/files/imagefs/usr/share/" );
+ 
+     ret = add_mimes(xdg_data_dir, mime_types);
+     if (ret)
+diff --git a/server/unicode.c b/server/unicode.c
+index 84038335e7c..832ed24b1b6 100644
+--- a/server/unicode.c
++++ b/server/unicode.c
+@@ -313,7 +313,7 @@ static char *get_nls_dir(void)
+ /* load the case mapping table */
+ struct fd *load_intl_file(void)
+ {
+-    static const char *nls_dirs[] = { NULL, DATADIR "/wine/nls", "/data/data/com.winlator/files/imagefs/usr/glibc/local/share/wine/nls", "/data/data/com.winlator/files/imagefs/usr/glibc/share/wine/nls", "/data/data/com.winlator/files/imagefs/usr/local/share/wine/nls", "/data/data/com.winlator/files/imagefs/usr/share/wine/nls" };
++    static const char *nls_dirs[] = { NULL, DATADIR "/wine/nls", "/data/data/com.winlator/files/imagefs/usr/local/share/wine/nls", "/data/data/com.winlator/files/imagefs/usr/share/wine/nls" };
+     static const WCHAR nt_pathW[] = {'C',':','\\','w','i','n','d','o','w','s','\\',
+         's','y','s','t','e','m','3','2','\\','l','_','i','n','t','l','.','n','l','s',0};
+     static const struct unicode_str nt_name = { nt_pathW, sizeof(nt_pathW) };
