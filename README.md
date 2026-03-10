@@ -28,6 +28,8 @@ winlator11 hostei mod wine  x86_64 补丁与releases
 
  - [brunodev85/wine-9.2-custom](https://github.com/brunodev85/wine-9.2-custom)
 
+ - [longjunyu2/wine-custom](https://github.com/longjunyu2/wine-custom)
+
 ### termux 相关补丁
 
  - [Waim908/wine-termux](https://github.com/Waim908/wine-termux)
