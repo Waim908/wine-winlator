@@ -10,7 +10,13 @@ winlator11 hostei mod wine  x86_64 补丁与releases
 
 # Dir
 
+原版
+
 - *wine/* : 仅对wine10.15进行适配无法保证兼容性
+
+Glibc 7.1.x
+
+- *wine-glibc/* : 实验性通过LLWM完善了补丁
 
 # proton wine
 
