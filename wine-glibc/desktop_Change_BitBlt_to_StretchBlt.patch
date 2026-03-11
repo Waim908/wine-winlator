@@ -1,0 +1,30 @@
+From 372d2e5a21e3228266cea7a6d639a7e408c38a66 Mon Sep 17 00:00:00 2001
+From: Junyu Long <877730493@qq.com>
+Date: Mon, 5 Aug 2024 12:34:27 +0800
+Subject: [PATCH] user32: Change BitBlt to StretchBlt on desktop.c
+
+---
+ dlls/user32/desktop.c | 10 +++++-----
+ 1 file changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/dlls/user32/desktop.c b/dlls/user32/desktop.c
+index f73d10f87eb..632d951fbfb 100644
+--- a/dlls/user32/desktop.c
++++ b/dlls/user32/desktop.c
+@@ -138,11 +138,11 @@ BOOL WINAPI PaintDesktop(HDC hdc)
+             }
+             else
+             {
+-                x = (rect.left + rect.right - bitmapSize.cx) / 2;
+-                y = (rect.top + rect.bottom - bitmapSize.cy) / 2;
+-                if (x < 0) x = 0;
+-                if (y < 0) y = 0;
+-                BitBlt( hdc, x, y, bitmapSize.cx, bitmapSize.cy, hMemDC, 0, 0, SRCCOPY );
++                SIZE deskSize;
++                deskSize.cx = rect.right - rect.left;
++                deskSize.cy = rect.bottom - rect.top;
++
++                StretchBlt( hdc, 0, 0, deskSize.cx, deskSize.cy, hMemDC, 0, 0, bitmapSize.cx, bitmapSize.cy, SRCCOPY );
+             }
+             DeleteDC( hMemDC );
+         }

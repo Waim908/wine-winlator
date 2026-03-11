@@ -1,0 +1,27 @@
+From 144daaf7d133638448af5aab2551bbd2f0691ad3 Mon Sep 17 00:00:00 2001
+From: Junyu Long <877730493@qq.com>
+Date: Sat, 24 Aug 2024 19:09:45 +0800
+Subject: [PATCH] ntdll: If mmap() fails, force to use read(). This may result
+ in performance issues, so it is still not recommended to place files in
+ non-executable dirctories.
+
+---
+ dlls/ntdll/unix/virtual.c | 5 -----
+ 1 file changed, 5 deletions(-)
+
+diff --git a/dlls/ntdll/unix/virtual.c b/dlls/ntdll/unix/virtual.c
+index 7578d4bdf8b..6afa233d00e 100644
+--- a/dlls/ntdll/unix/virtual.c
++++ b/dlls/ntdll/unix/virtual.c
+@@ -2103,11 +2103,6 @@ static NTSTATUS map_file_into_view( struct file_view *view, int fd, size_t start
+             break;
+         case EACCES:
+         case EPERM:  /* noexec filesystem, fall back to read() */
+-            if (flags & MAP_SHARED)
+-            {
+-                if (prot & PROT_EXEC) ERR( "failed to set PROT_EXEC on file map, noexec filesystem?\n" );
+-                return STATUS_ACCESS_DENIED;
+-            }
+             if (prot & PROT_EXEC) WARN( "failed to set PROT_EXEC on file map, noexec filesystem?\n" );
+             break;
+         default:
