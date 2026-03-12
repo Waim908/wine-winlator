@@ -33,7 +33,7 @@ EOF
 fi
 }
 rm -rf /data/data/com.winlator/files/imagefs/home/xuser/.wine
-rm -rf /tmp/output-whp
+rm -rf /tmp/output-wcp
 rm -rf /data/data/com.winlator/files/imagefs/tmp
 mkdir -p /data/data/com.winlator/files/imagefs/tmp/
 mkdir -p /data/data/com.winlator/files/imagefs/home/xuser/.wine
@@ -101,15 +101,15 @@ fi
 cd $WINEPREFIX/..
 rm -rf .wine/dosdevice/z:
 mkdir -p /tmp/output-wcp
-tar -I 'xz -T$(nproc) -9' -cvf /tmp/output-whp/prefixPack.txz .wine
+tar -I 'xz -T$(nproc) -9' -cvf /tmp/output-wcp/prefixPack.txz .wine
 cp -r -p $wineRoot/bin /tmp/output-wcp/
 cp -r -p $wineRoot/lib /tmp/output-wcp/
 cp -r -p $wineRoot/share /tmp/output-wcp/
-cd /tmp/output-whp/
+cd /tmp/output-wcp/
 create_json
 if [[ -z $customWcpName ]]; then
-  tar -I 'zstd -T$(nproc) -9' -cvf /tmp/output-whp/wine-$wineVer.wcp bin/ lib/ share/ prefixPack.txz profile.json
+  tar -I 'zstd -T$(nproc) -9' -cvf /tmp/output-wcp/wine-$wineVer.wcp bin/ lib/ share/ prefixPack.txz profile.json
 else
-  tar -I 'zstd -T$(nproc) -9' -cvf /tmp/output-whp/$customWcpName.wcp bin/ lib/ share/ prefixPack.txz profile.json
+  tar -I 'zstd -T$(nproc) -9' -cvf /tmp/output-wcp/$customWcpName.wcp bin/ lib/ share/ prefixPack.txz profile.json
 fi
-echo "Output=> /tmp/output-whp/wine-$wineVer.wcp"
+echo "Output=> /tmp/output-wcp/wine-$wineVer.wcp"
