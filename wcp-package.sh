@@ -34,8 +34,8 @@ fi
 }
 rm -rf /data/data/com.winlator/files/imagefs/home/xuser/.wine
 rm -rf /tmp/output-whp
-rm -rf /data/data/com.winlator/files/imagefs/tmp
-mkdir -p /data/data/com.winlator/files/imagefs/tmp/
+rm -rf /data/data/com.winlator/files/imagefs/usr/tmp
+mkdir -p /data/data/com.winlator/files/imagefs/usr/tmp/
 mkdir -p /data/data/com.winlator/files/imagefs/home/xuser/.wine
 if [[ -z $wineVer ]]; then
   echo "你必须声明wineVer变量"
