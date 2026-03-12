@@ -21,19 +21,16 @@ else
 fi
 
 file_path2="$file_path/customization.cfg"
-if [[ $main_ver -le 10 ]]; then
-  if [[ $main_ver -eq 10 ]]; then
-    if [[ $sub_ver -gt 16 ]]; then
-      echo "Have esync & fsync ✅"
-      sed2 _use_esync true
-      sed2 _use_fsync true
-    fi
-  fi
+if (( main_ver < 10 || (main_ver == 10 && sub_ver <= 16) )); then
+  echo "Have esync & fsync ✅"
+  sed2 _use_esync true
+  sed2 _use_fsync true
 else
   echo "No esync & fsync ❌"
   sed2 _use_esync false
   sed2 _use_fsync false
 fi
+
 sed2 _GE_WAYLAND false
 sed2 _plain_version $1
 sed2 _staging_version "v$(echo $1 | sed 's/^wine-//')"
