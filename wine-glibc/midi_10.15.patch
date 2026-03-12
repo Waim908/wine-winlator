@@ -5,7 +5,7 @@ diff -urN wine-10.15/dlls/midimap/Makefile.in b/dlls/midimap/Makefile.in
  MODULE    = midimap.dll
 -IMPORTS   = winmm user32 advapi32
 +IMPORTS   = winmm user32 advapi32 ws2_32
- 
+
  SOURCES = \
  	midimap.c
 diff -urN wine-10.15/dlls/midimap/midimap.c b/dlls/midimap/midimap.c
@@ -37,13 +37,13 @@ diff -urN wine-10.15/dlls/midimap/midimap.c b/dlls/midimap/midimap.c
 +#define REQUEST_CODE_MIDI_OPEN 5
 +#define REQUEST_CODE_MIDI_CLOSE 6
 +#define REQUEST_CODE_MIDI_RESET 7
- 
+
  /*
   * Here's how Windows stores the midiOut mapping information.
 @@ -108,6 +123,22 @@
  static	MIDIOUTPORT*	midiOutPorts;
  static  unsigned	numMidiOutPorts;
- 
+
 +static struct sockaddr_in* client_addr = NULL;
 +static SOCKET server_sock = INVALID_SOCKET;
 +static BOOL winsock_loaded = FALSE;
@@ -64,14 +64,14 @@ diff -urN wine-10.15/dlls/midimap/midimap.c b/dlls/midimap/midimap.c
  {
      if (!IsBadReadPtr(mm, sizeof(MIDIMAPDATA)) && mm->self == mm)
 @@ -285,203 +316,184 @@
- 
+
  static DWORD modOpen(DWORD_PTR *lpdwUser, LPMIDIOPENDESC lpDesc, DWORD dwFlags)
  {
 -    MIDIMAPDATA*	mom = HeapAlloc(GetProcessHeap(), 0, sizeof(MIDIMAPDATA));
 +    MIDIMAPDATA* mom = HeapAlloc(GetProcessHeap(), 0, sizeof(MIDIMAPDATA));
- 
+
      TRACE("(%p %p %08lx)\n", lpdwUser, lpDesc, dwFlags);
- 
+
 -    if (!mom) return MMSYSERR_NOMEM;
 +    if (!mom)
 +        return MMSYSERR_NOMEM;
@@ -82,7 +82,7 @@ diff -urN wine-10.15/dlls/midimap/midimap.c b/dlls/midimap/midimap.c
 +	    HeapFree(GetProcessHeap(), 0, mom);
 +	    return MMSYSERR_INVALPARAM;
      }
- 
+
 -    if (MIDIMAP_LoadSettings(mom))
 -    {
 -	UINT chn;
@@ -98,7 +98,7 @@ diff -urN wine-10.15/dlls/midimap/midimap.c b/dlls/midimap/midimap.c
 +	    mom->wCbFlags = HIWORD(dwFlags & CALLBACK_TYPEMASK);
 +	    mom->midiDesc = *lpDesc;
 +	    mom->runningStatus = 0;
- 
+
 -	for (chn = 0; chn < 16; chn++)
 -	{
 -	    if (mom->ChannelMap[chn]->loaded) continue;
@@ -130,18 +130,18 @@ diff -urN wine-10.15/dlls/midimap/midimap.c b/dlls/midimap/midimap.c
      HeapFree(GetProcessHeap(), 0, mom);
      return MIDIERR_INVALIDSETUP;
  }
- 
+
 -static	DWORD	modClose(MIDIMAPDATA* mom)
 +static DWORD modClose(MIDIMAPDATA* mom)
  {
 -    UINT	i;
 -    DWORD	ret = MMSYSERR_NOERROR;
 +    UINT i;
- 
+
 -    if (MIDIMAP_IsBadData(mom)) 	return MMSYSERR_ERROR;
 +    if (MIDIMAP_IsBadData(mom))
 +        return MMSYSERR_ERROR;
- 
+
 -    for (i = 0; i < 16; i++)
 -    {
 -	DWORD	t;
@@ -174,14 +174,14 @@ diff -urN wine-10.15/dlls/midimap/midimap.c b/dlls/midimap/midimap.c
 +
 +    return MMSYSERR_NOERROR;
  }
- 
+
  static DWORD modLongData(MIDIMAPDATA* mom, LPMIDIHDR lpMidiHdr, DWORD_PTR dwParam2)
  {
 -    WORD	chn;
 -    DWORD	ret = MMSYSERR_NOERROR;
 -    MIDIHDR	mh;
 +    DWORD ret = MMSYSERR_NOERROR;
- 
+
      if (MIDIMAP_IsBadData(mom))
 -	return MMSYSERR_ERROR;
 +	    return MMSYSERR_ERROR;
@@ -193,7 +193,7 @@ diff -urN wine-10.15/dlls/midimap/midimap.c b/dlls/midimap/midimap.c
      if (lpMidiHdr->dwFlags & MHDR_INQUEUE)
 -	return MIDIERR_STILLPLAYING;
 +	    return MIDIERR_STILLPLAYING;
- 
+
 -    mh = *lpMidiHdr;
      lpMidiHdr->dwFlags &= ~MHDR_DONE;
      lpMidiHdr->dwFlags |= MHDR_INQUEUE;
@@ -221,7 +221,7 @@ diff -urN wine-10.15/dlls/midimap/midimap.c b/dlls/midimap/midimap.c
      MIDIMAP_NotifyClient(mom, MOM_DONE, (DWORD_PTR)lpMidiHdr, 0L);
      return ret;
  }
- 
+
  static DWORD modData(MIDIMAPDATA* mom, DWORD_PTR dwParam)
  {
 -    BYTE	status = LOBYTE(LOWORD(dwParam));
@@ -229,11 +229,11 @@ diff -urN wine-10.15/dlls/midimap/midimap.c b/dlls/midimap/midimap.c
 -    DWORD	ret = MMSYSERR_NOERROR;
 +    BYTE status = LOBYTE(LOWORD(dwParam));
 +    WORD chn;
- 
+
      if (MIDIMAP_IsBadData(mom))
 -	return MMSYSERR_ERROR;
 +	    return MMSYSERR_ERROR;
- 
+
 -    if (status < 0x80)
 -    {
 -        if (mom->runningStatus)
@@ -251,11 +251,11 @@ diff -urN wine-10.15/dlls/midimap/midimap.c b/dlls/midimap/midimap.c
          }
      }
      chn = status & 0x0F;
- 
+
 -    if (!mom->ChannelMap[chn]) return MMSYSERR_NOERROR;
 +    if (!mom->ChannelMap[chn])
 +        return MMSYSERR_NOERROR;
- 
+
 -    switch (status & 0xF0)
 -    {
 -    case 0x80:
@@ -331,11 +331,11 @@ diff -urN wine-10.15/dlls/midimap/midimap.c b/dlls/midimap/midimap.c
 +        default:
 +            FIXME("ooch %Ix\n", dwParam);
      }
- 
+
 -    return ret;
 +    return MMSYSERR_NOERROR;
  }
- 
+
  static DWORD modPrepare(MIDIMAPDATA* mom, LPMIDIHDR lpMidiHdr, DWORD_PTR dwSize)
  {
      if (MIDIMAP_IsBadData(mom)) return MMSYSERR_ERROR;
@@ -349,13 +349,13 @@ diff -urN wine-10.15/dlls/midimap/midimap.c b/dlls/midimap/midimap.c
      if (lpMidiHdr->dwFlags & MHDR_PREPARED)
 -	return MMSYSERR_NOERROR;
 +        return MMSYSERR_NOERROR;
- 
+
      lpMidiHdr->dwFlags |= MHDR_PREPARED;
      lpMidiHdr->dwFlags &= ~(MHDR_DONE|MHDR_INQUEUE); /* flags cleared since w2k */
 +
      return MMSYSERR_NOERROR;
  }
- 
+
  static DWORD modUnprepare(MIDIMAPDATA* mom, LPMIDIHDR lpMidiHdr, DWORD_PTR dwSize)
  {
      if (MIDIMAP_IsBadData(mom)) return MMSYSERR_ERROR;
@@ -373,7 +373,7 @@ diff -urN wine-10.15/dlls/midimap/midimap.c b/dlls/midimap/midimap.c
      if (lpMidiHdr->dwFlags & MHDR_INQUEUE)
 -	return MIDIERR_STILLPLAYING;
 +	    return MIDIERR_STILLPLAYING;
- 
+
      lpMidiHdr->dwFlags &= ~MHDR_PREPARED;
      return MMSYSERR_NOERROR;
 @@ -505,37 +517,122 @@
@@ -395,11 +395,11 @@ diff -urN wine-10.15/dlls/midimap/midimap.c b/dlls/midimap/midimap.c
 +
 +    if (!numMidiOutPorts)
 +        return MMSYSERR_BADDEVICEID;
- 
+
      memcpy(lpMidiCaps, &mappercaps, min(size, sizeof(*lpMidiCaps)));
      return MMSYSERR_NOERROR;
  }
- 
+
 -static	DWORD	modReset(MIDIMAPDATA* mom)
 +static DWORD modReset(MIDIMAPDATA* mom)
  {
@@ -438,7 +438,7 @@ diff -urN wine-10.15/dlls/midimap/midimap.c b/dlls/midimap/midimap.c
 +
 +    res = setsockopt(server_sock, SOL_SOCKET, SO_REUSEADDR, (const char *)&reuse_addr, sizeof(reuse_addr));
 +    if (res == SOCKET_ERROR) return FALSE;
- 
+
 -    for (chn = 0; chn < 16; chn++)
 +    ioctlsocket(server_sock, FIONBIO, &non_blocking);
 +
@@ -461,7 +461,7 @@ diff -urN wine-10.15/dlls/midimap/midimap.c b/dlls/midimap/midimap.c
 +        server_sock = INVALID_SOCKET;
      }
 -    mom->runningStatus = 0;
- 
+
 -    return ret;
 +    if (winsock_loaded)
 +    {
@@ -515,7 +515,7 @@ diff -urN wine-10.15/dlls/midimap/midimap.c b/dlls/midimap/midimap.c
 +    send_buffer[0] = REQUEST_CODE_MIDI_RESET;
 +    request_midi_data(send_buffer);
  }
- 
+
  static LRESULT MIDIMAP_drvOpen(void);
 @@ -589,38 +686,27 @@
   */
@@ -526,11 +526,11 @@ diff -urN wine-10.15/dlls/midimap/midimap.c b/dlls/midimap/midimap.c
 -    BOOL                found_valid_port = FALSE;
 +    unsigned i;
 +    MIDIOUTPORT* winlatorMidiOutPort;
- 
+
      if (midiOutPorts)
 -	return 0;
 +	    return 0;
- 
+
 -    numMidiOutPorts = midiOutGetNumDevs();
 +    numMidiOutPorts = 1;
      midiOutPorts = HeapAlloc(GetProcessHeap(), 0,
@@ -554,7 +554,7 @@ diff -urN wine-10.15/dlls/midimap/midimap.c b/dlls/midimap/midimap.c
 -	    midiOutPorts[dev].loaded = -1;
 -	}
 -    }
- 
+
 -    if (!found_valid_port)
 -        ERR_(winediag)("No software synthesizer midi port found, Midi sound output probably won't work.\n");
 +    winlatorMidiOutPort = midiOutPorts;
@@ -568,7 +568,7 @@ diff -urN wine-10.15/dlls/midimap/midimap.c b/dlls/midimap/midimap.c
 +
 +    create_server_socket();
 +    send_buffer = HeapAlloc(GetProcessHeap(), 0, BUFFER_SIZE * sizeof(BYTE));
- 
+
      return 1;
  }
 @@ -630,12 +716,16 @@
@@ -592,7 +592,7 @@ diff -urN wine-10.15/dlls/midimap/midimap.c b/dlls/midimap/midimap.c
 +
      return 0;
  }
- 
+
 @@ -645,8 +735,8 @@
  LRESULT CALLBACK MIDIMAP_DriverProc(DWORD_PTR dwDevID, HDRVR hDriv, UINT wMsg,
                                      LPARAM dwParam1, LPARAM dwParam2)
@@ -601,6 +601,15 @@ diff -urN wine-10.15/dlls/midimap/midimap.c b/dlls/midimap/midimap.c
 -/* EPP 	  dwDevID, hDriv, wMsg, dwParam1, dwParam2); */
 +    TRACE("(%08lX, %04X, %08lX, %08lX, %08lX)\n",
 +        dwDevID, hDriv, wMsg, dwParam1, dwParam2);
- 
+
      switch (wMsg)
      {
+
+diff -urN proton10_wine/dlls/midimap/midimap.spec b/dlls/midimap/midimap.spec
+--- proton10_wine/dlls/midimap/midimap.spec	2025-10-26 19:03:17.463768487 +0800
++++ b/dlls/midimap/midimap.spec	2025-10-26 21:20:27.027518448 +0800
+@@ -1,3 +1,4 @@
+ @ stdcall -private DriverProc(long long long long long) MIDIMAP_DriverProc
+ @ stdcall -private modMessage(long long long long long) MIDIMAP_modMessage
++@ stdcall -private midMessage(long long long long long) MIDIMAP_midMessage
+ @ stub modmCallback
