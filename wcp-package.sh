@@ -4,7 +4,7 @@ if [[ -z $customDescription ]]; then
 cat > '/tmp/output-wcp/profile.json' << EOF
 {
   "type": "Wine",
-  "versionName": "${wine-ver}",
+  "versionName": "${wine-ver}-custom",
   "versionCode": 1,
   "description": "${wine-ver}-tkg-stg-ge. Built form [https://github.com/Waim908/wine-winlator]",
   "files": [],
