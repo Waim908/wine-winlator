@@ -1,12 +1,12 @@
 #!/bin/bash
 create_json () {
 if [[ -z $customDescription ]]; then
-cat > '/tmp/output-wcp/profile.json' << EOF
+cat > '/tmp/output-wcp/tmp/profile.json' << EOF
 {
   "type": "Wine",
-  "versionName": "${wine-ver}-custom",
+  "versionName": "${wineVer}-custom",
   "versionCode": 1,
-  "description": "${wine-ver}-tkg-stg-ge. Built form [https://github.com/Waim908/wine-winlator]",
+  "description": "${wineVer}-tkg-stg-ge. Built form [https://github.com/Waim908/wine-winlator]",
   "files": [],
   "wine": {
           "binPath": "bin",
@@ -16,10 +16,10 @@ cat > '/tmp/output-wcp/profile.json' << EOF
 }
 EOF
 else
-cat > '/tmp/output-wcp/profile.json' << EOF
+cat > '/tmp/output-wcp/tmp/profile.json' << EOF
 {
   "type": "Wine",
-  "versionName": "${wine-ver}",
+  "versionName": "${wineVer}",
   "versionCode": 1,
   "description": "${customDescription}",
   "files": [],
@@ -100,16 +100,16 @@ else
 fi
 cd $WINEPREFIX/..
 rm -rf .wine/dosdevice/z:
-mkdir -p /tmp/output-wcp
+mkdir -p /tmp/output-wcp/tmp
 tar -I 'xz -T$(nproc) -9' -cvf /tmp/output-wcp/prefixPack.txz .wine
-cp -r -p $wineRoot/bin /tmp/output-wcp/
-cp -r -p $wineRoot/lib /tmp/output-wcp/
-cp -r -p $wineRoot/share /tmp/output-wcp/
-cd /tmp/output-wcp/
+cp -r -p $wineRoot/bin /tmp/output-wcp/tmp/
+cp -r -p $wineRoot/lib /tmp/output-wcp/tmp/
+cp -r -p $wineRoot/share /tmp/output-wcp/tmp/
+cd /tmp/output-wcp/tmp/
 create_json
 if [[ -z $customWcpName ]]; then
-  tar -I 'zstd -T$(nproc) -9' -cvf /tmp/output-wcp/wine-$wineVer.wcp bin/ lib/ share/ prefixPack.txz profile.json
+  tar -I 'zstd -T$(nproc) -9' -cvf /tmp/output-wcp/wine-$wineVer.wcp .
 else
-  tar -I 'zstd -T$(nproc) -9' -cvf /tmp/output-wcp/$customWcpName.wcp bin/ lib/ share/ prefixPack.txz profile.json
+  tar -I 'zstd -T$(nproc) -9' -cvf /tmp/output-wcp/$customWcpName.wcp bin/ .
 fi
 echo "Output=> /tmp/output-wcp/wine-$wineVer.wcp"
