@@ -101,7 +101,7 @@ fi
 cd $WINEPREFIX/..
 rm -rf .wine/dosdevice/z:
 mkdir -p /tmp/output-wcp/tmp
-tar -I 'xz -T$(nproc) -9' -cvf /tmp/output-wcp/prefixPack.txz .wine
+tar -I 'xz -T$(nproc) -9' -cvf /tmp/output-wcp/tmp/prefixPack.txz .wine
 cp -r -p $wineRoot/bin /tmp/output-wcp/tmp/
 cp -r -p $wineRoot/lib /tmp/output-wcp/tmp/
 cp -r -p $wineRoot/share /tmp/output-wcp/tmp/
