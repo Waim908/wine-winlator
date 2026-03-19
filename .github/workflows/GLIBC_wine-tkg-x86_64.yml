@@ -24,8 +24,8 @@ jobs:
         run: |
           [[ -z $wineVer ]] && { echo "你没有输入Wine版本！" && exit 1;}
           cd /tmp
-          git clone --depth 1 --branch master https://gitlab.com/Waim908/wine-winelator || exit 1
-          git clone --depth 1 --branch master https://gitlab.com/GloriousEggroll/wine-tkg-git || exit 1
+          git clone --depth 1 --branch master https://github.com/Waim908/wine-winelator || exit 1
+          git clone --depth 1 --branch master https://gihub.com/GloriousEggroll/wine-tkg-git || exit 1
 
   install_deps:
     runs-on: ubuntu-24.04
@@ -48,7 +48,7 @@ jobs:
   build_wine:
     runs-on: ubuntu-24.04
     name: Build Wine-TKG
-    needs: install_deps
+    needs: [clone_source, install_deps]
     steps:
       - name: Build Wine-TKG
         run: |
