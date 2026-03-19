@@ -1,0 +1,114 @@
+name: Compile Wine-TKG for x86_64 (Glibc)
+
+permissions:
+  contents: write
+  packages: write
+
+on:
+  workflow_dispatch:
+  inputs:
+    version:
+      description: 'Wine-TKG Version'
+      required: false
+      default: '10.15'
+
+env:
+  wineVer: ${{ github.event.inputs.version }}
+
+runs-on: ubuntu-24.04
+
+jobs:
+  clone_source:
+    runs-on: ubuntu-24.04
+    name: Clone Wine-TKG Source
+    steps:
+      - name: Clone Wine-TKG Repository
+        run: |
+          [[ -z $wineVer ]] && { echo "你没有输入Wine版本！" && exit 1;}
+          cd /tmp
+          git clone --depth 1 --branch master https://gitlab.com/Waim908/wine-winelator || exit 1
+          git clone --depth 1 --branch master https://gitlab.com/GloriousEggroll/wine-tkg-git || exit 1
+
+  install_deps:
+    runs-on: ubuntu-24.04
+    name: Install Dependencies
+    needs: clone-source
+    steps:
+      - name: Install Build Dependencies
+        run: |
+          ubuntu_pkgs_64=(git libwayland-bin libwayland-dev libxkbregistry-dev libunwind-dev autoconf bison ccache debhelper desktop-file-utils docbook-to-man docbook-utils docbook-xsl flex fontforge gawk gettext libacl1-dev libasound2-dev libcapi20-dev libcups2-dev libdbus-1-dev libgif-dev libglu1-mesa-dev libgphoto2-dev libgsm1-dev libgtk-3-dev libkrb5-dev libxi-dev liblcms2-dev libldap2-dev libmpg123-dev libncurses5-dev libopenal-dev libosmesa6-dev libpcap-dev libpulse-dev libsane-dev libssl-dev libtiff5-dev libudev-dev libv4l-dev libva-dev libxslt1-dev libxt-dev ocl-icd-opencl-dev oss4-dev prelink sharutils unixodbc-dev valgrind schedtool libfreetype6-dev xserver-xorg-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev gcc-multilib g++-multilib curl fonttools libsdl2-dev python3-tk libvulkan1 libc6-dev linux-libc-dev libkdb5-* libppl14 libcolord2 libvulkan-dev libgnutls28-dev libpng-dev libkadm5clnt-mit* libkadm5srv-mit* libavcodec-dev libavutil-dev libavformat-dev libswresample-dev libavcodec58 libswresample3 libavutil56 libvkd3d-dev libxinerama-dev libxcursor-dev libxrandr-dev libxcomposite-dev mingw-w64 glslang-dev glslang-tools meson wget python3-pefile rustc cargo python3-ldb samba-libs samba-dev libgcrypt20-dev libusb-1.0-0-dev yasm jq)
+          ubuntu_pkgs_64+=(mmv build-essential patch)
+          sudo apt update
+          yes | sudo apt install ${ubuntu_pkgs_64[@]} || exit
+
+  donwload_cache:
+    - name: Download Cache
+      id: cache-tag
+      uses: actions/cache@v4
+      with:
+        path: /tmp/ccache.tar.xz
+        key: tkg-ccache-amd64
+
+  build_wine:
+    runs-on: ubuntu-24.04
+    name: Build Wine-TKG
+    needs: install_deps
+    steps:
+      - name: Build Wine-TKG
+        run: |
+          mkdir -p ~/.cache/
+          if [[ -f /tmp/ccache.tar.xz ]]; then
+            echo "找到Ccache缓存，正在解压..."
+            tar -xf old-ccache.tar.xz -C ~/.cache/ || exit 1
+          else
+            echo "未找到Ccache缓存，继续构建..."
+          fi
+
+          export ENABLE_PROTON_MF=1
+          bash +x /tmp/wine-winlator/set-tkg-cfg.sh wine-$wineVer /tmp/wine-tkg-git/wine-tkg-git/
+
+          bash +x /tmp/wine-winlator/add_patch.sh wine-glibc $wineVer /tmp/wine-tkg-git/wine-tkg-git/wine-tkg-userpatches/
+
+          echo "正在构建Wine-TKG..."
+          cd /tmp/wine-tkg-git/wine-tkg-git/
+          echo '_ci_build="true"' >> customization.cfg
+          yes | ./non-makepkg-build.sh || exit 1
+
+          echo "正在保存Ccache缓存..."
+          [[ -f /tmp/ccache.tar.xz ]] && rm -rf /tmp/ccache.tar.xz
+          cd ~/.cache
+          tar -I 'xz -T$(nproc) -9' -cf /tmp/ccache.tar.xz ccache || exit 1
+
+          echo "正在打包Wine-TKG..."
+          wine_path=$(ls /tmp/output/ 2>/dev/null)
+          [[ -z $wine_path ]] && exit 1
+          bash -x /tmp/wine-winlator/wcp-package.sh /tmp/output/$wine_path
+
+      - name: Save ccache
+        uses: actions/cache/save@v5
+        with:
+          path: /tmp/ccache.tar.xz
+          key: tkg-ccache-amd64
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          target_commitish: $wineVer-tkg
+          tag_name: ${{ steps.wine_tag.outputs.wine_ver }}-${{ steps.wine_tag.outputs.PKG_NAME }}
+          name: Wine ${{ github.event.inputs.version }} TkG Staging GE for Winlator Glibc
+          body: |
+            自动编译版本。
+            移植Proton MF
+            启用Esync
+            启用Fsync
+            修改请查看此仓库源码。
+          files: /tmp/output-wcp/*.wcp
+          draft: false
+          prerelease: false
+
+
+
+
+
