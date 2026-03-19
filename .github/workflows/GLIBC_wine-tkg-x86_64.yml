@@ -16,20 +16,9 @@ env:
   wineVer: ${{ github.event.inputs.version }}
 
 jobs:
-  clone_source:
+  build_wine:
     runs-on: ubuntu-24.04
-    name: Clone Wine-TKG Source
-    steps:
-      - name: Clone Wine-TKG Repository
-        run: |
-          [[ -z $wineVer ]] && { echo "你没有输入Wine版本！" && exit 1;}
-          cd /tmp
-          git clone --depth 1 https://github.com/Waim908/wine-winlator.git || exit 1
-          git clone --depth 1 https://github.com/Frogging-Family/wine-tkg-git.git || exit 1
-
-  download_cache:
-    runs-on: ubuntu-24.04
-    name: Download Ccache Cache
+    name: Build Wine-TKG
     steps:
       - name: Download Cache
         id: cache-tag
@@ -38,13 +27,13 @@ jobs:
           path: /tmp/ccache.tar.xz
           key: tkg-ccache-amd64
 
-  build_wine:
-    runs-on: ubuntu-24.04
-    name: Build Wine-TKG
-    needs: [clone_source, download_cache]
-    steps:
       - name: Build Wine-TKG
         run: |
+          [[ -z $wineVer ]] && { echo "你没有输入Wine版本！" && exit 1;}
+          cd /tmp
+          git clone --depth 1 https://github.com/Waim908/wine-winlator.git || exit 1
+          git clone --depth 1 https://github.com/Frogging-Family/wine-tkg-git.git || exit 1
+
           mkdir -p ~/.cache/
           if [[ -f /tmp/ccache.tar.xz ]]; then
             echo "找到Ccache缓存，正在解压..."
