@@ -6,8 +6,7 @@ source "$script_dir/$1/$2/__patch__.conf"
 echo "${_patch_file_[@]}"
 
 for i in "${_patch_file_[@]}"; do
-  ls "$script_dir/$1/$2/$i"
-  cp "$script_dir/$1/$2/$i" "$3"
+  cp -r "$script_dir/$1/$2/$i" "$3"
 done
 
 cd "$3" || exit 1
