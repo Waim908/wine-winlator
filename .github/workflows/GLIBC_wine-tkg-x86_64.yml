@@ -6,16 +6,14 @@ permissions:
 
 on:
   workflow_dispatch:
-  inputs:
-    version:
-      description: 'Wine-TKG Version'
-      required: false
-      default: '10.15'
+    inputs:
+      version:
+        description: 'Wine-TKG Version'
+        required: false
+        default: '10.15'
 
 env:
   wineVer: ${{ github.event.inputs.version }}
-
-runs-on: ubuntu-24.04
 
 jobs:
   clone_source:
@@ -32,7 +30,6 @@ jobs:
   install_deps:
     runs-on: ubuntu-24.04
     name: Install Dependencies
-    needs: clone-source
     steps:
       - name: Install Build Dependencies
         run: |
@@ -41,13 +38,12 @@ jobs:
           sudo apt update
           yes | sudo apt install ${ubuntu_pkgs_64[@]} || exit
 
-  donwload_cache:
-    - name: Download Cache
-      id: cache-tag
-      uses: actions/cache@v4
-      with:
-        path: /tmp/ccache.tar.xz
-        key: tkg-ccache-amd64
+      - name: Download Cache
+        id: cache-tag
+        uses: actions/cache@v4
+        with:
+          path: /tmp/ccache.tar.xz
+          key: tkg-ccache-amd64
 
   build_wine:
     runs-on: ubuntu-24.04
@@ -95,8 +91,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          target_commitish: $wineVer-tkg
-          tag_name: ${{ steps.wine_tag.outputs.wine_ver }}-${{ steps.wine_tag.outputs.PKG_NAME }}
+          tag_name: ${{ github.event.inputs.version }}-tkg
           name: Wine ${{ github.event.inputs.version }} TkG Staging GE for Winlator Glibc
           body: |
             自动编译版本。
