@@ -8,9 +8,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Wine-TKG Version'
+        description: "Wine-TKG Version"
         required: false
-        default: '10.15'
+        default: "10.15"
 
 env:
   wineVer: ${{ github.event.inputs.version }}
@@ -38,6 +38,10 @@ jobs:
           sudo apt update
           sudo apt install -y ${ubuntu_pkgs_64[@]} || exit
 
+  download_cache:
+    runs-on: ubuntu-24.04
+    name: Download Ccache Cache
+    steps:
       - name: Download Cache
         id: cache-tag
         uses: actions/cache@v4
@@ -102,8 +106,3 @@ jobs:
           files: /tmp/output-wcp/*.wcp
           draft: false
           prerelease: false
-
-
-
-
-
