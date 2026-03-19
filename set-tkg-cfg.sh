@@ -21,6 +21,8 @@ else
 fi
 
 file_path2="$file_path/customization.cfg"
+sed2 _use_staging true
+sed2 _staging_version "v$(echo $1 | sed 's/^wine-//')"
 if (( main_ver < 10 || (main_ver == 10 && sub_ver <= 16) )); then
   echo "Have esync & fsync ✅"
   sed2 _use_esync true
