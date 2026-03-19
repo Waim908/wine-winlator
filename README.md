@@ -6,6 +6,8 @@ winlator11 hostei mod wine  x86_64 补丁与releases
 
 部分补丁请通过```get_file_9.2.sh```和```patch.sh```生成，其中大部分无效，可能导致编译错误
 
+midi必须使用winlator版midimap.c！
+
 # [关于部分wine问题的解决方法](#about)
 
 # Dir
