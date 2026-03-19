@@ -52,7 +52,7 @@ jobs:
   build_wine:
     runs-on: ubuntu-24.04
     name: Build Wine-TKG
-    needs: [clone_source, install_deps]
+    needs: [clone_source, install_deps, download_cache]
     steps:
       - name: Build Wine-TKG
         run: |
