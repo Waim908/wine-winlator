@@ -57,16 +57,20 @@ jobs:
           cd ~/.cache
           tar -I 'xz -T$(nproc) -9' -cf /tmp/ccache.tar.xz ccache || { cat /tmp/wine-tkg-git/wine-tkg-git/prepare.log  && exit 1;}
 
-          echo "正在打包Wine-TKG..."
-          wine_path=$(ls /tmp/output/ 2>/dev/null)
-          [[ -z $wine_path ]] && exit 1
-          bash -x /tmp/wine-winlator/wcp-package.sh /tmp/output/$wine_path
-
       - name: Save ccache
         uses: actions/cache/save@v5
         with:
           path: /tmp/ccache.tar.xz
           key: tkg-ccache-amd64
+
+      - name: Package Wine-TKG
+        run: |
+          echo "正在打包Wine-TKG..."
+          wine_path=$(ls /tmp/output/ 2>/dev/null)
+          [[ -z $wine_path ]] && exit 1
+          sudo bash -x /tmp/wine-winlator/wcp-package.sh /tmp/output/$wine_path
+
+
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
