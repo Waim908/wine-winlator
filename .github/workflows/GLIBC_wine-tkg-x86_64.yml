@@ -55,7 +55,7 @@ jobs:
           echo "正在保存Ccache缓存..."
           [[ -f /tmp/ccache.tar.xz ]] && rm -rf /tmp/ccache.tar.xz
           cd ~/.cache
-          tar -I 'xz -T$(nproc) -9' -cf /tmp/ccache.tar.xz ccache || exit 1
+          tar -I 'xz -T$(nproc) -9' -cf /tmp/ccache.tar.xz ccache || { cat /tmp/wine-tkg-git/wine-tkg-git/prepare.log  && exit 1;}
 
           echo "正在打包Wine-TKG..."
           wine_path=$(ls /tmp/output/ 2>/dev/null)
