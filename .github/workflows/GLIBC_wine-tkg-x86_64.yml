@@ -68,7 +68,7 @@ jobs:
           echo "正在打包Wine-TKG..."
           wine_path=$(ls /tmp/output/ 2>/dev/null)
           [[ -z $wine_path ]] && exit 1
-          sudo bash -x /tmp/wine-winlator/wcp-package.sh /tmp/output/$wine_path
+          sudo bash -x /tmp/wine-winlator/wcp-package.sh /tmp/output/$wine_path $wineVer || exit 1
 
 
 
