@@ -37,7 +37,7 @@ jobs:
           mkdir -p ~/.cache/
           if [[ -f /tmp/ccache.tar.xz ]]; then
             echo "找到Ccache缓存，正在解压..."
-            tar -xf old-ccache.tar.xz -C ~/.cache/ || exit 1
+            tar -xf /tmp/ccache.tar.xz -C ~/.cache/ || exit 1
           else
             echo "未找到Ccache缓存，继续构建..."
           fi
