@@ -34,6 +34,9 @@ jobs:
           git clone --depth 1 https://github.com/Waim908/wine-winlator.git || exit 1
           git clone --depth 1 https://github.com/Frogging-Family/wine-tkg-git.git || exit 1
 
+          echo "安装locales"
+          apt install -y locales-all || exit 1
+
           mkdir -p ~/.cache/
           if [[ -f /tmp/ccache.tar.xz ]]; then
             echo "找到Ccache缓存，正在解压..."
