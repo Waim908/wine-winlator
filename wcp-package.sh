@@ -38,13 +38,16 @@ rm -rf /data/data/com.winlator/files/imagefs/tmp
 mkdir -p /data/data/com.winlator/files/imagefs/tmp/
 mkdir -p /data/data/com.winlator/files/imagefs/home/xuser/.wine
 if [[ -z $wineVer ]]; then
-  echo "你必须声明wineVer变量"
+  wineVer="$2"
+else
+  echo "声明wineVer变量"
   exit 1
 fi
 export WINEESYNC=1
 export WINEPREFIX=/data/data/com.winlator/files/imagefs/home/xuser/.wine
-export winePath=$1/bin
-export wineRoot=$1
+winePath=$1/bin
+wineRoot=$1
+
 if ! command -v zstd; then
   echo "zstd未安装"
   exit 1
