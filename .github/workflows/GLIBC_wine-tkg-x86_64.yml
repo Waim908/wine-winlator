@@ -48,7 +48,7 @@ jobs:
           fi
           sudo cp -r -p wine-winlator/ ubuntu2404/tmp/
           sudo cp -r -p wine-tkg-git/ ubuntu2404/tmp/
-          sudo echo "export wineVer=${wineVer}" >> ubuntu2404/root/.bashrc
+          sudo echo "export wineVer=${wineVer}" >> ubuntu2404/tmp/wineVer.conf
 
 
       - name: Compile

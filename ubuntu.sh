@@ -1,3 +1,9 @@
+if [[ -f /tmp/wineVer.conf ]]; then
+  echo "wineVer: $winVer"
+else
+  echo "没有wineVer.conf文件，退出！"
+  exit 1
+fi
 apt update
 yes | apt install build-essential locales git patch xz-utils
 echo "en_US.UTF-8 UTF-8" >> /etc/locale.gen
