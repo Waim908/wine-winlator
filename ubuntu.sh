@@ -1,4 +1,5 @@
 if [[ -f /tmp/wineVer.conf ]]; then
+  source /tmp/wineVer.conf
   echo "wineVer: $winVer"
 else
   echo "没有wineVer.conf文件，退出！"
