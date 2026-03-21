@@ -38,7 +38,12 @@ rm -rf /data/data/com.winlator/files/imagefs/tmp
 mkdir -p /data/data/com.winlator/files/imagefs/tmp/
 mkdir -p /data/data/com.winlator/files/imagefs/home/xuser/.wine
 if [[ -z $wineVer ]]; then
-  wineVer="$2"
+  if [[ ! -z $2 ]]; then
+    wineVer="$2"
+  else
+    echo "声明wineVer变量"
+    exit 1
+  fi
 else
   echo "声明wineVer变量"
   exit 1

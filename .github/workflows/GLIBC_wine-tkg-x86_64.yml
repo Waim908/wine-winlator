@@ -1,4 +1,4 @@
-name: Compile Wine-TKG for x86_64 (Glibc)
+name: Compile Wine-TKG for x86_64 (Glibc) (env BCC ubuntu)
 
 permissions:
   contents: write
@@ -27,55 +27,47 @@ jobs:
           path: /tmp/ccache.tar.xz
           key: tkg-ccache-amd64
 
-      - name: Build Wine-TKG
+      - name: Build Wine-TKG & Download BCC
         run: |
           [[ -z $wineVer ]] && { echo "你没有输入Wine版本！" && exit 1;}
           cd /tmp
           git clone --depth 1 https://github.com/Waim908/wine-winlator.git || exit 1
           git clone --depth 1 https://github.com/Frogging-Family/wine-tkg-git.git || exit 1
+          wget https://github.com/Waim908/BCC/releases/download/ubuntu2404-latest/ubuntu2404-latest.tar.xz || exit 1
+          tar xf ubuntu2404-latest.tar.xz
 
-          echo "安装locales"
-          sudo echo "en_US.UTF_8 UTF-8" >> /etc/locale.gen
-          sudo locale-gen
-          export LANG=en_US.UTF-8
-
-          mkdir -p ~/.cache/
+      - name: Setting BCC & Compile Wine-TKG
+        run: |
+          echo $(pwd)
+          sudo bash wine-winlator/mount.sh mount ubuntu2404
+          sudo mkdir -p ubuntu2404/root/.cache/
           if [[ -f /tmp/ccache.tar.xz ]]; then
             echo "找到Ccache缓存，正在解压..."
-            tar -xf /tmp/ccache.tar.xz -C ~/.cache/ || exit 1
+            sudo tar -xf /tmp/ccache.tar.xz -C ubuntu2404/root/.cache/ || exit 1
           else
-            echo "未找到Ccache缓存，继续构建..."
+            echo "未找到Ccache缓存，继续..."
           fi
+          sudo cp -r -p wine-winlator/ ubuntu2404/tmp/
+          sudo cp -r -p wine-tkg-git/ ubuntu2404/tmp/
+          sudo echo "export wineVer=${wineVer}" >> ubuntu2404/root/.bashrc
 
-          export ENABLE_PROTON_MF=1
-          bash -x /tmp/wine-winlator/set-tkg-cfg.sh wine-$wineVer /tmp/wine-tkg-git/wine-tkg-git/
 
-          bash +x /tmp/wine-winlator/add_patch.sh wine-glibc $wineVer /tmp/wine-tkg-git/wine-tkg-git/wine-tkg-userpatches/
-
-          echo "正在构建Wine-TKG..."
-          cd /tmp/wine-tkg-git/wine-tkg-git/
-          echo '_ci_build="true"' >> customization.cfg
-          yes | ./non-makepkg-build.sh || exit 1
-
-          echo "正在保存Ccache缓存..."
-          [[ -f /tmp/ccache.tar.xz ]] && rm -rf /tmp/ccache.tar.xz
-          cd ~/.cache
-          tar -I 'xz -T$(nproc) -9' -cf /tmp/ccache.tar.xz ccache || { cat /tmp/wine-tkg-git/wine-tkg-git/prepare.log  && exit 1;}
+      - name: Compile
+        run: |
+          sudo chroot ubuntu2404 bash -x /tmp/wine-winlator/ubuntu.sh || exit 1
+          sudo bash wine-winlator/mount.sh umount ubuntu2404
+          sudo chmod 644 ubuntu2404/tmp/output-wcp/*.wcp
+          sudo mv ubuntu2404/tmp/cache.tar.xz /tmp/
+          sudo chmod 644 /tmp/cache.tar.xz
+          mkdir -p /tmp/output-wcp/
+          sudo mv ubuntu2404/tmp/output-wcp/*.wcp /tmp/output-wcp/
+          sudo chmod 644 /tmp/output-wcp/*.wcp
 
       - name: Save ccache
         uses: actions/cache/save@v5
         with:
           path: /tmp/ccache.tar.xz
           key: tkg-ccache-amd64
-
-      - name: Package Wine-TKG
-        run: |
-          echo "正在打包Wine-TKG..."
-          wine_path=$(ls /tmp/output/ 2>/dev/null)
-          [[ -z $wine_path ]] && exit 1
-          sudo bash -x /tmp/wine-winlator/wcp-package.sh /tmp/output/$wine_path $wineVer || exit 1
-
-
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
