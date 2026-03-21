@@ -35,7 +35,9 @@ jobs:
           git clone --depth 1 https://github.com/Frogging-Family/wine-tkg-git.git || exit 1
 
           echo "安装locales"
-          sudo apt install -y locales-all || exit 1
+          sudo echo en_US.UTF_8 UTF-8 >> /etc/locale.gen
+          sudo locale-gen
+          export LANG=en_US.UTF-8
 
           mkdir -p ~/.cache/
           if [[ -f /tmp/ccache.tar.xz ]]; then
