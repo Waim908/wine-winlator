@@ -38,7 +38,7 @@ jobs:
       - name: Setting BCC & Compile Wine-TKG
         run: |
           echo $(pwd)
-          sudo bash wine-winlator/mount.sh mount ubuntu2404
+          sudo bash wine-winlator/mount.sh mount ubuntu2404 || exit 1
           sudo mkdir -p ubuntu2404/root/.cache/
           if [[ -f /tmp/ccache.tar.xz ]]; then
             echo "找到Ccache缓存，正在解压..."
@@ -54,12 +54,12 @@ jobs:
       - name: Compile
         run: |
           sudo chroot ubuntu2404 bash -x /tmp/wine-winlator/ubuntu.sh || exit 1
-          sudo bash wine-winlator/mount.sh umount ubuntu2404
+
+      - name: Collect Artifacts
+        run: |
+          sudo bash wine-winlator/mount.sh umount ubuntu2404 || exit 1
           sudo chmod 644 ubuntu2404/tmp/output-wcp/*.wcp
-          sudo mv ubuntu2404/tmp/cache.tar.xz /tmp/
           sudo chmod 644 /tmp/cache.tar.xz
-          mkdir -p /tmp/output-wcp/
-          sudo mv ubuntu2404/tmp/output-wcp/*.wcp /tmp/output-wcp/
           sudo chmod 644 /tmp/output-wcp/*.wcp
 
       - name: Save ccache
