@@ -44,9 +44,6 @@ if [[ -z $wineVer ]]; then
     echo "声明wineVer变量"
     exit 1
   fi
-else
-  echo "声明wineVer变量"
-  exit 1
 fi
 export WINEESYNC=1
 export WINEPREFIX=/data/data/com.winlator/files/imagefs/home/xuser/.wine
