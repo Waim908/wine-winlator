@@ -8,7 +8,7 @@ fi
 apt clean
 chmod 777 /tmp
 apt update
-yes | apt install build-essential locales git patch xz-utils sudo ccache || exit 1
+yes | apt install build-essential locales git patch xz-utils sudo ccache zstd || exit 1
 echo "en_US.UTF-8 UTF-8" >> /etc/locale.gen
 locale-gen
 export LC_ALL=en_US.UTF-8
