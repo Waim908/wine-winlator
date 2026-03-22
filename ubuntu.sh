@@ -8,10 +8,10 @@ fi
 apt clean
 chmod 777 /tmp
 apt update
-yes | apt install build-essential locales git patch xz-utils
+yes | apt install build-essential locales git patch xz-utils sudo ccache || exit 1
 echo "en_US.UTF-8 UTF-8" >> /etc/locale.gen
 locale-gen
-export LANG=en_US.UTF-8
+export LC_ALL=en_US.UTF-8
 
 export ENABLE_PROTON_MF=1
 bash -x /tmp/wine-winlator/set-tkg-cfg.sh wine-$wineVer /tmp/wine-tkg-git/wine-tkg-git/
