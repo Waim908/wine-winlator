@@ -118,8 +118,8 @@ cd /tmp/output-wcp/tmp/lib
 cd /tmp/output-wcp/tmp/
 create_json
 if [[ -z $customWcpName ]]; then
-  tar -I 'zstd -T$(nproc) -9' -cvf /tmp/output-wcp/wine-$wineVer.wcp .
+  tar -I 'zstd -T$(nproc) --ultra -19' -cvf /tmp/output-wcp/wine-$wineVer.wcp .
 else
-  tar -I 'zstd -T$(nproc) -9' -cvf /tmp/output-wcp/$customWcpName.wcp bin/ .
+  tar -I 'zstd -T$(nproc) --ultra -19' -cvf /tmp/output-wcp/$customWcpName.wcp bin/ .
 fi
 echo "Output=> /tmp/output-wcp/wine-$wineVer.wcp"
