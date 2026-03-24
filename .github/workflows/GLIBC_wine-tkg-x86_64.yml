@@ -11,6 +11,14 @@ on:
         description: "Wine-TKG Version"
         required: false
         default: "10.15"
+      customTag:
+        description: "Custom Releases Tag"
+        required: false
+        default: "r"
+      customDescription:
+        description: "Custom Releases Description"
+        required: false
+        default: ""
 
 env:
   wineVer: ${{ github.event.inputs.version }}
@@ -73,14 +81,17 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ github.event.inputs.version }}-tkg
-          name: Wine ${{ github.event.inputs.version }} TkG Staging GE for Winlator Glibc
+          tag_name: ${{ github.event.inputs.version }}-${{ github.event.inputs.customTag }}-tkg
+          name: Wine ${{ github.event.inputs.version }} TkG Staging GE for Winlator Glibc (${{ github.event.inputs.customTag }})
           body: |
             自动编译版本。
             移植Proton MF
             启用Esync
             启用Fsync
             修改请查看此仓库源码。
+            Remake: ${{ github.event.inputs.customTag }}
+            Update Description: ${{ github.event.inputs.customDescription }}
+
           files: /tmp/output-wcp/*.wcp
           draft: false
           prerelease: false

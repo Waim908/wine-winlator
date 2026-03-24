@@ -8,7 +8,7 @@ sed2() {
     sed -i "s|^${key}=\"[^\"]*\"|${key}=\"${value}\"|" "$file" || exit 1
   else
     echo "File not found: $file"
-    return 1
+    exit 1
   fi
 }
 
@@ -60,11 +60,11 @@ sed2 _nomakepkg_prefix_path /tmp/output
 
 file_path2="$file_path/wine-tkg-profiles/advanced-customization.cfg"
 sed2 _GCC_FLAGS "-O3 -pipe -msse3 -mfpmath=sse -ftree-vectorize -Wno-error=implicit-function-declaration -Wno-error=incompatible-pointer-types"
-sed2 _LD_FLAGS "-Wl,-O3,--sort-common,--as-needed"
+sed2 _LD_FLAGS "-Wl,-O3,--sort-common,--as-needed,-s"
 sed2 _CROSS_FLAGS "-O3 -pipe -msse3 -mfpmath=sse -ftree-vectorize -Wno-error=implicit-function-declaration -Wno-error=incompatible-pointer-types"
-sed2 _CROSS_LD_FLAGS "-Wl,-O3,--sort-common,--as-needed"
+sed2 _CROSS_LD_FLAGS "-Wl,-O3,--sort-common,--as-needed,-s"
 sed2 _NOLIB32 wow64
 sed2 _configure_userargs64 "--disable-win16 --disable-tests --without-capi --without-coreaudio --without-cups --without-gphoto --without-osmesa --without-oss --without-pcap --without-pcsclite --without-sane --without-udev --without-unwind --without-usb --without-v4l2 --without-wayland --without-xinerama --without-piper"
 sed2 _user_patches_no_confirm true
 
-echo "TkG Configuration file setting completed！"
+echo "TkG Configuration file setting completed!"
