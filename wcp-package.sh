@@ -1,12 +1,13 @@
 #!/bin/bash
+[[ isArm64ec == 1 ]] && isArm64ec="-arm64ec" || isArm64ec=""
 create_json () {
 if [[ -z $customDescription ]]; then
 cat > '/tmp/output-wcp/tmp/profile.json' << EOF
 {
   "type": "Wine",
-  "versionName": "${wineVer}-custom",
+  "versionName": "${wineVer}-custom${isArm64ec}",
   "versionCode": 1,
-  "description": "${wineVer}-tkg-stg-ge. Built form [https://github.com/Waim908/wine-winlator]",
+  "description": "${wineVer}-tkg-stg-ge${isArm64ec}. Built form [https://github.com/Waim908/wine-winlator]",
   "files": [],
   "wine": {
           "binPath": "bin",
@@ -69,20 +70,12 @@ else
   if [[ $useBox64 == 1 ]]; then
       echo "使用box64执行"
       box64 $winePath/wineboot || exit 1
+#      box64 $winePath/wine cmd /c "reg import " /f"
   else
       $winePath/wineboot || exit 1
   fi
   sleep 3
-  exit_status=$?
-  if [[ $exit_status -eq 0 ]]; then
-      echo "wineboot 执行成功"
-  else
-      echo "wineboot 执行失败，退出码: $exit_status"
-      # 这里可以添加失败处理逻辑
-      exit 1
-  fi
 fi
-sleep 2
 if [[ $useBox64 == 1 ]]; then
   wine_version=$(box64 $winePath/wine --version)
 else
@@ -118,8 +111,8 @@ cd /tmp/output-wcp/tmp/lib
 cd /tmp/output-wcp/tmp/
 create_json
 if [[ -z $customWcpName ]]; then
-  tar -I 'zstd -T$(nproc) --ultra -19' -cvf /tmp/output-wcp/wine-$wineVer.wcp .
+  tar -I 'zstd -T$(nproc) --ultra -19' -cvf /tmp/output-wcp/wine-$wineVer${isArm64ec}.wcp .
 else
   tar -I 'zstd -T$(nproc) --ultra -19' -cvf /tmp/output-wcp/$customWcpName.wcp bin/ .
 fi
-echo "Output=> /tmp/output-wcp/wine-$wineVer.wcp"
+echo "Output=> /tmp/output-wcp/wine-$wineVer${isArm64ec}.wcp"

@@ -20,6 +20,8 @@ Glibc 7.1.x
 
 - *wine-glibc/* : 实验性通过LLM完善了补丁
 
+- *wine-glibc-arm64ec/* : Arm64ec补丁
+
 # proton wine
 
 ## 可能无法百分百保证游戏按键控制的兼容性
@@ -37,6 +39,8 @@ Glibc 7.1.x
  - [brunodev85/wine-9.2-custom](https://github.com/brunodev85/wine-9.2-custom)
 
  - [longjunyu2/wine-custom](https://github.com/longjunyu2/wine-custom)
+
+ - [AndreRH/wine](https://github.com/AndreRH/wine)
 
 ### termux 相关补丁
 

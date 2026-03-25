@@ -67,4 +67,13 @@ sed2 _NOLIB32 wow64
 sed2 _configure_userargs64 "--disable-win16 --disable-tests --without-capi --without-coreaudio --without-cups --without-gphoto --without-osmesa --without-oss --without-pcap --without-pcsclite --without-sane --without-udev --without-unwind --without-usb --without-v4l2 --without-wayland --without-xinerama --without-piper"
 sed2 _user_patches_no_confirm true
 
+[[ $NO_COMPILE == 1 ]] && NO_COMPILE=true
+if [[ $NO_COMPILE == true ]]; then
+  sed2 _NOCOMPILE "true"
+  echo "NO_COMPILE is set to true, will not compile Wine-TKG 🔴"
+else
+  sed2 _NOCOMPILE "false"
+  echo "NO_COMPILE is set to false, will compile Wine-TKG 🟢"
+fi
+
 echo "TkG Configuration file setting completed!"

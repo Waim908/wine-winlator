@@ -1,4 +1,4 @@
-name: Compile Wine-TKG for x86_64 (Glibc) (env BCC ubuntu)
+name: Compile Wine-TKG for x86_64 (Glibc) (env BCC Archlinux)
 
 permissions:
   contents: write
@@ -40,7 +40,7 @@ jobs:
           [[ -z $wineVer ]] && { echo "你没有输入Wine版本！" && exit 1;}
           git clone --depth 1 https://github.com/Waim908/wine-winlator.git || exit 1
           git clone --depth 1 https://github.com/Frogging-Family/wine-tkg-git.git || exit 1
-          wget https://github.com/Waim908/BCC/releases/download/ubuntu2404-latest/ubuntu2404-latest.tar.xz || exit 1
+          wget  || exit 1
           tar xf ubuntu2404-latest.tar.xz
 
       - name: Setting BCC & Compile Wine-TKG
