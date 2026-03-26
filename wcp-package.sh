@@ -110,7 +110,13 @@ cp -r -p $wineRoot/bin /tmp/output-wcp/tmp/
 cp -r -p $wineRoot/lib /tmp/output-wcp/tmp/
 cp -r -p $wineRoot/share /tmp/output-wcp/tmp/
 cd /tmp/output-wcp/tmp/
-[[ $doNotCleanStaticLibrary == 1 ]] || { echo "Deleting static libraries..." && find . -type f -name "*.a" -delete || exit 1;}
+[[ $doNotCleanStaticLibrary == 1 ]] || {
+  echo "Deleting static libraries..."
+  find . -type f -name "*.a" -print0 | while IFS= read -r -d '' file; do
+      echo "Deleting: $file"
+      rm -f "$file" || { echo "Error: failed to delete $file" >&2; exit 1; }
+  done
+}
 create_json
 if [[ -z $customWcpName ]]; then
   tar -I 'zstd -T$(nproc) --ultra -22' -cvf /tmp/output-wcp/wine-$wineVer${isArm64ec}.wcp .
