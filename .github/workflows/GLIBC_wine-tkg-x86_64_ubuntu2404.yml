@@ -40,8 +40,9 @@ jobs:
           [[ -z $wineVer ]] && { echo "你没有输入Wine版本！" && exit 1;}
           git clone --depth 1 https://github.com/Waim908/wine-winlator.git || exit 1
           git clone --depth 1 https://github.com/Frogging-Family/wine-tkg-git.git || exit 1
-          aria2c -s$(nproc) -x$(nproc) https://github.com/Waim908/BCC/releases/download/wine-bcc-latest/wine-bcc.tar.xz || exit 1
-          tar xf wine-bcc.tar.xz
+          # aria2c -s$(nproc) -x$(nproc) https://github.com/Waim908/BCC/releases/download/wine-bcc-latest/wine-bcc.tar.xz || exit 1
+          aria2c -s$(nproc) -x$(nproc) https://github.com/Waim908/BCC/releases/download/wine-amd64-ubuntu2404-bcc-latest/wine-ubuntu2404-bcc-amd64.tar.xz || exit 1
+          tar xf wine-ubuntu2404-bcc-amd64.tar.xz && rm -rf wine-ubuntu2404-bcc-amd64.tar.xz
 
       - name: Setting BCC & Compile Wine-TKG
         run: |
