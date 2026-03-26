@@ -33,9 +33,6 @@ cat > '/tmp/output-wcp/tmp/profile.json' << EOF
 EOF
 fi
 }
-claen_static_library () {
-  find . -type f -name "*.a" -exec rm -f {} \;
-}
 rm -rf /data/data/com.winlator/files/imagefs/home/xuser/.wine
 rm -rf /tmp/output-wcp
 rm -rf /data/data/com.winlator/files/imagefs/tmp
@@ -108,17 +105,16 @@ fi
 cd $WINEPREFIX/..
 rm -rf .wine/dosdevice/z:
 mkdir -p /tmp/output-wcp/tmp
-tar -I 'xz -T$(nproc) -9' -cvf /tmp/output-wcp/tmp/prefixPack.txz .wine
+tar -I 'xz -T$(nproc) -9e' -cvf /tmp/output-wcp/tmp/prefixPack.txz .wine
 cp -r -p $wineRoot/bin /tmp/output-wcp/tmp/
 cp -r -p $wineRoot/lib /tmp/output-wcp/tmp/
 cp -r -p $wineRoot/share /tmp/output-wcp/tmp/
-cd /tmp/output-wcp/tmp/lib
-[[ $doNotCleanStaticLibrary == 1 ]] || clean_static_library
 cd /tmp/output-wcp/tmp/
+[[ $doNotCleanStaticLibrary == 1 ]] || { echo "Deleting static libraries..." && find . -type f -name "*.a" -delete || exit 1;}
 create_json
 if [[ -z $customWcpName ]]; then
-  tar -I 'zstd -T$(nproc) --ultra -19' -cvf /tmp/output-wcp/wine-$wineVer${isArm64ec}.wcp .
+  tar -I 'zstd -T$(nproc) --ultra -22' -cvf /tmp/output-wcp/wine-$wineVer${isArm64ec}.wcp .
 else
-  tar -I 'zstd -T$(nproc) --ultra -19' -cvf /tmp/output-wcp/$customWcpName.wcp bin/ .
+  tar -I 'zstd -T$(nproc) --ultra -22' -cvf /tmp/output-wcp/$customWcpName.wcp bin/ .
 fi
 echo "Output=> /tmp/output-wcp/wine-$wineVer${isArm64ec}.wcp"
