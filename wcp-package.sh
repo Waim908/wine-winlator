@@ -70,11 +70,17 @@ else
   if [[ $useBox64 == 1 ]]; then
       echo "使用box64执行"
       box64 $winePath/wineboot || exit 1
-#      box64 $winePath/wine cmd /c "reg import " /f"
+      sleep 3
+      echo "Delete Registry Key: HKEY_CURRENT_USER\Control Panel\Desktop\WindowMetrics"
+      box64 $winePath/wine reg delete "HKEY_CURRENT_USER\Control Panel\Desktop\WindowMetrics" /f || exit 1
+      sleep 3
   else
       $winePath/wineboot || exit 1
+      sleep 3
+      echo "Delete Registry Key: HKEY_CURRENT_USER\Control Panel\Desktop\WindowMetrics"
+      $winePath/wine reg delete "HKEY_CURRENT_USER\Control Panel\Desktop\WindowMetrics" /f || exit 1
+      sleep 3
   fi
-  sleep 3
 fi
 if [[ $useBox64 == 1 ]]; then
   wine_version=$(box64 $winePath/wine --version)
