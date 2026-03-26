@@ -38,8 +38,8 @@ jobs:
       - name: Build Wine-TKG & Download BCC
         run: |
           [[ -z $wineVer ]] && { echo "你没有输入Wine版本！" && exit 1;}
-          git clone --depth 1 https://github.com/Waim908/wine-winlator.git || exit 1
-          git clone --depth 1 https://github.com/Frogging-Family/wine-tkg-git.git || exit 1
+          git clone --depth=1 https://github.com/Waim908/wine-winlator.git || exit 1
+          git clone --depth=1 https://github.com/Frogging-Family/wine-tkg-git.git || exit 1
           # aria2c -s$(nproc) -x$(nproc) https://github.com/Waim908/BCC/releases/download/wine-bcc-latest/wine-bcc.tar.xz || exit 1
           aria2c -s$(nproc) -x$(nproc) https://github.com/Waim908/BCC/releases/download/wine-amd64-ubuntu2404-bcc-latest/wine-ubuntu2404-bcc-amd64.tar.xz || exit 1
           tar xf wine-ubuntu2404-bcc-amd64.tar.xz && rm -rf wine-ubuntu2404-bcc-amd64.tar.xz
@@ -62,7 +62,7 @@ jobs:
 
       - name: Compile
         run: |
-          sudo chroot ubuntu2404 bash -x /tmp/wine-winlator/ubuntu2404.sh || exit 1
+          sudo chroot ubuntu2404 bash -x /tmp/wine-winlator/ubuntu.sh || exit 1
 
       - name: Collect Artifacts
         run: |
@@ -75,7 +75,7 @@ jobs:
         uses: actions/cache/save@v5
         with:
           path: /tmp/ccache.tar.xz
-          key: tkg-ccache-amd64-ubuntu2404
+          key: tkg-ccache-amd64
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
