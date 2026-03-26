@@ -33,7 +33,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /tmp/ccache.tar.xz
-          key: tkg-ccache-amd64-archlinux
+          key: tkg-ccache-amd64
 
       - name: Build Wine-TKG & Download BCC
         run: |
@@ -47,35 +47,35 @@ jobs:
       - name: Setting BCC & Compile Wine-TKG
         run: |
           echo $(pwd)
-          sudo bash wine-winlator/mount.sh mount archlinux || exit 1
-          sudo mkdir -p archlinux/root/.cache/
+          sudo bash wine-winlator/mount.sh mount ubuntu2404 || exit 1
+          sudo mkdir -p ubuntu2404/root/.cache/
           if [[ -f /tmp/ccache.tar.xz ]]; then
             echo "找到Ccache缓存，正在解压..."
-            sudo tar -xf /tmp/ccache.tar.xz -C archlinux/root/.cache/ || exit 1
+            sudo tar -xf /tmp/ccache.tar.xz -C ubuntu2404/root/.cache/ || exit 1
           else
             echo "未找到Ccache缓存，继续..."
           fi
-          sudo cp -r -p wine-winlator/ archlinux/tmp/
-          sudo cp -r -p wine-tkg-git/ archlinux/tmp/
-          sudo echo "export wineVer=${wineVer}" >> archlinux/tmp/wineVer.conf
+          sudo cp -r -p wine-winlator/ ubuntu2404/tmp/
+          sudo cp -r -p wine-tkg-git/ ubuntu2404/tmp/
+          sudo echo "export wineVer=${wineVer}" >> ubuntu2404/tmp/wineVer.conf
 
 
       - name: Compile
         run: |
-          sudo chroot archlinux bash -x /tmp/wine-winlator/archlinux.sh || exit 1
+          sudo chroot ubuntu2404 bash -x /tmp/wine-winlator/ubuntu2404.sh || exit 1
 
       - name: Collect Artifacts
         run: |
-          sudo bash wine-winlator/mount.sh umount archlinux || exit 1
-          sudo chmod 644 archlinux/tmp/output-wcp/*.wcp
+          sudo bash wine-winlator/mount.sh umount ubuntu2404 || exit 1
+          sudo chmod 644 ubuntu2404/tmp/output-wcp/*.wcp
           sudo chmod 644 /tmp/ccache.tar.xz
-          sudo chmod 644 archlinux/tmp/output-wcp/*.wcp
+          sudo chmod 644 ubuntu2404/tmp/output-wcp/*.wcp
 
       - name: Save ccache
         uses: actions/cache/save@v5
         with:
           path: /tmp/ccache.tar.xz
-          key: tkg-ccache-amd64-archlinux
+          key: tkg-ccache-amd64-ubuntu2404
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
