@@ -43,7 +43,6 @@ jobs:
         run: |
           git clone --depth=1 https://github.com/Waim908/wine-winlator.git || exit 1
 
-          [[ -z $wineVer ]] && { echo "你没有输入Wine版本！" && exit 1;}
           wineSourceURL=${{ github.event.inputs.sourceURL }}
           [[ -z $wineSourceURL ]] && wineSourceURL="https://github.com/wine-mirror/wine.git"
 
@@ -54,7 +53,7 @@ jobs:
           fi
 
           cd wine-src
-          wineVer=$(echo ${{ github.event.inputs.version }} | sed 's/wine-//')
+          wineVer=$(echo ${{ github.event.inputs.targetBranch }} | sed 's/wine-//')
           echo "wineVer=$wineVer" >> $GITHUB_OUTPUT
           echo "::set-output name=wineVer::$wineVer"
           cd ..
