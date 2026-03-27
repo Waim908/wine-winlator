@@ -7,10 +7,6 @@ permissions:
 on:
   workflow_dispatch:
     inputs:
-      version:
-        description: "Wine-TKG Version"
-        required: false
-        default: "10.15"
       sourceURL:
         description: "Wine Source URL"
         required: false
@@ -27,9 +23,6 @@ on:
         description: "Custom Releases Description"
         required: false
         default: ""
-
-env:
-  wineVer: ${{ github.event.inputs.version }}
 
 jobs:
   build_wine:
@@ -90,7 +83,7 @@ jobs:
           sudo mv ubuntu2404/tmp/build_arm64ec_wine.tar.xz /tmp/
 
       - name: Upload Artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: build_arm64ec_wine
           path: /tmp/build_arm64ec_wine.tar.xz
