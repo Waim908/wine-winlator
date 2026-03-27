@@ -11,6 +11,10 @@ on:
         description: "Wine Source URL"
         required: false
         default: "https://github.com/Waim908/wine-tkg-git-src.git"
+      llvmURL:
+        description: "llvm mingw pack"
+        required: false
+        default: "https://github.com/mstorsjo/llvm-mingw/releases/download/20260324/llvm-mingw-20260324-ucrt-ubuntu-22.04-x86_64.tar.xz"
       targetBranch:
         description: "Wine Target Branch"
         required: false
@@ -41,6 +45,10 @@ jobs:
       - name: Pull Wine-TKG Source & Download BCC
         id: download
         run: |
+          aria2c -s$(nproc) -x$(nproc) https://github.com/mstorsjo/llvm-mingw/releases/download/20260324/llvm-mingw-20260324-ucrt-ubuntu-22.04-x86_64.tar.xz || exit 1
+          mkdir llvm_mingw
+          tar --strip-components=1 -xvf *.tar.xz -C llvm_mingw/ && rm -rf *.tar.xz
+
           git clone --depth=1 https://github.com/Waim908/wine-winlator.git || exit 1
 
           wineSourceURL=${{ github.event.inputs.sourceURL }}
@@ -74,10 +82,11 @@ jobs:
           fi
           sudo cp -r -p wine-winlator/ ubuntu2404/tmp/
           sudo mv wine-src/ ubuntu2404/tmp/
+          sudo mv llvm_mingw/ ubuntu2404/tmp/
 
       - name: Compile
         run: |
-          sudo chroot ubuntu2404 bash -x /tmp/wine-winlator/ubuntu_arm64ec.sh || exit 1
+          sudo chroot ubuntu2404 bash -x /tmp/wine-winlator/ubuntu_arm64ec.sh ${{ steps.download.outputs.wineVer  }} || exit 1
           sudo chmod 644 ubuntu2404/tmp/build_arm64ec_wine.tar.xz
           sudo mv ubuntu2404/tmp/build_arm64ec_wine.tar.xz /tmp/
 
