@@ -110,7 +110,7 @@ jobs:
           tar xvf /tmp/build_arm64ec_wine.tar.xz -C /tmp/ || exit 1
           cd /tmp
           wget https://raw.githubusercontent.com/Waim908/wine-winlator/main/wcp-package.sh || exit 1
-          sudo isArm64ec=1 bash -x wcp-package.sh /tmp/wine_build ${{ github.event.inputs.version }} $wineVer || exit 1
+          sudo isArm64ec=1 bash -x wcp-package.sh /tmp/wine_build ${{ needs.build_wine.outputs.wineVer }} || exit 1
           sudo chmod 644 /tmp/output-wcp/*.wcp
 
       - name: Create GitHub Release
