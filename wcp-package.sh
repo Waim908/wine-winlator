@@ -64,6 +64,7 @@ if [[ -z $winePath ]]; then
   exit 1
 else
   export USER=xuser
+  unset DISPLAY
   if [[ $useBox64 == 1 ]]; then
       echo "使用box64执行"
       box64 $winePath/wineboot || exit 1

@@ -1,0 +1,143 @@
+name: Compile Wine-TKG for Arm64ec (Glibc) (env BCC ubuntu)
+
+permissions:
+  contents: write
+  packages: write
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Wine-TKG Version"
+        required: false
+        default: "10.15"
+      sourceURL:
+        description: "Wine Source URL"
+        required: false
+        default: "https://github.com/Waim908/wine-tkg-git-src.git"
+      targetBranch:
+        description: "Wine Target Branch"
+        required: false
+        default: "wine-10.15"
+      customTag:
+        description: "Custom Releases Tag"
+        required: false
+        default: "r"
+      customDescription:
+        description: "Custom Releases Description"
+        required: false
+        default: ""
+
+env:
+  wineVer: ${{ github.event.inputs.version }}
+
+jobs:
+  build_wine:
+    runs-on: ubuntu-24.04
+    name: Build Wine-TKG
+    outputs:
+      wineVer: ${{ steps.download.outputs.wineVer }}
+    steps:
+      - name: Download Cache
+        id: cache-tag
+        uses: actions/cache@v4
+        with:
+          path: /tmp/ccache.tar.xz
+          key: tkg-ccache-arm64ec
+
+      - name: Pull Wine-TKG Source & Download BCC
+        id: download
+        run: |
+          git clone --depth=1 https://github.com/Waim908/wine-winlator.git || exit 1
+
+          [[ -z $wineVer ]] && { echo "你没有输入Wine版本！" && exit 1;}
+          wineSourceURL=${{ github.event.inputs.sourceURL }}
+          [[ -z $wineSourceURL ]] && wineSourceURL="https://github.com/wine-mirror/wine.git"
+
+          if [[ ! -z ${{ github.event.inputs.targetBranch }} ]]; then
+            git clone --depth=1  -b ${{ github.event.inputs.targetBranch }} $wineSourceURL wine-src || exit 1
+          else
+            git clone --depth=1 $wineSourceURL wine-src || exit 1
+          fi
+
+          cd wine-src
+          wineVer=$(echo ${{ github.event.inputs.version }} | sed 's/wine-//')
+          echo "wineVer=$wineVer" >> $GITHUB_OUTPUT
+          echo "::set-output name=wineVer::$wineVer"
+          cd ..
+          # aria2c -s$(nproc) -x$(nproc) https://github.com/Waim908/BCC/releases/download/wine-bcc-latest/wine-bcc.tar.xz || exit 1
+          aria2c -s$(nproc) -x$(nproc) https://github.com/Waim908/BCC/releases/download/wine-arm64ec-ubuntu2404-bcc-latest/wine-ubuntu2404-bcc-arm64ec.tar.xz || exit 1
+          tar xf *.tar.xz && rm -rf *.tar.xz
+
+      - name: Setting BCC & Compile Wine-TKG
+        run: |
+          echo $(pwd)
+          sudo bash wine-winlator/mount.sh mount ubuntu2404 || exit 1
+          sudo mkdir -p ubuntu2404/root/.cache/
+          if [[ -f /tmp/ccache.tar.xz ]]; then
+            echo "找到Ccache缓存，正在解压..."
+            sudo tar -xf /tmp/ccache.tar.xz -C ubuntu2404/root/.cache/ || exit 1
+          else
+            echo "未找到Ccache缓存，继续..."
+          fi
+          sudo cp -r -p wine-winlator/ ubuntu2404/tmp/
+          sudo mv wine-src/ ubuntu2404/tmp/
+
+      - name: Compile
+        run: |
+          sudo chroot ubuntu2404 bash -x /tmp/wine-winlator/ubuntu_arm64ec.sh || exit 1
+          sudo chmod 644 ubuntu2404/tmp/build_arm64ec_wine.tar.xz
+          sudo mv ubuntu2404/tmp/build_arm64ec_wine.tar.xz /tmp/
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: build_arm64ec_wine
+          path: /tmp/build_arm64ec_wine.tar.xz
+
+      - name: Save ccache
+        uses: actions/cache/save@v5
+        with:
+          path: /tmp/ccache.tar.xz
+          key: tkg-ccache-arm64ec
+
+  create_wcp:
+    runs-on: ubuntu-24.04-arm
+    name: Create WCP Package
+    needs: build_wine
+    steps:
+      - name: Download Artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: build_arm64ec_wine
+          path: /tmp/
+
+      - name: Create WCP Package
+        run: |
+          [[ -f /tmp/build_arm64ec_wine.tar.xz ]] || { echo "未找到编译产物！" && exit 1; }
+          tar xvf /tmp/build_arm64ec_wine.tar.xz -C /tmp/ || exit 1
+          cd /tmp
+          wget https://raw.githubusercontent.com/Waim908/wine-winlator/main/wcp-package.sh || exit 1
+          sudo isArm64ec=1 bash -x wcp-package.sh /tmp/wine_build ${{ github.event.inputs.version }} $wineVer || exit 1
+          sudo chmod 644 /tmp/output-wcp/*.wcp
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ needs.build_wine.outputs.wineVer }}-${{ github.event.inputs.customTag }}-tkg-arm64ec
+          name: Wine ${{ needs.build_wine.outputs.wineVer }} Arm64ec TkG Staging GE for Winlator Glibc (${{ github.event.inputs.customTag }})
+          body: |
+            自动编译版本。
+            移植Proton MF
+            启用Esync
+            启用Fsync
+            修改请查看此仓库源码。
+            此版本请勿使用在cmod与Winlator Bionic分支，否则可能失败！
+            Remake: ${{ github.event.inputs.customTag }}
+            Update Description: ${{ github.event.inputs.customDescription }}
+
+          files: /tmp/output-wcp/*.wcp
+          draft: false
+          prerelease: false
