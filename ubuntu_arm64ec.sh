@@ -1,10 +1,11 @@
+apt install -y patch xz-utils ccache || exit 1
 export LC_ALL=en_US.UTF-8
 apt clean
 chmod 777 /tmp
 apt update
-yes | apt install patch xz-utils ccache || exit 1
+
 cd /tmp/wine-src
-bash /tmp/wine-winlator/apply_patch.sh wine-glibc-arm64ec $wineVer "" exit 1
+bash /tmp/wine-winlator/apply_patch.sh wine-glibc-arm64ec $1 /tmp/wine-src exit 1
 source /tmp/wine-winlator/compile.conf amd64
 mkdir amd64
 ../configure --enable-win64 || exit 1
