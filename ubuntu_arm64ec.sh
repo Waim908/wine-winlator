@@ -8,6 +8,7 @@ cd /tmp/wine-src
 bash /tmp/wine-winlator/apply_patch.sh wine-glibc-arm64ec $1 /tmp/wine-src exit 1
 source /tmp/wine-winlator/compile.conf amd64
 mkdir amd64
+cd amd64
 ../configure --enable-win64 || exit 1
 make __tooldeps__ -j $(nproc) || exit 1
 make -C nls -j $(nproc) || exit 1
