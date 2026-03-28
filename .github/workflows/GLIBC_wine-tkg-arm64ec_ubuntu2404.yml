@@ -91,7 +91,7 @@ jobs:
       - name: Compile
         run: |
           sudo chroot ubuntu2404 bash -x /tmp/wine-winlator/ubuntu_arm64ec.sh ${{ steps.download.outputs.wineVer  }} ${{ github.event.inputs.makeWineVK }} || exit 1
-          sudo chmod 644 ubuntu2404/tmp/build_arm64ec_wine.tar.xz
+          sudo chmod 644 ubuntu2404/tmp/*.tar.xz
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4

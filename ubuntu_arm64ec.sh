@@ -32,5 +32,8 @@ source /tmp/wine-winlator/compile.conf arm64
 
 make -j $(nproc) || exit 1
 make install || exit 1
+echo "打包ccache"
+cd ~/.cache
+tar -I  "xz -T$(nproc)" -cvf /tmp/ccache.tar.xz ccache/
 cd /tmp
-tar -I "xz -T$(nproc)" -cvf /tmp/build_arm64ec_wine.tar.xz /tmp/wine_build || exit 1
+tar -I "xz -T$(nproc)" -cvf /tmp/build_arm64ec_wine.tar.xz wine_build || exit 1
