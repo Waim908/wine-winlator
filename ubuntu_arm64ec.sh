@@ -11,7 +11,7 @@ bash /tmp/wine-winlator/apply_patch.sh wine-glibc-arm64ec $1 /tmp/wine-src exit 
 source /tmp/wine-winlator/compile.conf amd64
 mkdir amd64
 cd amd64
-../configure --enable-win64 || exit 1
+../configure --enable-win64 || { cat config.log && exit 1;}
 make __tooldeps__ -j $(nproc) || exit 1
 make -C nls -j $(nproc) || exit 1
 cd ..
@@ -26,7 +26,7 @@ source /tmp/wine-winlator/compile.conf arm64
   build_alias=x86_64-linux-gnu \
   --with-wine-tools=amd64 \
   CC=aarch64-linux-gnu-gcc \
-  --disable-win16 --disable-tests --without-capi --without-coreaudio --without-cups --without-gphoto --without-osmesa --without-oss --without-pcap --without-pcsclite --without-sane --without-udev --without-unwind --without-usb --without-v4l2 --without-wayland --without-xinerama --without-piper || exit 1
+  --disable-win16 --disable-tests --without-capi --without-coreaudio --without-cups --without-gphoto --without-osmesa --without-oss --without-pcap --without-pcsclite --without-sane --without-udev --without-unwind --without-usb --without-v4l2 --without-wayland --without-xinerama --without-piper || { cat config.log && exit 1;}
 
 make -j $(nproc) || exit 1
 make install || exit 1
