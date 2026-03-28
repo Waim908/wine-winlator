@@ -1,10 +1,10 @@
 [[ -d /tmp/llvm_mingw ]] || { echo "无法找到编译器目录" && exit 1;}
 export PATH=/tmp/llvm_mingw/bin:$PATH
-apt install -y patch xz-utils ccache || exit 1
 export LC_ALL=en_US.UTF-8
 apt clean
 chmod 777 /tmp
 apt update
+sudo apt install -y patch xz-utils ccache || exit 1
 
 cd /tmp/wine-src
 bash /tmp/wine-winlator/apply_patch.sh wine-glibc-arm64ec $1 /tmp/wine-src exit 1
