@@ -19,6 +19,10 @@ on:
         description: "Custom Releases Description"
         required: false
         default: ""
+      makeWineVK:
+        description: "make wine vk (y/n)"
+        required: false
+        default: "y"
 
 env:
   wineVer: ${{ github.event.inputs.version }}

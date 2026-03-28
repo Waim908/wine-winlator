@@ -9,7 +9,7 @@ cd $3 || exit 1
 
 for i in "${_patch_file_[@]}"; do
   echo "应用补丁： $i"
-  #patch -p1 < "$script_dir/$1/$2/$i" || exit 1
+  patch -p1 < "$script_dir/$1/$2/$i" || exit 1
 done
 cd -
 

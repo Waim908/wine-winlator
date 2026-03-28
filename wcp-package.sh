@@ -1,5 +1,9 @@
 #!/bin/bash
-[[ isArm64ec == 1 ]] && isArm64ec="-arm64ec" || isArm64ec=""
+if [[ isArm64ec == 1 ]]; then
+  isArm64ec="-arm64ec"
+else
+  isArm64ec=""
+fi
 create_json () {
 if [[ -z $customDescription ]]; then
 cat > '/tmp/output-wcp/tmp/profile.json' << EOF
@@ -32,6 +36,17 @@ cat > '/tmp/output-wcp/tmp/profile.json' << EOF
 }
 EOF
 fi
+}
+patchelf_fix() {
+  LD_RPATH=/data/data/com.winlator/files/imagefs/usr/lib
+  LD_FILE=$LD_RPATH/ld-linux-aarch64.so.1
+  find . -type f -exec file {} + | grep -E ":.*ELF" | cut -d: -f1 | while read -r elf_file; do
+    echo "Patching $elf_file..."
+    patchelf --set-rpath "$LD_RPATH" --set-interpreter "$LD_FILE" "$elf_file" || {
+      echo "Failed to patch $elf_file" >&2
+      continue
+    }
+  done
 }
 rm -rf /data/data/com.winlator/files/imagefs/home/xuser/.wine
 rm -rf /tmp/output-wcp
@@ -111,6 +126,9 @@ cp -r -p $wineRoot/bin /tmp/output-wcp/tmp/
 cp -r -p $wineRoot/lib /tmp/output-wcp/tmp/
 cp -r -p $wineRoot/share /tmp/output-wcp/tmp/
 cd /tmp/output-wcp/tmp/
+if [[ ! $doNotFixLibrary == 1 ]] &&  [[ ! -z $isArm64ec ]]; then
+  patchelf_fix
+fi
 [[ $doNotCleanStaticLibrary == 1 ]] || {
   echo "Deleting static libraries..."
   find . -type f -name "*.a" -print0 | while IFS= read -r -d '' file; do

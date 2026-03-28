@@ -16,6 +16,9 @@ make __tooldeps__ -j $(nproc) || exit 1
 make -C nls -j $(nproc) || exit 1
 cd ..
 source /tmp/wine-winlator/compile.conf arm64
+
+[[ $MAKE_WINE_VULKAN == 1 ]] && dlls/winevulkan/make_vulkan || exit 1
+
 ./configure --prefix=/tmp/wine-$(cat VERSION | awk '{print $3}') \
   --with-mingw=clang \
   --enable-archs=arm64ec,aarch64,i386 \
@@ -25,7 +28,6 @@ source /tmp/wine-winlator/compile.conf arm64
   host_alias=aarch64-linux-gnu \
   build_alias=x86_64-linux-gnu \
   --with-wine-tools=amd64 \
-  CC=aarch64-linux-gnu-gcc \
   --disable-win16 --disable-tests --without-capi --without-coreaudio --without-cups --without-gphoto --without-osmesa --without-oss --without-pcap --without-pcsclite --without-sane --without-udev --without-unwind --without-usb --without-v4l2 --without-wayland --without-xinerama --without-piper || { cat config.log && exit 1;}
 
 make -j $(nproc) || exit 1
