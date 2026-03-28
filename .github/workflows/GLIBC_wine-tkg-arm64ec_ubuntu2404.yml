@@ -118,9 +118,9 @@ jobs:
 
       - name: Create WCP Package
         run: |
-          [[ -f /tmp/build_arm64ec_wine.tar.xz ]] || { echo "未找到编译产物！" && exit 1; }
-          tar xvf /tmp/build_arm64ec_wine.tar.xz -C /tmp/ || exit 1
           cd /tmp
+          7z x build_arm64ec_wine.zip && rm -rf *.zip
+          tar xvf *.tar.xz && rm -rf *.tar.xz
           wget https://raw.githubusercontent.com/Waim908/wine-winlator/main/wcp-package.sh || exit 1
           sudo isArm64ec=1 bash -x wcp-package.sh /tmp/wine_build ${{ needs.build_wine.outputs.wineVer }} || exit 1
           sudo chmod 644 /tmp/output-wcp/*.wcp
