@@ -4,7 +4,7 @@ export LC_ALL=en_US.UTF-8
 apt clean
 chmod 777 /tmp
 apt update
-sudo apt install -y patch xz-utils ccache || exit 1
+apt install -y patch xz-utils ccache || exit 1
 
 cd /tmp/wine-src
 bash /tmp/wine-winlator/apply_patch.sh wine-glibc-arm64ec $1 /tmp/wine-src exit 1
