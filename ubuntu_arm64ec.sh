@@ -19,7 +19,7 @@ source /tmp/wine-winlator/compile.conf arm64
 
 [[ $MAKE_WINE_VULKAN == 1 ]] && dlls/winevulkan/make_vulkan || exit 1
 
-./configure --prefix=/tmp/wine-$(cat VERSION | awk '{print $3}') \
+./configure --prefix=/tmp/wine_build \
   --with-mingw=clang \
   --enable-archs=arm64ec,aarch64,i386 \
   --enable-tools \
