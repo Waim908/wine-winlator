@@ -17,7 +17,7 @@ make -C nls -j $(nproc) || exit 1
 cd ..
 source /tmp/wine-winlator/compile.conf arm64
 
-[[ $MAKE_WINE_VULKAN == $2 ]] && dlls/winevulkan/make_vulkan
+[[ $2 == y ]] && dlls/winevulkan/make_vulkan
 
 ./configure --prefix=/tmp/wine_build \
   --with-mingw=clang \
