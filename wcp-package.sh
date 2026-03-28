@@ -127,6 +127,7 @@ cp -r -p $wineRoot/lib /tmp/output-wcp/tmp/
 cp -r -p $wineRoot/share /tmp/output-wcp/tmp/
 cd /tmp/output-wcp/tmp/
 if [[ ! $doNotFixLibrary == 1 ]] &&  [[ ! -z $isArm64ec ]]; then
+  command -v patchelf  || { echo "patchelf未安装" && exit 1;}
   patchelf_fix
 fi
 [[ $doNotCleanStaticLibrary == 1 ]] || {

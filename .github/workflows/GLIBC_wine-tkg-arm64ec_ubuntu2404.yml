@@ -118,6 +118,8 @@ jobs:
 
       - name: Create WCP Package
         run: |
+          apt update
+          apt install -y patchelf
           cd /tmp
           7z x build_arm64ec_wine.zip && rm -rf *.zip
           tar xvf *.tar.xz && rm -rf *.tar.xz
