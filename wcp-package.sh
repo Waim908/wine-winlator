@@ -1,5 +1,5 @@
 #!/bin/bash
-if [[ isArm64ec == 1 ]]; then
+if [[ $isArm64ec == 1 ]]; then
   isArm64ec="-arm64ec"
 else
   isArm64ec=""
