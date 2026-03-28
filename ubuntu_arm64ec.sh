@@ -1,4 +1,4 @@
-[[ -f /tmp/llvm_mingw ]] || { echo "无法找到编译器目录" && exit 1;}
+[[ -d /tmp/llvm_mingw ]] || { echo "无法找到编译器目录" && exit 1;}
 export PATH=/tmp/llvm_mingw/bin:$PATH
 apt install -y patch xz-utils ccache || exit 1
 export LC_ALL=en_US.UTF-8

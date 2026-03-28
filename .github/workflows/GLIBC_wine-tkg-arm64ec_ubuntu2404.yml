@@ -45,7 +45,7 @@ jobs:
       - name: Pull Wine-TKG Source & Download BCC
         id: download
         run: |
-          aria2c -s$(nproc) -x$(nproc) https://github.com/mstorsjo/llvm-mingw/releases/download/20260324/llvm-mingw-20260324-ucrt-ubuntu-22.04-x86_64.tar.xz || exit 1
+          aria2c -s$(nproc) -x$(nproc) ${{ github.event.inputs.llvmURL }} || exit 1
           mkdir llvm_mingw
           tar --strip-components=1 -xvf *.tar.xz -C llvm_mingw/ && rm -rf *.tar.xz
 
