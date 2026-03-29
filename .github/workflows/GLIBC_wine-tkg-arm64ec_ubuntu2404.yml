@@ -132,14 +132,14 @@ jobs:
           export wineVer=$(echo $wineVer | sed 's/-hangover//')
           mkdir -p /data/data/com.winlator/files/imagefs
           apt update
-          apt install -y patchelf 7zip aria2
+          apt install -y patchelf 7zip aria2 zstd xz-utils
           aria2c -s16 -x16 $targetImagefs || exit 1
           tar xf *.tzst -C /data/data/com.winlator/files/imagefs/ && rm -rf *.tzst
           cd /tmp
           7z x build_arm64ec_wine.zip && rm -rf *.zip
           tar xvf *.tar.xz && rm -rf *.tar.xz
           aria2c https://raw.githubusercontent.com/Waim908/wine-winlator/main/wcp-package.sh || exit 1
-          isArm64ec=1 bash -x wcp-package.sh /tmp/wine_build $wineVer || exit 1
+          doNotFixLibrary=1 isArm64ec=1 bash -x wcp-package.sh /tmp/wine_build $wineVer || exit 1
           chmod 644 /tmp/output-wcp/*.wcp
 
       - name: Create GitHub Release
