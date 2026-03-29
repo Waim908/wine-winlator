@@ -18,7 +18,11 @@ on:
       targetBranch:
         description: "Wine Target Branch"
         required: false
-        default: "wine-10.15"
+        default: "wine-10.15-hangover"
+      targetImagefs:
+        description: "Fake Imagefs Environment, Download Package URL"
+        required: false
+        default: "https://github.com/moze30/rootfs-winlator-glibc/releases/download/rootfs-g7.1.5-1.1/imagefs-g7.1.5-1.1.tzst"
       customTag:
         description: "Custom Releases Tag"
         required: false
@@ -69,8 +73,8 @@ jobs:
           echo "wineVer=$wineVer" >> $GITHUB_OUTPUT
           echo "::set-output name=wineVer::$wineVer"
           cd ..
-          # aria2c -s$(nproc) -x$(nproc) https://github.com/Waim908/BCC/releases/download/wine-bcc-latest/wine-bcc.tar.xz || exit 1
-          aria2c -s$(nproc) -x$(nproc) https://github.com/Waim908/BCC/releases/download/wine-arm64ec-ubuntu2404-bcc-latest/wine-ubuntu2404-bcc-arm64ec.tar.xz || exit 1
+          # aria2c -s16 -x16 https://github.com/Waim908/BCC/releases/download/wine-bcc-latest/wine-bcc.tar.xz || exit 1
+          aria2c -s16 -x16 https://github.com/Waim908/BCC/releases/download/wine-arm64ec-ubuntu2404-bcc-latest/wine-ubuntu2404-bcc-arm64ec.tar.xz || exit 1
           tar xf *.tar.xz && rm -rf *.tar.xz
 
       - name: Setting BCC & Compile Wine-TKG
@@ -107,6 +111,13 @@ jobs:
 
   create_wcp:
     runs-on: ubuntu-24.04-arm
+    container:
+      image: ubuntu:24.04
+      volumes:
+        - /tmp:/tmp
+      env:
+        wineVer: ${{ github.event.inputs.targetBranch }}
+        targetImagefs: ${{ github.event.inputs.targetImagefs }}
     name: Create WCP Package
     needs: build_wine
     steps:
@@ -118,14 +129,18 @@ jobs:
 
       - name: Create WCP Package
         run: |
-          sudo apt update
-          sudo apt install -y patchelf
+          export wineVer=$(echo $wineVer | sed 's/-hangover//')
+          mkdir -p /data/data/com.winlator/files/imagefs
+          apt update
+          apt install -y patchelf 7zip aria2
+          aria2c -s16 -x16 $targetImagefs || exit 1
+          tar xf *.tzst -C /data/data/com.winlator/files/imagefs/ && rm -rf *.tzst
           cd /tmp
           7z x build_arm64ec_wine.zip && rm -rf *.zip
           tar xvf *.tar.xz && rm -rf *.tar.xz
           wget https://raw.githubusercontent.com/Waim908/wine-winlator/main/wcp-package.sh || exit 1
-          sudo isArm64ec=1 bash -x wcp-package.sh /tmp/wine_build ${{ needs.build_wine.outputs.wineVer }} || exit 1
-          sudo chmod 644 /tmp/output-wcp/*.wcp
+          isArm64ec=1 bash -x wcp-package.sh /tmp/wine_build $wineVer || exit 1
+          chmod 644 /tmp/output-wcp/*.wcp
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

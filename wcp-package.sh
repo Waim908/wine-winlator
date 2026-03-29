@@ -9,7 +9,7 @@ if [[ -z $customDescription ]]; then
 cat > '/tmp/output-wcp/tmp/profile.json' << EOF
 {
   "type": "Wine",
-  "versionName": "${wineVer}-custom${isArm64ec}",
+  "versionName": "${wineVer}-${isArm64ec:-custom}",
   "versionCode": 1,
   "description": "${wineVer}-tkg-stg-ge${isArm64ec}. Built form [https://github.com/Waim908/wine-winlator]",
   "files": [],
@@ -38,7 +38,7 @@ EOF
 fi
 }
 patchelf_fix() {
-  LD_RPATH=/data/data/com.winlator/files/imagefs/usr/lib
+  LD_RPATH="/data/data/com.winlator/files/imagefs/usr/lib"
   LD_FILE=$LD_RPATH/ld-linux-aarch64.so.1
   find . -type f -exec file {} + | grep -E ":.*ELF" | cut -d: -f1 | while read -r elf_file; do
     echo "Patching $elf_file..."
@@ -143,4 +143,4 @@ if [[ -z $customWcpName ]]; then
 else
   tar -I 'zstd -T$(nproc) --ultra -22' -cvf /tmp/output-wcp/$customWcpName.wcp bin/ .
 fi
-echo "Output=> /tmp/output-wcp/wine-$wineVer${isArm64ec}.wcp"
+echo "Output=> /tmp/output-wcp/wine-$wineVer${isArm64ec:-custom}.wcp"
