@@ -138,7 +138,7 @@ jobs:
           cd /tmp
           7z x build_arm64ec_wine.zip && rm -rf *.zip
           tar xvf *.tar.xz && rm -rf *.tar.xz
-          wget https://raw.githubusercontent.com/Waim908/wine-winlator/main/wcp-package.sh || exit 1
+          aria2c https://raw.githubusercontent.com/Waim908/wine-winlator/main/wcp-package.sh || exit 1
           isArm64ec=1 bash -x wcp-package.sh /tmp/wine_build $wineVer || exit 1
           chmod 644 /tmp/output-wcp/*.wcp
 
