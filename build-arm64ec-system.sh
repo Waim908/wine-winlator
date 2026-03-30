@@ -12,14 +12,13 @@ warn() {
 }
 
 script_dir="$(dirname $(readlink -f "$0"))"
-source "$script_dir/config.cfg" || { warn "配置文件加载失败: $script_dir/config.cfg" && exit 1; }
+source "$script_dir/config/custom.cfg" || { warn "配置文件加载失败: $script_dir/config.cfg" && exit 1; }
 
 arch=$(uname -m)
 [[ ! $arch == x86_64 ]] && { warn "不支持的系统架构" && exit 1; }
 
 _install_deps() {
   [[ $DEBIAN_FRONTEND == noninteractive ]] && info "软件包安装过程Cli交互式过程已关闭"
-  [[ $_doNotInstallDep == 1 ]] && return 0
   local i
   local failed_pkgs=()
   local yn
@@ -66,9 +65,9 @@ info "构建目标：$_targetBuild"
 if [[ $_doNotInstallDep == true ]]; then
   info "跳过依赖安装"
 else
-  distro=$(source /etc/*-release && echo $ID)
+  distro=$(source /etc/os-release && echo $ID)
   [[ -z $distro ]] && {
-    warn "无法从/etc/*-release获取发行版数据"
+    warn "无法从/etc/os-release获取发行版数据"
     exit 1
   }
   case $distro in
