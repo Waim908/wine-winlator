@@ -4,7 +4,7 @@ export LC_ALL=en_US.UTF-8
 apt clean
 chmod 777 /tmp
 apt update
-apt install -y patch xz-utils ccache || exit 1
+apt install -y patch xz-utils || exit 1
 
 cd /tmp/wine-src
 bash /tmp/wine-winlator/apply_patch.sh wine-glibc-arm64ec $1 /tmp/wine-src || exit 1
@@ -32,8 +32,5 @@ source /tmp/wine-winlator/compile.conf arm64
 
 make -j $(nproc) || exit 1
 make install || exit 1
-echo "打包ccache"
-cd ~/.cache
-tar -I  "xz -T$(nproc)" -cvf /tmp/ccache.tar.xz ccache/
 cd /tmp
 tar -I "xz -T$(nproc)" -cvf /tmp/build_arm64ec_wine.tar.xz wine_build || exit 1

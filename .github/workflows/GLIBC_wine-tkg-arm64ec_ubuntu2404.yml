@@ -43,13 +43,6 @@ jobs:
     outputs:
       wineVer: ${{ steps.download.outputs.wineVer }}
     steps:
-      - name: Download Cache
-        id: cache-tag
-        uses: actions/cache@v4
-        with:
-          path: /tmp/ccache.tar.xz
-          key: tkg-ccache-arm64ec
-
       - name: Pull Wine-TKG Source & Download BCC
         id: download
         run: |
@@ -80,13 +73,6 @@ jobs:
         run: |
           echo $(pwd)
           sudo bash wine-winlator/mount.sh mount ubuntu2404 || exit 1
-          sudo mkdir -p ubuntu2404/root/.cache/
-          if [[ -f /tmp/ccache.tar.xz ]]; then
-            echo "找到Ccache缓存，正在解压..."
-            sudo tar -xf /tmp/ccache.tar.xz -C ubuntu2404/root/.cache/ || exit 1
-          else
-            echo "未找到Ccache缓存，继续..."
-          fi
           sudo cp -r -p wine-winlator/ ubuntu2404/tmp/
           sudo mv wine-src/ ubuntu2404/tmp/
           sudo mv llvm_mingw/ ubuntu2404/tmp/
@@ -102,12 +88,6 @@ jobs:
         with:
           name: build_arm64ec_wine
           path: /tmp/build_arm64ec_wine.tar.xz
-
-      - name: Save ccache
-        uses: actions/cache/save@v5
-        with:
-          path: /tmp/ccache.tar.xz
-          key: tkg-ccache-arm64ec
 
   create_wcp:
     runs-on: ubuntu-24.04-arm
