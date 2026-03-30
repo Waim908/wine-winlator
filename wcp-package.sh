@@ -61,6 +61,7 @@ if [[ -z $wineVer ]]; then
     exit 1
   fi
 fi
+wineVer="${wineVer#wine-}"
 export WINEESYNC=1
 export WINEPREFIX=/data/data/com.winlator/files/imagefs/home/xuser/.wine
 winePath=$1/bin
@@ -143,4 +144,4 @@ if [[ -z $customWcpName ]]; then
 else
   tar -I 'zstd -T$(nproc) --ultra -22' -cvf /tmp/output-wcp/$customWcpName.wcp bin/ .
 fi
-echo "Output=> /tmp/output-wcp/wine-$wineVer${isArm64ec:-custom}.wcp"
+echo "Output=> /tmp/output-wcp/wine-$wineVer${isArm64ec}.wcp"

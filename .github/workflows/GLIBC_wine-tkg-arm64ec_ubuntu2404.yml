@@ -115,8 +115,6 @@ jobs:
       image: ubuntu:24.04
       volumes:
         - /tmp:/tmp
-      env:
-        targetImagefs: ${{ github.event.inputs.targetImagefs }}
     name: Create WCP Package
     needs: build_wine
     steps:
@@ -138,7 +136,7 @@ jobs:
           7z x build_arm64ec_wine.zip && rm -rf *.zip
           tar xvf *.tar.xz && rm -rf *.tar.xz
           aria2c https://raw.githubusercontent.com/Waim908/wine-winlator/main/wcp-package.sh || exit 1
-          doNotFixLibrary=1 isArm64ec=1 bash -x wcp-package.sh /tmp/wine_build $wineVer || exit 1
+          customWcpName=wine-${{ needs.build_wine.outputs.wineVer }}-arm64ec doNotCleanStaticLibrary=1 doNotFixLibrary=1 isArm64ec=1 bash -x wcp-package.sh /tmp/wine_build $wineVer || exit 1
           chmod 644 /tmp/output-wcp/*.wcp
 
       - name: Create GitHub Release
