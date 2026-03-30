@@ -81,7 +81,7 @@ else
   esac
 fi
 
-mkdir /tmp/wlt-wine/
+mkdir -p /tmp/wlt-wine/
 rm -rf /tmp/wlt-wine/wine-src/
 mkdir -p "$_outputPath"
 
