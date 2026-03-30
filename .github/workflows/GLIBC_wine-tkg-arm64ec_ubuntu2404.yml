@@ -69,7 +69,7 @@ jobs:
           fi
 
           cd wine-src
-          wineVer=$(echo ${{ github.event.inputs.targetBranch }} | sed 's/wine-//')
+          wineVer=$(echo ${{ github.event.inputs.targetBranch }} | sed 's/wine-//' | sed 's/-hangover//')
           echo "wineVer=$wineVer" >> $GITHUB_OUTPUT
           cd ..
           # aria2c -s16 -x16 https://github.com/Waim908/BCC/releases/download/wine-bcc-latest/wine-bcc.tar.xz || exit 1
@@ -93,7 +93,7 @@ jobs:
 
       - name: Compile
         run: |
-          sudo chroot ubuntu2404 bash -x /tmp/wine-winlator/ubuntu_arm64ec.sh ${{ steps.download.outputs.wineVer  }} ${{ github.event.inputs.makeWineVK }} || exit 1
+          sudo chroot ubuntu2404 bash -x /tmp/wine-winlator/ubuntu_arm64ec.sh ${{ steps.download.outputs.wineVer }} ${{ github.event.inputs.makeWineVK }} || exit 1
           sudo chmod 644 ubuntu2404/tmp/*.tar.xz
           sudo mv ubuntu2404/tmp/*.tar.xz /tmp/
 
