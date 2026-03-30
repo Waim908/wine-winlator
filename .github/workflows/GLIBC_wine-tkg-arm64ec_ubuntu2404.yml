@@ -129,16 +129,21 @@ jobs:
           export wineVer=$(echo ${{ needs.build_wine.outputs.wineVer }} | sed 's/-hangover//')
           mkdir -p /data/data/com.winlator/files/imagefs
           apt update
-          apt install -y patchelf 7zip aria2 zstd xz-utils
+          apt install -y patchelf 7zip aria2 zstd xz-utils locales fontconfig
+          echo "en_US.UTF-8" >> /etc/locale.gen
+          locale-gen
+          export LC_ALL=en_US.UTF-8
+          export FONTCONFIG_PATH="/data/data/com.winlator/files/imagefs/etc/fonts"
+          fc-cache -fv
           aria2c -s16 -x16 $targetImagefs || exit 1
           tar xf *.tzst -C /data/data/com.winlator/files/imagefs/ && rm -rf *.tzst
           cd /tmp
           7z x build_arm64ec_wine.zip && rm -rf *.zip
           tar xvf *.tar.xz && rm -rf *.tar.xz
           aria2c https://raw.githubusercontent.com/Waim908/wine-winlator/main/wcp-package.sh || exit 1
-          customWcpName=wine-${{ needs.build_wine.outputs.wineVer }}-arm64ec doNotCleanStaticLibrary=1 doNotFixLibrary=1 isArm64ec=1 bash -x wcp-package.sh /tmp/wine_build $wineVer || exit 1
+          customDescription="Tag: ${{ needs.build_wine.outputs.wineVer }}-${{ github.event.inputs.customTag }}-tkg-arm64ec; Built form [https://github.com/Waim908/wine-winlator]" customWcpName=wine-${{ needs.build_wine.outputs.wineVer }}-arm64ec doNotCleanStaticLibrary=1 doNotFixLibrary=1 isArm64ec=1 bash -x wcp-package.sh /tmp/wine_build $wineVer || exit 1
           chmod 644 /tmp/output-wcp/*.wcp
-
+          # ${{ needs.build_wine.outputs.wineVer }}-${{ github.event.inputs.customTag }}-tkg-arm64ec
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         env:

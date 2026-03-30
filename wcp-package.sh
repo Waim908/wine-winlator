@@ -24,7 +24,7 @@ else
 cat > '/tmp/output-wcp/tmp/profile.json' << EOF
 {
   "type": "Wine",
-  "versionName": "${wineVer}",
+  "versionName": "${wineVer}-${isArm64ec:-custom}",
   "versionCode": 1,
   "description": "${customDescription}",
   "files": [],
