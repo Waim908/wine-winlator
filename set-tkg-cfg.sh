@@ -1,10 +1,9 @@
 file_path=$2
 sed2() {
-  local file="$file_path2"
   local key="$1"
   local value="$2"
 
-  if [[ -f "$file" ]]; then
+  if [[ -f "$file_path2" ]]; then
     sed -i "s|^${key}=\"[^\"]*\"|${key}=\"${value}\"|" "$file" || exit 1
   else
     echo "File not found: $file"

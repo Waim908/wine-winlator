@@ -71,7 +71,6 @@ jobs:
           cd wine-src
           wineVer=$(echo ${{ github.event.inputs.targetBranch }} | sed 's/wine-//')
           echo "wineVer=$wineVer" >> $GITHUB_OUTPUT
-          echo "::set-output name=wineVer::$wineVer"
           cd ..
           # aria2c -s16 -x16 https://github.com/Waim908/BCC/releases/download/wine-bcc-latest/wine-bcc.tar.xz || exit 1
           aria2c -s16 -x16 https://github.com/Waim908/BCC/releases/download/wine-arm64ec-ubuntu2404-bcc-latest/wine-ubuntu2404-bcc-arm64ec.tar.xz || exit 1
@@ -96,6 +95,7 @@ jobs:
         run: |
           sudo chroot ubuntu2404 bash -x /tmp/wine-winlator/ubuntu_arm64ec.sh ${{ steps.download.outputs.wineVer  }} ${{ github.event.inputs.makeWineVK }} || exit 1
           sudo chmod 644 ubuntu2404/tmp/*.tar.xz
+          sudo mv ubuntu2404/tmp/*.tar.xz /tmp/
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
@@ -116,7 +116,6 @@ jobs:
       volumes:
         - /tmp:/tmp
       env:
-        wineVer: ${{ github.event.inputs.targetBranch }}
         targetImagefs: ${{ github.event.inputs.targetImagefs }}
     name: Create WCP Package
     needs: build_wine
@@ -129,7 +128,7 @@ jobs:
 
       - name: Create WCP Package
         run: |
-          export wineVer=$(echo $wineVer | sed 's/-hangover//')
+          export wineVer=$(echo ${{ needs.build_wine.outputs.wineVer }} | sed 's/-hangover//')
           mkdir -p /data/data/com.winlator/files/imagefs
           apt update
           apt install -y patchelf 7zip aria2 zstd xz-utils
