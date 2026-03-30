@@ -22,7 +22,7 @@ _install_deps() {
   local i
   local failed_pkgs=()
   local yn
-  for i in ${deps}; do
+  for i in ${deps[@]}; do
     dpkg -s $i 2>&1 >/dev/null && info "已安装=> $i" || { _apt_exec $i || { err "$i安装失败,跳过!" && failed_pkgs+=($i); }; }
   done
   echo -e "\n"
