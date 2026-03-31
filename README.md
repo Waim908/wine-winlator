@@ -10,6 +10,8 @@ midi必须使用winlator版midimap.c！
 
 # [关于部分wine问题的解决方法](#about)
 
+# [如何编译Arm64ec?](#howToBuildArm64ec)
+
 # Dir
 
 原版
@@ -45,6 +47,45 @@ Glibc 7.1.x
 ### termux 相关补丁
 
  - [Waim908/wine-termux](https://github.com/Waim908/wine-termux)
+
+<a id ="howToBuild"></a>
+
+# 编译Arm64ec
+
+### step 1
+
+安装llvm-ming并定义$PATH
+
+### step2
+
+cd 到源码目录
+
+###  step3
+
+```mkdir amd64 && cd amd64```
+
+### step4
+
+```bash
+../configure --enable-win64  &&   make __tooldeps__ -j $(nproc)  && make -C nls -j $(nproc)
+```
+
+### step5
+
+```cd ..```
+```bash
+./configure --prefix=/tmp/wine_build \
+  --with-mingw=clang \
+  --enable-archs=arm64ec,aarch64,i386 \
+  --enable-tools \
+  --disable-tests \
+  --host=aarch64-linux-gnu \
+  host_alias=aarch64-linux-gnu \
+  build_alias=x86_64-linux-gnu \
+  --with-wine-tools=amd64 \
+  --disable-win16 --disable-tests --without-capi --without-coreaudio --without-cups --without-gphoto --without-osmesa --without-oss --without-pcap --without-pcsclite --without-sane --without-udev --without-unwind --without-usb --without-v4l2 --without-wayland --without-xinerama --without-piper \
+  CC=aarch64-linux-gnu-gcc
+```
 
 <a id="about"></a>
 
