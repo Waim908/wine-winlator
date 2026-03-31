@@ -36,7 +36,7 @@ _install_deps() {
 _repo_menu() {
   local i
   if [[ -z $_targetArm64ecRepo ]]; then
-    select i in $_arm64ecRepos; do
+    select i in ${_arm64ecRepos[@]}; do
       _targetArm64ecRepo="$i"
       break
     done
