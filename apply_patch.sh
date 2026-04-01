@@ -5,7 +5,11 @@ source "$script_dir/$1/$2/__patch__.conf"
 
 echo "${_patch_file_[@]}"
 
-cd $3 || exit 1
+if [[ -z $3 ]]; then
+  cd $(pwd) || exit 1
+else
+  cd $3 || exit 1
+fi
 
 if [[ $dryRun == 1 ]]; then
   for i in "${_patch_file_[@]}"; do
