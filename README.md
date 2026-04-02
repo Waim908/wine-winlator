@@ -24,13 +24,13 @@ Glibc 7.1.x
 
 - *wine-glibc-arm64ec/* : Arm64ec补丁
 
-# proton wine
+# Arm64ec Wine
 
-## 可能无法百分百保证游戏按键控制的兼容性
+**此版本只能在glibc环境的winlator运行！此仓库不负责编译bionic分支的版本！请勿用于bionic分支！**
 
-## _bad后缀为临时性补丁，通过download文件夹生成，因为是临时性的故 不一定会开源请自行对比downlaod文件夹的源码
+由于hangover采用滚动更新机制，这意味着对于老版本的wine无法保证百分百兼容性。
 
-## 此项目维护相对困难，其次winlator原作者并未开源wine10.10无法制作对应补丁，故可能存在兼容性问题
+如果可能，对于老版本的维护尽可能采用更新的arm64ec补丁。
 
 # 鸣谢
 
