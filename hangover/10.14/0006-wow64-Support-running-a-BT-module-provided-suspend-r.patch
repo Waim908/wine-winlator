@@ -1,0 +1,78 @@
+From a105905330d001e9a82a4b76f92fed58ec519540 Mon Sep 17 00:00:00 2001
+From: Billy Laws <blaws05@gmail.com>
+Date: Thu, 27 Jul 2023 08:20:59 -0700
+Subject: [PATCH 06/12] wow64: Support running a BT module provided suspend
+ routine
+
+Suspension in JITs cannot easily be handled on the unix side, so allow BT
+modules to provide their own suspend helper.
+---
+ dlls/wow64/process.c  |  3 +--
+ dlls/wow64/syscall.c  | 10 ++++++++++
+ dlls/wow64/wow64.spec |  2 +-
+ 3 files changed, 12 insertions(+), 3 deletions(-)
+
+diff --git a/dlls/wow64/process.c b/dlls/wow64/process.c
+index e558db0..61ee034 100644
+--- a/dlls/wow64/process.c
++++ b/dlls/wow64/process.c
+@@ -1099,10 +1099,9 @@ NTSTATUS WINAPI wow64_NtSuspendThread( UINT *args )
+     HANDLE handle = get_handle( &args );
+     ULONG *count = get_ptr( &args );
+ 
+-    return NtSuspendThread( handle, count );
++    return RtlWow64SuspendThread( handle, count );
+ }
+ 
+-
+ /**********************************************************************
+  *           wow64_NtTerminateProcess
+  */
+diff --git a/dlls/wow64/syscall.c b/dlls/wow64/syscall.c
+index 0b6f17b..e574e34 100644
+--- a/dlls/wow64/syscall.c
++++ b/dlls/wow64/syscall.c
+@@ -128,6 +128,7 @@ static void     (WINAPI *pBTCpuProcessInit)(void);
+ static NTSTATUS (WINAPI *pBTCpuSetContext)(HANDLE,HANDLE,void *,void *);
+ static void     (WINAPI *pBTCpuThreadInit)(void);
+ static void     (WINAPI *pBTCpuSimulate)(void) __attribute__((used));
++static NTSTATUS (WINAPI *pBTCpuSuspendLocalThread)(HANDLE,ULONG *);
+ static void *   (WINAPI *p__wine_get_unix_opcode)(void);
+ static void *   (WINAPI *pKiRaiseUserExceptionDispatcher)(void);
+ void     (WINAPI *pBTCpuFlushInstructionCache2)( const void *, SIZE_T ) = NULL;
+@@ -872,6 +873,7 @@ static DWORD WINAPI process_init( RTL_RUN_ONCE *once, void *param, void **contex
+     GET_PTR( BTCpuProcessInit );
+     GET_PTR( BTCpuThreadInit );
+     GET_PTR( BTCpuResetToConsistentState );
++    GET_PTR( BTCpuSuspendLocalThread );
+     GET_PTR( BTCpuSetContext );
+     GET_PTR( BTCpuSimulate );
+     GET_PTR( BTCpuFlushInstructionCache2 );
+@@ -1566,3 +1568,11 @@ NTSTATUS WINAPI Wow64RaiseException( int code, EXCEPTION_RECORD *rec )
+ 
+     return STATUS_SUCCESS;
+ }
++
++/**********************************************************************
++ *            Wow64SuspendLocalThread (wow64.@)
++ */
++NTSTATUS WINAPI Wow64SuspendLocalThread( HANDLE thread, ULONG *count )
++{
++    return pBTCpuSuspendLocalThread( thread, count );
++}
+diff --git a/dlls/wow64/wow64.spec b/dlls/wow64/wow64.spec
+index 5b4e565..8f95dfc 100644
+--- a/dlls/wow64/wow64.spec
++++ b/dlls/wow64/wow64.spec
+@@ -22,7 +22,7 @@
+ @ stub Wow64ShallowThunkAllocSecurityQualityOfService32TO64_FNC
+ @ stub Wow64ShallowThunkSIZE_T32TO64
+ @ stub Wow64ShallowThunkSIZE_T64TO32
+-@ stub Wow64SuspendLocalThread
++@ stdcall Wow64SuspendLocalThread(long ptr)
+ @ stdcall -norelay Wow64SystemServiceEx(long ptr)
+ @ stub Wow64ValidateUserCallTarget
+ @ stub Wow64ValidateUserCallTargetFilter
+-- 
+2.53.0
+

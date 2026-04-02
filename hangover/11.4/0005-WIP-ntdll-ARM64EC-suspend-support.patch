@@ -1,0 +1,175 @@
+From ac9d2b808fe3e9897ec5351110010230ccb268c7 Mon Sep 17 00:00:00 2001
+From: Billy Laws <blaws05@gmail.com>
+Date: Thu, 7 Aug 2025 20:57:03 +0100
+Subject: [PATCH 05/10] WIP: ntdll: ARM64EC suspend support
+
+---
+ dlls/ntdll/ntdll_misc.h        |  1 +
+ dlls/ntdll/signal_arm64ec.c    |  1 +
+ dlls/ntdll/signal_x86_64.c     |  8 +++++
+ dlls/ntdll/unix/signal_arm64.c | 57 ++++++++++++++++++++++++++++++----
+ 4 files changed, 61 insertions(+), 6 deletions(-)
+
+diff --git a/dlls/ntdll/ntdll_misc.h b/dlls/ntdll/ntdll_misc.h
+index 88fbe13..c5b75cc 100644
+--- a/dlls/ntdll/ntdll_misc.h
++++ b/dlls/ntdll/ntdll_misc.h
+@@ -169,6 +169,7 @@ extern IMAGE_ARM64EC_METADATA *arm64ec_get_module_metadata( HMODULE module );
+ extern void arm64ec_update_hybrid_metadata( void *module, IMAGE_NT_HEADERS *nt,
+                                             const IMAGE_ARM64EC_METADATA *metadata );
+ extern void invoke_arm64ec_syscall(void);
++extern void arm64ec_suspend_point(void);
+ 
+ extern void *__os_arm64x_check_call;
+ extern void *__os_arm64x_check_icall;
+diff --git a/dlls/ntdll/signal_arm64ec.c b/dlls/ntdll/signal_arm64ec.c
+index 4bb3375..932b1e4 100644
+--- a/dlls/ntdll/signal_arm64ec.c
++++ b/dlls/ntdll/signal_arm64ec.c
+@@ -84,6 +84,7 @@ static inline BOOL enter_syscall_callback(void)
+ static inline void leave_syscall_callback(void)
+ {
+     get_arm64ec_cpu_area()->InSyscallCallback = 0;
++    if (get_arm64ec_cpu_area()->SuspendDoorbell && *get_arm64ec_cpu_area()->SuspendDoorbell) arm64ec_suspend_point();
+ }
+ 
+ /**********************************************************************
+diff --git a/dlls/ntdll/signal_x86_64.c b/dlls/ntdll/signal_x86_64.c
+index 0ed76d3..6bed630 100644
+--- a/dlls/ntdll/signal_x86_64.c
++++ b/dlls/ntdll/signal_x86_64.c
+@@ -73,6 +73,14 @@ __ASM_GLOBAL_FUNC( invoke_arm64ec_syscall,
+                    "pushq %r10\n\t"         /* and return to syscall thunk */
+                    "ret" )
+ 
++/**************************************************************************
++ *		arm64ec_suspend_point
++ *
++ * x64 stub to support cooperative suspend when leaving a syscall callack.
++ */
++__ASM_GLOBAL_FUNC( arm64ec_suspend_point,
++                   "ret" )
++
+ /*******************************************************************
+  *		KiUserExceptionDispatcher (NTDLL.@)
+  */
+diff --git a/dlls/ntdll/unix/signal_arm64.c b/dlls/ntdll/unix/signal_arm64.c
+index b60e9f5..4bfe1f0 100644
+--- a/dlls/ntdll/unix/signal_arm64.c
++++ b/dlls/ntdll/unix/signal_arm64.c
+@@ -64,6 +64,18 @@ WINE_DEFAULT_DEBUG_CHANNEL(seh);
+ #define NTDLL_DWARF_H_NO_UNWINDER
+ #include "dwarf.h"
+ 
++struct arm64_thread_data
++{
++    BOOL suspend_pending;
++};
++
++C_ASSERT( sizeof(struct arm64_thread_data) <= sizeof(((struct ntdll_thread_data *)0)->cpu_data) );
++
++static inline struct arm64_thread_data *arm64_thread_data(void)
++{
++    return (struct arm64_thread_data *)ntdll_get_thread_data()->cpu_data;
++}
++
+ /***********************************************************************
+  * signal context platform-specific definitions
+  */
+@@ -183,6 +195,10 @@ struct syscall_frame
+ 
+ C_ASSERT( sizeof( struct syscall_frame ) == 0x330 );
+ 
++static BOOL is_arm64ec_suspend_doorbell_valid(void)
++{
++    return is_arm64ec() && NtCurrentTeb()->ChpeV2CpuAreaInfo && NtCurrentTeb()->ChpeV2CpuAreaInfo->SuspendDoorbell;
++}
+ 
+ /***********************************************************************
+  *           context_init_empty_xstate
+@@ -207,7 +223,6 @@ void set_process_instrumentation_callback( void *callback )
+     if (callback) FIXME( "Not supported.\n" );
+ }
+ 
+-
+ /***********************************************************************
+  *           syscall_frame_fixup_for_fastpath
+  *
+@@ -316,7 +331,18 @@ NTSTATUS signal_set_full_context( CONTEXT *context )
+     struct syscall_frame *frame = get_syscall_frame();
+     NTSTATUS status = NtSetContextThread( GetCurrentThread(), context );
+ 
+-    if (!status && (context->ContextFlags & CONTEXT_INTEGER) == CONTEXT_INTEGER)
++    if (is_arm64ec_suspend_doorbell_valid() && arm64_thread_data()->suspend_pending)
++    {
++        CONTEXT suspend_context;
++        *NtCurrentTeb()->ChpeV2CpuAreaInfo->SuspendDoorbell = 0;
++        arm64_thread_data()->suspend_pending = FALSE;
++        suspend_context.ContextFlags = CONTEXT_FULL | CONTEXT_EXCEPTION_REPORTING; /* TODO: check */
++        NtGetContextThread( GetCurrentThread(), &suspend_context );
++        wait_suspend( &suspend_context );
++        NtSetContextThread( GetCurrentThread(), &suspend_context );
++    }
++
++    if (!status && (context->ContextFlags & CONTEXT_INTEGER) == CONTEXT_INTEGER) /* TODO: also check with susp */
+         frame->restore_flags |= CONTEXT_INTEGER;
+ 
+     if (is_arm64ec() && !is_ec_code( frame->pc ))
+@@ -407,12 +433,20 @@ NTSTATUS WINAPI NtGetContextThread( HANDLE handle, CONTEXT *context )
+ {
+     struct syscall_frame *frame = get_syscall_frame();
+     DWORD needed_flags = context->ContextFlags & ~CONTEXT_ARM64;
+-    BOOL self = (handle == GetCurrentThread());
++    THREAD_BASIC_INFORMATION info;
++    NTSTATUS ret;
++    BOOL self;
++
++    NtQueryInformationThread( handle, ThreadBasicInformation, &info, sizeof(info), NULL );
++    self = HandleToULong( info.ClientId.UniqueThread ) == GetCurrentThreadId();
+ 
+     if (!self)
+     {
+-        NTSTATUS ret = get_thread_context( handle, context, &self, IMAGE_FILE_MACHINE_ARM64 );
+-        if (ret || !self) return ret;
++        /* Avoid exposing JIT code pointers to other processes on ARM64EC */
++        if (is_arm64ec()) NtSuspendThread( handle, NULL );
++        ret = get_thread_context( handle, context, &self, IMAGE_FILE_MACHINE_ARM64 );
++        if (is_arm64ec()) NtResumeThread( handle, NULL );
++        return ret;
+     }
+ 
+     if (needed_flags & CONTEXT_INTEGER)
+@@ -1287,6 +1321,14 @@ static void usr1_handler( int signal, siginfo_t *siginfo, void *sigcontext )
+     ucontext_t *ucontext = sigcontext;
+     CONTEXT context;
+ 
++    if (is_arm64ec_suspend_doorbell_valid() &&
++        (NtCurrentTeb()->ChpeV2CpuAreaInfo->InSimulation || NtCurrentTeb()->ChpeV2CpuAreaInfo->InSyscallCallback))
++    {
++        *NtCurrentTeb()->ChpeV2CpuAreaInfo->SuspendDoorbell = 1;
++        arm64_thread_data()->suspend_pending = TRUE;
++        return;
++    }
++
+     if (is_inside_syscall( SP_sig(ucontext) ))
+     {
+         context.ContextFlags = CONTEXT_FULL | CONTEXT_EXCEPTION_REQUEST;
+@@ -1433,11 +1475,14 @@ void syscall_dispatcher_return_slowpath(void)
+  */
+ void init_syscall_frame( LPTHREAD_START_ROUTINE entry, void *arg, BOOL suspend, TEB *teb )
+ {
+-    struct syscall_frame *frame = ((struct ntdll_thread_data *)&teb->GdiTebBatch)->syscall_frame;
++    struct ntdll_thread_data *thread_data = (struct ntdll_thread_data *)&teb->GdiTebBatch;
++    struct syscall_frame *frame = thread_data->syscall_frame;
+     CONTEXT *ctx, context = { CONTEXT_ALL };
+     I386_CONTEXT *i386_context;
+     ARM_CONTEXT *arm_context;
+ 
++    ((struct arm64_thread_data *)(thread_data->cpu_data))->suspend_pending = FALSE;
++
+     context.X0  = (DWORD64)entry;
+     context.X1  = (DWORD64)arg;
+     context.X18 = (DWORD64)teb;
+-- 
+2.53.0
+

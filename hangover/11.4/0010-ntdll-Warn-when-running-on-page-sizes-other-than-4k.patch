@@ -1,0 +1,28 @@
+From 04d384823c7594274bb0a99121cc733b8478d33b Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Andr=C3=A9=20Zwing?= <nerv@dawncrow.de>
+Date: Wed, 2 Apr 2025 21:29:09 +0200
+Subject: [PATCH 10/10] ntdll: Warn when running on page sizes other than 4k
+
+---
+ dlls/ntdll/unix/server.c | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/dlls/ntdll/unix/server.c b/dlls/ntdll/unix/server.c
+index c04328c..3d16203 100644
+--- a/dlls/ntdll/unix/server.c
++++ b/dlls/ntdll/unix/server.c
+@@ -1324,6 +1324,11 @@ static int setup_config_dir(void)
+     struct stat st;
+     int fd_cwd = open( ".", O_RDONLY );
+ 
++#ifdef _SC_PAGESIZE
++    if (sysconf( _SC_PAGESIZE ) != 4096)
++        MESSAGE("You are running with the wrong page size, expect problems!\nPlease also consult https://github.com/AndreRH/hangover/wiki/Page-Size\n");
++#endif
++
+     if (chdir( config_dir ) == -1)
+     {
+         if (errno != ENOENT) fatal_perror( "cannot use directory %s", config_dir );
+-- 
+2.53.0
+

@@ -1,0 +1,27 @@
+From bc1d586a08d2a1abc004c15308deb10fb78356a4 Mon Sep 17 00:00:00 2001
+From: Billy Laws <blaws05@gmail.com>
+Date: Wed, 17 Apr 2024 18:50:05 +0000
+Subject: [PATCH 04/12] ntdll: Force all wow64 host allocations outside of the
+ 32-bit AS.
+
+---
+ dlls/ntdll/unix/virtual.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/dlls/ntdll/unix/virtual.c b/dlls/ntdll/unix/virtual.c
+index 4b4d9d6..ad50c93 100644
+--- a/dlls/ntdll/unix/virtual.c
++++ b/dlls/ntdll/unix/virtual.c
+@@ -4960,6 +4960,9 @@ static NTSTATUS allocate_virtual_memory( void **ret, SIZE_T *size_ptr, ULONG typ
+     {
+         base = NULL;
+         size = ROUND_SIZE( 0, size, page_mask );
++#ifdef _WIN64
++        if (is_wow64() && (!limit_high || limit_high > limit_4g)) limit_low = limit_4g;
++#endif
+     }
+ 
+     /* Compute the alloc type flags */
+-- 
+2.53.0
+

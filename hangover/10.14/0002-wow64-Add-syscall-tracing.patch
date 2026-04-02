@@ -1,0 +1,78 @@
+From 0d7bcd356b28bfb1f37f318e76bbce158b5aa9ab Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Andr=C3=A9=20Zwing?= <nerv@dawncrow.de>
+Date: Sat, 18 Nov 2023 12:27:42 +0100
+Subject: [PATCH 02/12] wow64: Add syscall tracing
+
+---
+ dlls/wow64/syscall.c | 34 ++++++++++++++++++++++++++++++++++
+ 1 file changed, 34 insertions(+)
+
+diff --git a/dlls/wow64/syscall.c b/dlls/wow64/syscall.c
+index db92547..0b6f17b 100644
+--- a/dlls/wow64/syscall.c
++++ b/dlls/wow64/syscall.c
+@@ -34,6 +34,7 @@
+ #include "wine/debug.h"
+ 
+ WINE_DEFAULT_DEBUG_CHANNEL(wow);
++WINE_DECLARE_DEBUG_CHANNEL(wow_syscall);
+ 
+ USHORT native_machine = 0;
+ USHORT current_machine = 0;
+@@ -62,6 +63,31 @@ static SYSTEM_SERVICE_TABLE syscall_tables[4] =
+     { (ULONG_PTR *)syscall_thunks, NULL, ARRAY_SIZE(syscall_thunks), syscall_args }
+ };
+ 
++static const char *syscall_names0[] =
++{
++#define SYSCALL_ENTRY(id,name,args) #name,
++    ALL_SYSCALLS32
++#undef SYSCALL_ENTRY
++};
++
++#undef ALL_SYSCALLS
++#undef ALL_SYSCALL_STUBS
++#undef ALL_SYSCALLS32
++#undef ALL_SYSCALLS64
++#include "../win32u/win32syscalls.h"
++static const char *syscall_names1[] =
++{
++#define SYSCALL_ENTRY(id,name,args) #name,
++    ALL_SYSCALLS32
++#undef SYSCALL_ENTRY
++};
++#undef ALL_SYSCALLS
++#undef ALL_SYSCALL_STUBS
++#undef ALL_SYSCALLS32
++#undef ALL_SYSCALLS64
++#include "../ntdll/ntsyscalls.h"
++
++
+ /* header for Wow64AllocTemp blocks; probably not the right layout */
+ struct mem_header
+ {
+@@ -1028,6 +1054,13 @@ NTSTATUS WINAPI Wow64SystemServiceEx( UINT num, UINT *args )
+     UINT id = num & 0xfff;
+     const SYSTEM_SERVICE_TABLE *table = &syscall_tables[(num >> 12) & 3];
+ 
++    if (((num >> 12) & 3) == 0)
++        TRACE_(wow_syscall)("%d = %s table %d\n", id, syscall_names0[id], (num >> 12) & 3);
++    else if (((num >> 12) & 3) == 1)
++        TRACE_(wow_syscall)("%d = %s table %d\n", id, syscall_names1[id], (num >> 12) & 3);
++    else
++        TRACE_(wow_syscall)("UNKNOWN table for %08x\n", num);
++
+     if (id >= table->ServiceLimit)
+     {
+         ERR( "unsupported syscall %04x\n", num );
+@@ -1035,6 +1068,7 @@ NTSTATUS WINAPI Wow64SystemServiceEx( UINT num, UINT *args )
+     }
+     status = wow64_syscall( args, table->ServiceTable[id] );
+     free_temp_data();
++    TRACE_(wow_syscall)("status %08lx\n", status);
+     return status;
+ }
+ 
+-- 
+2.53.0
+

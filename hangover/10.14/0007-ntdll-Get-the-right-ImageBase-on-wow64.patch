@@ -1,0 +1,29 @@
+From 2622427f012489409555f83971c401b53b6ecf24 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Andr=C3=A9=20Zwing?= <nerv@dawncrow.de>
+Date: Fri, 24 Nov 2023 17:33:44 +0100
+Subject: [PATCH 07/12] ntdll: Get the right ImageBase on wow64
+
+---
+ dlls/ntdll/loader.c | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/dlls/ntdll/loader.c b/dlls/ntdll/loader.c
+index 7a307b3..378ff4c 100644
+--- a/dlls/ntdll/loader.c
++++ b/dlls/ntdll/loader.c
+@@ -2161,7 +2161,11 @@ static NTSTATUS perform_relocations( void *module, IMAGE_NT_HEADERS *nt, SIZE_T
+     ULONG *protect_old, i;
+     NTSTATUS status = STATUS_SUCCESS;
+ 
+-    base = (char *)nt->OptionalHeader.ImageBase;
++    if (nt->OptionalHeader.Magic == IMAGE_NT_OPTIONAL_HDR64_MAGIC)
++        base = (char *)((const IMAGE_NT_HEADERS64 *)nt)->OptionalHeader.ImageBase;
++    else
++        base = (char *)((const IMAGE_NT_HEADERS32 *)nt)->OptionalHeader.ImageBase;
++
+     if (module == base) return STATUS_SUCCESS;  /* nothing to do */
+ 
+     /* no relocations are performed on non page-aligned binaries */
+-- 
+2.53.0
+
