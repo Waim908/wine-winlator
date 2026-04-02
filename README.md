@@ -48,7 +48,7 @@ Glibc 7.1.x
 
  - [Waim908/wine-termux](https://github.com/Waim908/wine-termux)
 
-<a id ="howToBuild"></a>
+<a id ="howToBuildArm64ec"></a>
 
 # 编译Arm64ec
 
