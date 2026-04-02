@@ -1,5 +1,5 @@
---- b/dlls/ntdll/signal_arm64.c	2026-04-02 23:10:32.548987769 +0800
-+++ download_hangover_11_4/dlls/ntdll/signal_arm64.c	2026-04-02 22:55:13.893770392 +0800
+--- wine-10.15-ori/dlls/ntdll/signal_arm64.c	2026-04-02 22:15:36.627443012 +0800
++++ hangover-11.4/dlls/ntdll/signal_arm64.c	2026-04-02 15:50:28.179999553 +0800
 @@ -28,7 +28,6 @@
  #include <setjmp.h>
  
@@ -45,7 +45,7 @@
  /***********************************************************************
   *           RtlIsProcessorFeaturePresent [NTDLL.@]
   */
-@@ -637,10 +659,25 @@
+@@ -637,12 +659,86 @@
          (1ull << PF_ARM_SVE_SM4_INSTRUCTIONS_AVAILABLE) |
          (1ull << PF_ARM_SVE_I8MM_INSTRUCTIONS_AVAILABLE) |
          (1ull << PF_ARM_SVE_F32MM_INSTRUCTIONS_AVAILABLE) |
@@ -63,32 +63,30 @@
 +
 +    RtlRunOnceExecuteOnce( &init_once, init_cpu_features, NULL, NULL );
 +    return !!(cpu_features_bitmap[feature / 64] & (1ull << (feature % 64)));
-+}
-+
+ }
+ 
 +static void suspend_remote_breakin( HANDLE thread )
 +{
 +    ULONG count;
 +    NTSTATUS status = pWow64SuspendLocalThread( thread, &count );
 +    if (status >= 0) status = count;
 +    NtTerminateThread( GetCurrentThread(),  status );
- }
- 
- /***********************************************************************
-@@ -648,14 +685,56 @@
-  */
- NTSTATUS WINAPI RtlWow64SuspendThread( HANDLE thread, ULONG *count )
- {
++}
++
++/***********************************************************************
++ *              RtlWow64SuspendThread (NTDLL.@)
++ */
++NTSTATUS WINAPI RtlWow64SuspendThread( HANDLE thread, ULONG *count )
++{
 +    HANDLE thread_dup;
-     THREAD_BASIC_INFORMATION tbi;
++    THREAD_BASIC_INFORMATION tbi;
 +    NTSTATUS status = NtDuplicateObject( NtCurrentProcess(), thread, NtCurrentProcess(), &thread_dup,
 +                                         THREAD_QUERY_INFORMATION | THREAD_SUSPEND_RESUME, 0, 0 );
 +    if (status) return status;
 +    status = NtQueryInformationThread( thread_dup, ThreadBasicInformation, &tbi, sizeof(tbi), NULL);
 +    NtClose( thread_dup );
 +    if (status) return status;
- 
--    NTSTATUS ret = NtQueryInformationThread( thread, ThreadBasicInformation, &tbi, sizeof(tbi), NULL);
--    if (ret) return ret;
++
 +    if (tbi.ClientId.UniqueProcess != NtCurrentTeb()->ClientId.UniqueProcess)
 +    {
 +        HANDLE process;
@@ -123,16 +121,17 @@
 +                *count = (ULONG)tbi.ExitStatus;
 +            }
 +        }
- 
--    if (tbi.ClientId.UniqueProcess != NtCurrentTeb()->ClientId.UniqueProcess) {
--        FIXME( "Non-local process thread suspend\n" );
--        return STATUS_SUCCESS;
++
 +        NtClose( suspender_thread );
 +err_close_remote_hnd:
 +        NtDuplicateObject( process, remote_suspendee_thread, NULL, NULL, 0, 0, DUPLICATE_CLOSE_SOURCE );
 +err_close_proc:
 +        NtClose( process );
 +        return status;
-     }
++    }
++
++    return pWow64SuspendLocalThread( thread, count );
++}
  
-     return pWow64SuspendLocalThread( thread, count );
+ /*************************************************************************
+  *		RtlWalkFrameChain (NTDLL.@)
