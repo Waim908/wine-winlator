@@ -21,8 +21,7 @@ else
   for i in "${_patch_file_[@]}"; do
     echo "应用补丁： $i"
     [[ -f "$script_dir/$1/$2/$i" ]] || { echo "补丁不存在!" && exit 1;}
-    patch --no-backup-if-mismatch  -p1 < "$script_dir/$1/$2/$i" || { echo "补丁应用失败!" && exit 1;}
+    patch --no-backup-if-mismatch -N -p1 < "$script_dir/$1/$2/$i" || { echo "补丁应用失败!" && exit 1;}
   done
 fi
 cd -
-
