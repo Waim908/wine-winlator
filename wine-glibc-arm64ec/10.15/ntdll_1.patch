@@ -1,0 +1,138 @@
+From ad3dded001b5fd5dd5a6ce740967d8c1efdbedb1 Mon Sep 17 00:00:00 2001
+From: Paul Gofman <pgofman@codeweavers.com>
+Date: Thu, 9 Oct 2025 15:53:55 -0600
+Subject: [PATCH] ntdll: Make nested_exception_handler() arch specific.
+
+---
+ dlls/ntdll/exception.c      | 10 ----------
+ dlls/ntdll/ntdll_misc.h     |  2 --
+ dlls/ntdll/signal_arm.c     | 11 +++++++++++
+ dlls/ntdll/signal_arm64.c   | 13 +++++++++++++
+ dlls/ntdll/signal_arm64ec.c | 11 +++++++++++
+ dlls/ntdll/signal_x86_64.c  | 11 +++++++++++
+ 6 files changed, 46 insertions(+), 12 deletions(-)
+
+diff --git a/dlls/ntdll/exception.c b/dlls/ntdll/exception.c
+index 2284333668a6..691781017a2e 100644
+--- a/dlls/ntdll/exception.c
++++ b/dlls/ntdll/exception.c
+@@ -302,16 +302,6 @@ NTSTATUS WINAPI dispatch_user_callback( void *args, ULONG len, ULONG id )
+ 
+ #endif
+ 
+-/*******************************************************************
+- *         nested_exception_handler
+- */
+-EXCEPTION_DISPOSITION WINAPI nested_exception_handler( EXCEPTION_RECORD *rec, void *frame,
+-                                                       CONTEXT *context, void *dispatch )
+-{
+-    if (rec->ExceptionFlags & (EXCEPTION_UNWINDING | EXCEPTION_EXIT_UNWIND)) return ExceptionContinueSearch;
+-    return ExceptionNestedException;
+-}
+-
+ 
+ /*******************************************************************
+  *		raise_status
+diff --git a/dlls/ntdll/ntdll_misc.h b/dlls/ntdll/ntdll_misc.h
+index 6fcc61149f47..1ac221bf156a 100644
+--- a/dlls/ntdll/ntdll_misc.h
++++ b/dlls/ntdll/ntdll_misc.h
+@@ -57,8 +57,6 @@ extern NTSTATUS WINAPI dispatch_exception( EXCEPTION_RECORD *rec, CONTEXT *conte
+ extern NTSTATUS WINAPI dispatch_user_callback( void *args, ULONG len, ULONG id );
+ extern EXCEPTION_DISPOSITION WINAPI user_callback_handler( EXCEPTION_RECORD *record, void *frame,
+                                                            CONTEXT *context, void *dispatch );
+-extern EXCEPTION_DISPOSITION WINAPI nested_exception_handler( EXCEPTION_RECORD *rec, void *frame,
+-                                                              CONTEXT *context, void *dispatch );
+ extern void DECLSPEC_NORETURN raise_status( NTSTATUS status, EXCEPTION_RECORD *rec );
+ extern LONG WINAPI call_unhandled_exception_filter( PEXCEPTION_POINTERS eptr );
+ extern void WINAPI process_breakpoint(void);
+diff --git a/dlls/ntdll/signal_arm.c b/dlls/ntdll/signal_arm.c
+index aedb20222c44..9f4cc9403750 100644
+--- a/dlls/ntdll/signal_arm.c
++++ b/dlls/ntdll/signal_arm.c
+@@ -148,6 +148,17 @@ EXCEPTION_DISPOSITION WINAPI unwind_exception_handler( EXCEPTION_RECORD *record,
+ }
+ 
+ 
++/*******************************************************************
++ *         nested_exception_handler
++ */
++EXCEPTION_DISPOSITION WINAPI nested_exception_handler( EXCEPTION_RECORD *rec, void *frame,
++                                                       CONTEXT *context, void *dispatch )
++{
++    if (rec->ExceptionFlags & (EXCEPTION_UNWINDING | EXCEPTION_EXIT_UNWIND)) return ExceptionContinueSearch;
++    return ExceptionNestedException;
++}
++
++
+ /**********************************************************************
+  *           call_unwind_handler
+  */
+diff --git a/dlls/ntdll/signal_arm64.c b/dlls/ntdll/signal_arm64.c
+index bc981289ea5a..9096f331dbcf 100644
+--- a/dlls/ntdll/signal_arm64.c
++++ b/dlls/ntdll/signal_arm64.c
+@@ -182,6 +182,19 @@ __ASM_GLOBAL_FUNC( call_unwind_handler,
+                    "ret" )
+ 
+ 
++
++
++/*******************************************************************
++ *         nested_exception_handler
++ */
++EXCEPTION_DISPOSITION WINAPI nested_exception_handler( EXCEPTION_RECORD *rec, void *frame,
++                                                       CONTEXT *context, void *dispatch )
++{
++    if (rec->ExceptionFlags & (EXCEPTION_UNWINDING | EXCEPTION_EXIT_UNWIND)) return ExceptionContinueSearch;
++    return ExceptionNestedException;
++}
++
++
+ /***********************************************************************
+  *		call_seh_handler
+  */
+diff --git a/dlls/ntdll/signal_arm64ec.c b/dlls/ntdll/signal_arm64ec.c
+index a93aae895540..9cbc6b48a2b1 100644
+--- a/dlls/ntdll/signal_arm64ec.c
++++ b/dlls/ntdll/signal_arm64ec.c
+@@ -1099,6 +1099,17 @@ static DWORD __attribute__((naked)) call_unwind_handler( EXCEPTION_RECORD *rec,
+ }
+ 
+ 
++/*******************************************************************
++ *         nested_exception_handler
++ */
++EXCEPTION_DISPOSITION WINAPI nested_exception_handler( EXCEPTION_RECORD *rec, void *frame,
++                                                       CONTEXT *context, void *dispatch )
++{
++    if (rec->ExceptionFlags & (EXCEPTION_UNWINDING | EXCEPTION_EXIT_UNWIND)) return ExceptionContinueSearch;
++    return ExceptionNestedException;
++}
++
++
+ /***********************************************************************
+  *		call_seh_handler
+  */
+diff --git a/dlls/ntdll/signal_x86_64.c b/dlls/ntdll/signal_x86_64.c
+index 1f184f4ea586..ae16bb77dae5 100644
+--- a/dlls/ntdll/signal_x86_64.c
++++ b/dlls/ntdll/signal_x86_64.c
+@@ -169,6 +169,17 @@ __ASM_GLOBAL_FUNC( RtlCaptureContext,
+                    "ret" );
+ 
+ 
++/*******************************************************************
++ *         nested_exception_handler
++ */
++EXCEPTION_DISPOSITION WINAPI nested_exception_handler( EXCEPTION_RECORD *rec, void *frame,
++                                                       CONTEXT *context, void *dispatch )
++{
++    if (rec->ExceptionFlags & (EXCEPTION_UNWINDING | EXCEPTION_EXIT_UNWIND)) return ExceptionContinueSearch;
++    return ExceptionNestedException;
++}
++
++
+ /***********************************************************************
+  *		call_seh_handler
+  */
