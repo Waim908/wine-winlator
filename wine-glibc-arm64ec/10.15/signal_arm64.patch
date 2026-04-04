@@ -1,6 +1,6 @@
 diff --color -urN 10.15/dlls/ntdll/signal_arm64.c b/dlls/ntdll/signal_arm64.c
---- 10.15/dlls/ntdll/signal_arm64.c	2026-04-03 23:46:00.306306983 +0800
-+++ b/dlls/ntdll/signal_arm64.c	2026-04-03 23:42:10.245926947 +0800
+--- 10.15/dlls/ntdll/signal_arm64.c	2026-04-04 22:50:06.362074803 +0800
++++ b/dlls/ntdll/signal_arm64.c	2026-04-04 22:48:42.649155539 +0800
 @@ -28,7 +28,6 @@
  #include <setjmp.h>
  
@@ -9,25 +9,7 @@ diff --color -urN 10.15/dlls/ntdll/signal_arm64.c b/dlls/ntdll/signal_arm64.c
  #include "windef.h"
  #include "winternl.h"
  #include "ddk/wdm.h"
-@@ -197,6 +196,17 @@
-                    "ret" )
- 
- 
-+/*******************************************************************
-+ *         nested_exception_handler
-+ */
-+EXCEPTION_DISPOSITION WINAPI nested_exception_handler( EXCEPTION_RECORD *rec, void *frame,
-+                                                       CONTEXT *context, void *dispatch )
-+{
-+    if (rec->ExceptionFlags & (EXCEPTION_UNWINDING | EXCEPTION_EXIT_UNWIND)) return ExceptionContinueSearch;
-+    return ExceptionNestedException;
-+}
-+
-+
- /**********************************************************************
-  *           call_seh_handlers
-  *
-@@ -601,6 +611,16 @@
+@@ -614,6 +613,16 @@
  }
  
  
@@ -44,7 +26,7 @@ diff --color -urN 10.15/dlls/ntdll/signal_arm64.c b/dlls/ntdll/signal_arm64.c
  /***********************************************************************
   *           RtlIsProcessorFeaturePresent [NTDLL.@]
   */
-@@ -640,8 +660,22 @@
+@@ -653,8 +662,22 @@
          (1ull << PF_ARM_SVE_F64MM_INSTRUCTIONS_AVAILABLE) |
          (1ull << PF_ARM_LSE2_AVAILABLE);
  
@@ -69,7 +51,7 @@ diff --color -urN 10.15/dlls/ntdll/signal_arm64.c b/dlls/ntdll/signal_arm64.c
  }
  
  /***********************************************************************
-@@ -649,14 +683,56 @@
+@@ -662,14 +685,56 @@
   */
  NTSTATUS WINAPI RtlWow64SuspendThread( HANDLE thread, ULONG *count )
  {
@@ -131,4 +113,3 @@ diff --color -urN 10.15/dlls/ntdll/signal_arm64.c b/dlls/ntdll/signal_arm64.c
      }
  
      return pWow64SuspendLocalThread( thread, count );
-
