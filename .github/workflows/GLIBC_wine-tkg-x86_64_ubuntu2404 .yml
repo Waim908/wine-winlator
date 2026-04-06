@@ -69,7 +69,6 @@ jobs:
           sudo bash wine-winlator/mount.sh umount ubuntu2404 || exit 1
           sudo chmod 644 ubuntu2404/tmp/output-wcp/*.wcp
           sudo chmod 644 /tmp/ccache.tar.xz
-          sudo chmod 644 ubuntu2404/tmp/output-wcp/*.wcp
 
       - name: Save ccache
         uses: actions/cache/save@v5

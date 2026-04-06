@@ -1,3 +1,4 @@
+export DEBIAN_FRONTEND=noninteractive
 if [[ -f /tmp/wineVer.conf ]]; then
   source /tmp/wineVer.conf
   echo "wineVer: $wineVer"
@@ -8,15 +9,15 @@ fi
 apt clean
 chmod 777 /tmp
 apt update
-yes | apt install build-essential locales git patch xz-utils sudo ccache zstd || exit 1
+apt install -y patch xz-utils sudo ccache zstd || exit 1
 echo "en_US.UTF-8 UTF-8" >> /etc/locale.gen
 locale-gen
 export LC_ALL=en_US.UTF-8
 
 export ENABLE_PROTON_MF=1
-bash -x /tmp/wine-winlator/set-tkg-cfg.sh wine-$wineVer /tmp/wine-tkg-git/wine-tkg-git/
+bash -x /tmp/wine-winlator/set-tkg-cfg.sh wine-$wineVer /tmp/wine-tkg-git/wine-tkg-git/ || exit 1
 
-bash +x /tmp/wine-winlator/add_patch.sh wine-glibc $wineVer /tmp/wine-tkg-git/wine-tkg-git/wine-tkg-userpatches/
+bash +x /tmp/wine-winlator/add_patch.sh wine-glibc $wineVer /tmp/wine-tkg-git/wine-tkg-git/wine-tkg-userpatches/ || exit 1
 
 echo "正在构建Wine-TKG..."
 cd /tmp/wine-tkg-git/wine-tkg-git/
