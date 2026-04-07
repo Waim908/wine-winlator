@@ -110,3 +110,7 @@ A：可以在设置里切换为跟手模式/触屏模式（不同修改版叫法
 Q: Winlator Glibc真的实现了标准posix shm吗？为什么ESYNC能直接用？
 
 A: 尽管longjunyu开源的wine中定义了两种函数调用，普通文件系列（unlink open）与shm系列（shm_unlink shm_open），但是问题来了，如果真的实现了那么esync文件理论上不应该出现在tmp/，而是直接到/dev/shm（安卓不存在） ->  /dev/ashmem（安卓共享内存，但是实际上目前只实现到sysvshm标准而非posix标准）
+
+Q: 我无法在winlator 7.1.5 启动此仓库发布的新版wine？
+
+A: 你可以直接在box64官方仓库的工作流下载到最新的box64 wcp文件，安装后就能直接启动了。
