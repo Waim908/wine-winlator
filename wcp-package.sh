@@ -9,7 +9,7 @@ if [[ -z $customDescription ]]; then
 cat > '/tmp/output-wcp/tmp/profile.json' << EOF
 {
   "type": "Wine",
-  "versionName": "${wineVer}-${isArm64ec:-custom}",
+  "versionName": "${wineVer}-wce-${isArm64ec:-amd64}",
   "versionCode": 1,
   "description": "${wineVer}-tkg-stg-ge${isArm64ec}. Built form [https://github.com/Waim908/wine-winlator]",
   "files": [],
@@ -126,6 +126,10 @@ tar -I 'xz -T$(nproc) -9e' -cvf /tmp/output-wcp/tmp/prefixPack.txz .wine
 cp -r -p $wineRoot/bin /tmp/output-wcp/tmp/
 cp -r -p $wineRoot/lib /tmp/output-wcp/tmp/
 cp -r -p $wineRoot/share /tmp/output-wcp/tmp/
+
+cd /tmp/output-wcp/tmp/lib
+find . -name "*.a" -type f -exec rm -v {} +
+
 cd /tmp/output-wcp/tmp/
 if [[ ! $doNotFixLibrary == 1 ]] &&  [[ ! -z $isArm64ec ]]; then
   command -v patchelf  || { echo "patchelf未安装" && exit 1;}
