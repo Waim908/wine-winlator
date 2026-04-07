@@ -28,9 +28,6 @@ Glibc 7.1.x
 
 **此版本只能在glibc环境的winlator运行！此仓库不负责编译bionic分支的版本！请勿用于bionic分支！**
 
-由于hangover采用滚动更新机制，这意味着对于老版本的wine无法保证百分百兼容性。
-
-如果可能，对于老版本的维护尽可能采用更新的arm64ec补丁。
 
 # 鸣谢
 
@@ -58,7 +55,7 @@ Glibc 7.1.x
 
 ### step2
 
-cd 到源码目录
+```cd /path/to/wine-src```
 
 ###  step3
 
@@ -76,7 +73,7 @@ cd 到源码目录
 
 ```cd ..```
 
-```source /path/to/compile.conf arm64ec```
+```source /path/to/compile.conf arm64```
 
 ```bash
 ./configure --prefix=/tmp/wine_build \
