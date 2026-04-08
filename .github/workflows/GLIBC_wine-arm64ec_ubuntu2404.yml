@@ -10,7 +10,7 @@ on:
       sourceURL:
         description: "Wine Source URL"
         required: false
-        default: "https://github.com/Waim908/wine-tkg-git-src.git"
+        default: ""
       llvmURL:
         description: "llvm mingw pack"
         required: false
@@ -53,7 +53,7 @@ jobs:
           git clone --depth=1 https://github.com/Waim908/wine-winlator.git || exit 1
 
           wineSourceURL=${{ github.event.inputs.sourceURL }}
-          [[ -z $wineSourceURL ]] && wineSourceURL="https://github.com/wine-mirror/wine.git"
+          [[ -z $wineSourceURL ]] && exit 1
 
           if [[ ! -z ${{ github.event.inputs.targetBranch }} ]]; then
             git clone --depth=1  -b ${{ github.event.inputs.targetBranch }} $wineSourceURL wine-src || exit 1
@@ -127,15 +127,16 @@ jobs:
           7z x build_arm64ec_wine.zip && rm -rf *.zip
           tar xvf *.tar.xz && rm -rf *.tar.xz
           aria2c https://raw.githubusercontent.com/Waim908/wine-winlator/main/wcp-package.sh || exit 1
-          customDescription="Tag: ${wineVer}-${wineTag}-tkg-arm64ec; Built form [https://github.com/Waim908/wine-winlator]" customWcpName=wine-${{ needs.build_wine.outputs.wineVer }}-arm64ec doNotCleanStaticLibrary=1 doNotFixLibrary=1 isArm64ec=1 bash -x wcp-package.sh /tmp/wine_build $wineVer || exit 1
+          customDescription="${wineVer}-${wineTag}-arm64ec; Built form [https://github.com/Waim908/wine-winlator]" customWcpName=wine-${{ needs.build_wine.outputs.wineVer }}-arm64ec doNotCleanStaticLibrary=1 doNotFixLibrary=1 isArm64ec=1 bash -x wcp-package.sh /tmp/wine_build $wineVer || exit 1
           chmod 644 /tmp/output-wcp/*.wcp
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: ${{ needs.build_wine.outputs.wineVer }}-${{ github.event.inputs.customTag }}-tkg-arm64ec
-          name: Wine ${{ needs.build_wine.outputs.wineVer }} Arm64ec TkG Staging GE for Winlator Glibc (${{ github.event.inputs.customTag }})
+          name: Wine ${{ needs.build_wine.outputs.wineVer }} Arm64ec for Winlator Glibc (${{ github.event.inputs.customTag }})
           body: |
             自动编译版本。
             移植Proton MF

@@ -7,6 +7,9 @@ apt update
 apt install -y patch xz-utils || exit 1
 
 cd /tmp/wine-src
+
+echo "Patch Ver=> $1"
+
 bash /tmp/wine-winlator/apply_patch.sh wine-glibc-arm64ec $1 /tmp/wine-src || exit 1
 source /tmp/wine-winlator/compile.conf amd64
 mkdir amd64

@@ -24,7 +24,7 @@ else
 cat > '/tmp/output-wcp/tmp/profile.json' << EOF
 {
   "type": "Wine",
-  "versionName": "${wineVer}-${isArm64ec:-custom}",
+  "versionName": "${wineVer}-wce-${isArm64ec:-amd64}",
   "versionCode": 1,
   "description": "${customDescription}",
   "files": [],
@@ -144,8 +144,8 @@ fi
 }
 create_json
 if [[ -z $customWcpName ]]; then
-  tar -I 'zstd -T$(nproc) --ultra -22' -cvf /tmp/output-wcp/wine-$wineVer${isArm64ec}.wcp .
+  tar -I 'zstd -T$(nproc) --ultra -22' -cvf /tmp/output-wcp/wine-$wineVer-wce${isArm64ec:-amd64}.wcp .
 else
   tar -I 'zstd -T$(nproc) --ultra -22' -cvf /tmp/output-wcp/$customWcpName.wcp bin/ .
 fi
-echo "Output=> /tmp/output-wcp/wine-$wineVer${isArm64ec}.wcp"
+echo "Output=> /tmp/output-wcp/wine-*.wcp"
