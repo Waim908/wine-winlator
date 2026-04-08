@@ -10,7 +10,7 @@ on:
       sourceURL:
         description: "Wine Source URL"
         required: false
-        default: ""
+        default: "https://github.com/AndreRH/wine.git"
       llvmURL:
         description: "llvm mingw pack"
         required: false
@@ -18,7 +18,7 @@ on:
       targetBranch:
         description: "Wine Target Branch"
         required: false
-        default: "wine-10.15-hangover"
+        default: "hangover-10.14"
       targetImagefs:
         description: "Fake Imagefs Environment, Download Package URL"
         required: false
@@ -62,7 +62,8 @@ jobs:
           fi
 
           cd wine-src
-          wineVer=$(echo ${{ github.event.inputs.targetBranch }} | sed 's/wine-//' | sed 's/-hangover//')
+          wineVer=$(echo ${{ github.event.inputs.targetBranch }} | cut -d'-' -f2)
+          [[ -z $wineVer ]] && exit 1
           echo "wineVer=$wineVer" >> $GITHUB_OUTPUT
           cd ..
           # aria2c -s16 -x16 https://github.com/Waim908/BCC/releases/download/wine-bcc-latest/wine-bcc.tar.xz || exit 1
