@@ -4,9 +4,9 @@ sed2() {
   local value="$2"
 
   if [[ -f "$file_path2" ]]; then
-    sed -i "s|^${key}=\"[^\"]*\"|${key}=\"${value}\"|" "$file" || exit 1
+    sed -i "s|^${key}=\"[^\"]*\"|${key}=\"${value}\"|" "$file_path2" || exit 1
   else
-    echo "File not found: $file"
+    echo "File not found: $file_path2"
     exit 1
   fi
 }
