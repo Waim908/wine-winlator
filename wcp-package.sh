@@ -9,9 +9,9 @@ if [[ -z $customDescription ]]; then
 cat > '/tmp/output-wcp/tmp/profile.json' << EOF
 {
   "type": "Wine",
-  "versionName": "${wineVer}-wce-${isArm64ec:-amd64}",
+  "versionName": "${wineVer}-${isArm64ec:-amd64}",
   "versionCode": 1,
-  "description": "${wineVer}-tkg-stg-ge${isArm64ec}. Built form [https://github.com/Waim908/wine-winlator]",
+  "description": "${wineVer}-${isArm64ec:-amd64}. Built form [https://github.com/Waim908/wine-winlator]",
   "files": [],
   "wine": {
           "binPath": "bin",
@@ -24,7 +24,7 @@ else
 cat > '/tmp/output-wcp/tmp/profile.json' << EOF
 {
   "type": "Wine",
-  "versionName": "${wineVer}-wce-${isArm64ec:-amd64}",
+  "versionName": "${wineVer}-${isArm64ec:-amd64}",
   "versionCode": 1,
   "description": "${customDescription}",
   "files": [],
@@ -144,8 +144,8 @@ fi
 }
 create_json
 if [[ -z $customWcpName ]]; then
-  tar -I 'zstd -T$(nproc) --ultra -22' -cvf /tmp/output-wcp/wine-$wineVer-wce${isArm64ec:-amd64}.wcp .
+  tar -I 'zstd -T$(nproc) --ultra -22' -cvf /tmp/output-wcp/wine-$wineVer${isArm64ec:-amd64}.wcp .
 else
   tar -I 'zstd -T$(nproc) --ultra -22' -cvf /tmp/output-wcp/$customWcpName.wcp bin/ .
 fi
-echo "Output=> /tmp/output-wcp/wine-*.wcp"
+echo "Output=> /tmp/output-wcp/*.wcp"
