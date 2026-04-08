@@ -144,7 +144,7 @@ fi
 }
 create_json
 if [[ -z $customWcpName ]]; then
-  tar -I 'zstd -T$(nproc) --ultra -22' -cvf /tmp/output-wcp/wine-$wineVer${isArm64ec:-amd64}.wcp .
+  tar -I 'zstd -T$(nproc) --ultra -22' -cvf /tmp/output-wcp/wine-$wineVer${isArm64ec:--amd64}.wcp .
 else
   tar -I 'zstd -T$(nproc) --ultra -22' -cvf /tmp/output-wcp/$customWcpName.wcp bin/ .
 fi
