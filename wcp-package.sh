@@ -99,6 +99,7 @@ else
         box64 $winePath/wine reg delete "HKEY_CURRENT_USER\Control Panel\Desktop\WindowMetrics" /f || exit 1
         sleep 3
     else
+        [[ $isArm64ec == "arm64ec" ]] && export HODLL="libwow64fex.dll"
         $winePath/wineboot || exit 1
         sleep 3
         echo "Delete Registry Key: HKEY_CURRENT_USER\Control Panel\Desktop\WindowMetrics"
@@ -114,7 +115,12 @@ else
 fi
 
 [[ $doNotCreateTXT == 1 ]] || {
-    cat > '/data/data/com.winlator/files/imagefs/home/xuser/.wine/drive_c/ProgramData/Microsoft/Windows/Start Menu/TkG-version.txt' << EOF
+  if [[ $isArm64ec == arm64ec ]]; then
+    txtFileName="Arm64ec-version.txt"
+  else
+    txtFileName="TkG-version.txt"
+  fi
+    cat > '/data/data/com.winlator/files/imagefs/home/xuser/.wine/drive_c/ProgramData/Microsoft/Windows/Start Menu/${txtFileName}' << EOF
 Version: $wine_version
 Others: More staging settings in winecfg
 [Waim908/wine-winlator](https://github.com/Waim908/wine-winlator)
@@ -162,7 +168,7 @@ create_json
 if [[ -z $customWcpName ]]; then
     tar -I 'zstd -T$(nproc) --ultra -22' -cvf /tmp/output-wcp/wine-$wineVer-${isArm64ec}.wcp .
 else
-    tar -I 'zstd -T$(nproc) --ultra -22' -cvf /tmp/output-wcp/$customWcpName.wcp bin/ .
+    tar -I 'zstd -T$(nproc) --ultra -22' -cvf /tmp/output-wcp/$customWcpName.wcp .
 fi
 
 echo "Output=> /tmp/output-wcp/*.wcp"

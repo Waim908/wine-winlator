@@ -32,6 +32,8 @@ Glibc 7.1.x
 
 **此版本只能在glibc环境的winlator运行！此仓库不负责编译bionic分支的版本！请勿用于bionic分支！**
 
+同时内置的fex dll可能无法保证兼容性或者最新，仅适合测试和prefix生成
+
 
 <a id ="howToBuildArm64ec"></a>
 
@@ -115,3 +117,5 @@ A: 你可以直接在box64官方仓库的工作流下载到最新的box64 wcp文
  - [AndreRH/wine](https://github.com/AndreRH/wine)
 
  - [Waim908/wine-termux](https://github.com/Waim908/wine-termux)
+
+ - [FEX-Emu/FEX](https://github.com/FEX-Emu/FEX)
