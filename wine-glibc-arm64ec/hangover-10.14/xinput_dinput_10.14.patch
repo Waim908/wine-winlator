@@ -1,6 +1,6 @@
 diff --color -urN hangover-10.14/dlls/dinput/dinput.c b/dlls/dinput/dinput.c
 --- hangover-10.14/dlls/dinput/dinput.c	2026-04-08 19:58:27.566616601 +0800
-+++ b/dlls/dinput/dinput.c	2026-04-08 21:44:11.106107420 +0800
++++ b/dlls/dinput/dinput.c	2026-04-09 18:40:53.622326285 +0800
 @@ -282,6 +282,7 @@
  
      if (IsEqualGUID( &GUID_SysKeyboard, guid )) hr = keyboard_create_device( impl, guid, &device );
@@ -21,7 +21,7 @@ diff --color -urN hangover-10.14/dlls/dinput/dinput.c b/dlls/dinput/dinput.c
      return DI_OK;
 diff --color -urN hangover-10.14/dlls/dinput/dinput_private.h b/dlls/dinput/dinput_private.h
 --- hangover-10.14/dlls/dinput/dinput_private.h	2026-04-08 19:58:27.566616601 +0800
-+++ b/dlls/dinput/dinput_private.h	2026-04-08 21:43:53.981022251 +0800
++++ b/dlls/dinput/dinput_private.h	2026-04-09 18:41:10.128808279 +0800
 @@ -56,6 +56,8 @@
  extern HRESULT keyboard_create_device( struct dinput *dinput, const GUID *guid, IDirectInputDevice8W **out );
  extern HRESULT hid_joystick_enum_device( DWORD type, DWORD flags, DIDEVICEINSTANCEW *instance, DWORD version, int index );
@@ -33,8 +33,20 @@ diff --color -urN hangover-10.14/dlls/dinput/dinput_private.h b/dlls/dinput/dinp
      GUID instance_guid;
 diff --color -urN hangover-10.14/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 --- hangover-10.14/dlls/xinput1_3/main.c	2026-04-08 19:58:28.718985316 +0800
-+++ b/dlls/xinput1_3/main.c	2026-04-08 21:48:00.304187274 +0800
-@@ -35,20 +35,44 @@
++++ b/dlls/xinput1_3/main.c	2026-04-09 18:46:37.368945299 +0800
+@@ -3,6 +3,7 @@
+  * Copyright 2008 Andrew Fenn
+  * Copyright 2018 Aric Stewart
+  * Copyright 2021 Rémi Bernon for CodeWeavers
++ * Copyright 2024 BrunoSX 
+  *
+  * This library is free software; you can redistribute it and/or
+  * modify it under the terms of the GNU Lesser General Public
+@@ -32,23 +33,40 @@
+ #include "wingdi.h"
+ #include "winnls.h"
+ #include "winternl.h"
++#include "winsock2.h"
  
  #include "dbt.h"
  #include "setupapi.h"
@@ -44,7 +56,6 @@ diff --color -urN hangover-10.14/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
  #include "initguid.h"
  #include "devguid.h"
  #include "xinput.h"
-+#include "winsock2.h"
  
  #include "wine/debug.h"
  
@@ -61,11 +72,6 @@ diff --color -urN hangover-10.14/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 +#define REQUEST_CODE_GET_GAMEPAD_STATE 9
 +#define REQUEST_CODE_RELEASE_GAMEPAD 10
 +
-+#define FLAG_DINPUT_MAPPER_STANDARD 0x01
-+#define FLAG_DINPUT_MAPPER_XINPUT 0x02
-+#define FLAG_INPUT_TYPE_XINPUT 0x04
-+#define FLAG_INPUT_TYPE_DINPUT 0x08
-+
 +#define IDX_BUTTON_A 0
 +#define IDX_BUTTON_B 1
 +#define IDX_BUTTON_X 2
@@ -79,12 +85,10 @@ diff --color -urN hangover-10.14/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 +#define IDX_BUTTON_L3 8
 +#define IDX_BUTTON_R3 9
 +
-+static char input_type = 0;
-+
  WINE_DEFAULT_DEBUG_CHANNEL(xinput);
  
  struct xinput_controller
-@@ -57,919 +81,475 @@
+@@ -57,732 +75,317 @@
      XINPUT_CAPABILITIES caps;
      XINPUT_STATE state;
      XINPUT_GAMEPAD last_keystroke;
@@ -122,7 +126,7 @@ diff --color -urN hangover-10.14/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 -static struct xinput_controller controllers[XUSER_MAX_COUNT];
 -static CRITICAL_SECTION_DEBUG controller_critsect_debug[XUSER_MAX_COUNT] =
 +static struct xinput_controller controller;
-+static CRITICAL_SECTION_DEBUG controller_critsect_debug =
++static CRITICAL_SECTION_DEBUG controller_critsect_debug = 
  {
 -    {
 -        0, 0, &controllers[0].crit,
@@ -150,7 +154,7 @@ diff --color -urN hangover-10.14/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
  };
  
 -static struct xinput_controller controllers[XUSER_MAX_COUNT] =
-+static struct xinput_controller controller =
++static struct xinput_controller controller = 
  {
 -    {{ &controller_critsect_debug[0], -1, 0, 0, 0, 0 }},
 -    {{ &controller_critsect_debug[1], -1, 0, 0, 0, 0 }},
@@ -170,39 +174,78 @@ diff --color -urN hangover-10.14/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 -static BOOL find_opened_device(const WCHAR *device_path, int *free_slot)
 -{
 -    int i;
-+static SOCKET server_sock = INVALID_SOCKET;
-+static BOOL winsock_loaded = FALSE;
-+static char xinput_min_index = 3;
- 
+-
 -    *free_slot = XUSER_MAX_COUNT;
 -    for (i = XUSER_MAX_COUNT; i > 0; i--)
 -    {
 -        if (!controllers[i - 1].device) *free_slot = i - 1;
 -        else if (!wcsicmp(device_path, controllers[i - 1].device_path)) return TRUE;
--    }
++static SOCKET server_sock = INVALID_SOCKET;
++static BOOL winsock_loaded = FALSE;
++static char xinput_min_index = 3;
++
++static void close_server_socket(void) 
++{
++    if (server_sock != INVALID_SOCKET) 
++    {
++        closesocket(server_sock);
++        server_sock = INVALID_SOCKET;
++    }
++    
++    if (winsock_loaded) 
++    {
++        WSACleanup();
++        winsock_loaded = FALSE;
+     }
 -    return FALSE;
--}
--
+ }
+ 
 -static void check_value_caps(struct xinput_controller *controller, USHORT usage, HIDP_VALUE_CAPS *caps)
-+static void close_server_socket(void)
- {
+-{
 -    switch (usage)
-+    if (server_sock != INVALID_SOCKET)
-     {
+-    {
 -    case HID_USAGE_GENERIC_X: controller->hid.lx_caps = *caps; break;
 -    case HID_USAGE_GENERIC_Y: controller->hid.ly_caps = *caps; break;
 -    case HID_USAGE_GENERIC_Z: controller->hid.lt_caps = *caps; break;
 -    case HID_USAGE_GENERIC_RX: controller->hid.rx_caps = *caps; break;
 -    case HID_USAGE_GENERIC_RY: controller->hid.ry_caps = *caps; break;
 -    case HID_USAGE_GENERIC_RZ: controller->hid.rt_caps = *caps; break;
-+        closesocket(server_sock);
-+        server_sock = INVALID_SOCKET;
-     }
--}
--
+-    }
++static BOOL create_server_socket(void)
++{    
++    WSADATA wsa_data;
++    struct sockaddr_in server_addr;
++    const UINT reuse_addr = 1;
++    ULONG non_blocking = 1;
++    int res;
++    
++    close_server_socket();
++    
++    winsock_loaded = WSAStartup(MAKEWORD(2,2), &wsa_data) == NO_ERROR;
++    if (!winsock_loaded) return FALSE;
++    
++    server_addr.sin_family = AF_INET;
++    server_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
++    server_addr.sin_port = htons(SERVER_PORT);
++    
++    server_sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
++    if (server_sock == INVALID_SOCKET) return FALSE;
++    
++    res = setsockopt(server_sock, SOL_SOCKET, SO_REUSEADDR, (const char *)&reuse_addr, sizeof(reuse_addr));
++    if (res == SOCKET_ERROR) return FALSE;
++    
++    ioctlsocket(server_sock, FIONBIO, &non_blocking);
++
++    res = bind(server_sock, (struct sockaddr*)&server_addr, sizeof(server_addr));
++    if (res == SOCKET_ERROR) return FALSE;
++    
++    return TRUE;
+ }
+ 
 -static void check_waveform_caps(struct xinput_controller *controller, HANDLE device, PHIDP_PREPARSED_DATA preparsed,
 -                                HIDP_LINK_COLLECTION_NODE *collections, HIDP_VALUE_CAPS *caps)
--{
++static void get_gamepad_request(void)
+ {
 -    USHORT count, report_len = controller->hid.caps.FeatureReportByteLength;
 -    char *report_buf = controller->hid.feature_report_buf;
 -    ULONG parent = caps->LinkCollection, waveform = 0;
@@ -213,7 +256,7 @@ diff --color -urN hangover-10.14/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 -    while (collections[parent].LinkUsagePage != HID_USAGE_PAGE_HAPTICS ||
 -           collections[parent].LinkUsage != HID_USAGE_HAPTICS_SIMPLE_CONTROLLER)
 -        if (!(parent = collections[parent].Parent)) break;
- 
+-
 -    if (collections[parent].LinkUsagePage != HID_USAGE_PAGE_HAPTICS ||
 -        collections[parent].LinkUsage != HID_USAGE_HAPTICS_SIMPLE_CONTROLLER)
 -    {
@@ -250,19 +293,40 @@ diff --color -urN hangover-10.14/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 -        controller->hid.haptics_rumble_caps = value_caps;
 -    }
 -    else if (waveform == HID_USAGE_HAPTICS_WAVEFORM_BUZZ)
-+    if (winsock_loaded)
-     {
+-    {
 -        TRACE("Found buzz caps, report %u collection %u\n", value_caps.ReportID, value_caps.LinkCollection);
 -        controller->hid.haptics_report = value_caps.ReportID;
 -        controller->hid.haptics_buzz_caps = value_caps;
-+        WSACleanup();
-+        winsock_loaded = FALSE;
-     }
+-    }
 -    else FIXME("Unsupported waveform type %#lx\n", waveform);
++    char buffer[BUFFER_SIZE];
++    struct sockaddr_in client_addr;
++    
++    client_addr.sin_family = AF_INET;
++    client_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
++    client_addr.sin_port = htons(CLIENT_PORT);
++    
++    buffer[0] = REQUEST_CODE_GET_GAMEPAD;
++    buffer[1] = 1;
++    buffer[2] = 1;
++    sendto(server_sock, buffer, BUFFER_SIZE, 0, (struct sockaddr*)&client_addr, sizeof(client_addr));
++}
++
++static void release_gamepad_request(void)
++{
++    char buffer[BUFFER_SIZE];
++    struct sockaddr_in client_addr;
++    
++    client_addr.sin_family = AF_INET;
++    client_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
++    client_addr.sin_port = htons(CLIENT_PORT);
++    
++    buffer[0] = REQUEST_CODE_RELEASE_GAMEPAD;
++    sendto(server_sock, buffer, BUFFER_SIZE, 0, (struct sockaddr*)&client_addr, sizeof(client_addr));
  }
  
 -static BOOL controller_check_caps(struct xinput_controller *controller, HANDLE device, PHIDP_PREPARSED_DATA preparsed)
-+static BOOL create_server_socket(void)
++static BOOL controller_check_caps(void)
  {
 -    USHORT caps_count = 0, waveform_caps_count = 0;
 -    XINPUT_CAPABILITIES *caps = &controller->caps;
@@ -273,16 +337,11 @@ diff --color -urN hangover-10.14/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 -    HIDP_VALUE_CAPS *value_caps;
 -    int i, u, button_count = 0;
 -    NTSTATUS status;
-+    WSADATA wsa_data;
-+    struct sockaddr_in server_addr;
-+    const UINT reuse_addr = 1;
-+    ULONG non_blocking = 1;
-+    int res;
- 
+-
 -    /* Count buttons */
--    memset(caps, 0, sizeof(XINPUT_CAPABILITIES));
-+    close_server_socket();
- 
++    XINPUT_CAPABILITIES *caps = &controller.caps;
+     memset(caps, 0, sizeof(XINPUT_CAPABILITIES));
+-
 -    if (!(button_caps = malloc(sizeof(*button_caps) * controller->hid.caps.NumberInputButtonCaps))) return FALSE;
 -    status = HidP_GetButtonCaps(HidP_Input, button_caps, &controller->hid.caps.NumberInputButtonCaps, preparsed);
 -    if (status != HIDP_STATUS_SUCCESS) WARN("HidP_GetButtonCaps returned %#lx\n", status);
@@ -298,10 +357,9 @@ diff --color -urN hangover-10.14/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 -    free(button_caps);
 -    if (button_count < 11)
 -        WARN("Too few buttons, continuing anyway\n");
--    caps->Gamepad.wButtons = 0xffff;
-+    winsock_loaded = WSAStartup(MAKEWORD(2,2), &wsa_data) == NO_ERROR;
-+    if (!winsock_loaded) return FALSE;
- 
++    
+     caps->Gamepad.wButtons = 0xffff;
+-
 -    if (!(value_caps = malloc(sizeof(*value_caps) * controller->hid.caps.NumberInputValueCaps))) return FALSE;
 -    status = HidP_GetValueCaps(HidP_Input, value_caps, &controller->hid.caps.NumberInputValueCaps, preparsed);
 -    if (status != HIDP_STATUS_SUCCESS) WARN("HidP_GetValueCaps returned %#lx\n", status);
@@ -313,10 +371,7 @@ diff --color -urN hangover-10.14/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 -        else for (u = caps->Range.UsageMin; u <=caps->Range.UsageMax; u++) check_value_caps(controller, u, value_caps + i);
 -    }
 -    free(value_caps);
-+    server_addr.sin_family = AF_INET;
-+    server_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
-+    server_addr.sin_port = htons(SERVER_PORT);
- 
+-
 -    if (!controller->hid.lt_caps.UsagePage) WARN("Missing axis LeftTrigger\n");
 -    else caps->Gamepad.bLeftTrigger = (1u << (sizeof(caps->Gamepad.bLeftTrigger) + 1)) - 1;
 -    if (!controller->hid.rt_caps.UsagePage) WARN("Missing axis RightTrigger\n");
@@ -329,13 +384,15 @@ diff --color -urN hangover-10.14/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 -    else caps->Gamepad.sThumbRX = (1u << (sizeof(caps->Gamepad.sThumbRX) + 1)) - 1;
 -    if (!controller->hid.ry_caps.UsagePage) WARN("Missing axis ThumbRY\n");
 -    else caps->Gamepad.sThumbRY = (1u << (sizeof(caps->Gamepad.sThumbRY) + 1)) - 1;
-+    server_sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-+    if (server_sock == INVALID_SOCKET) return FALSE;
++    caps->Gamepad.bLeftTrigger = (1u << (sizeof(caps->Gamepad.bLeftTrigger) + 1)) - 1;
++    caps->Gamepad.bRightTrigger = (1u << (sizeof(caps->Gamepad.bRightTrigger) + 1)) - 1;
++    caps->Gamepad.sThumbLX = (1u << (sizeof(caps->Gamepad.sThumbLX) + 1)) - 1;
++    caps->Gamepad.sThumbLY = (1u << (sizeof(caps->Gamepad.sThumbLY) + 1)) - 1;
++    caps->Gamepad.sThumbRX = (1u << (sizeof(caps->Gamepad.sThumbRX) + 1)) - 1;
++    caps->Gamepad.sThumbRY = (1u << (sizeof(caps->Gamepad.sThumbRY) + 1)) - 1;
  
--    caps->Type = XINPUT_DEVTYPE_GAMEPAD;
--    caps->SubType = XINPUT_DEVSUBTYPE_GAMEPAD;
-+    res = setsockopt(server_sock, SOL_SOCKET, SO_REUSEADDR, (const char *)&reuse_addr, sizeof(reuse_addr));
-+    if (res == SOCKET_ERROR) return FALSE;
+     caps->Type = XINPUT_DEVTYPE_GAMEPAD;
+     caps->SubType = XINPUT_DEVSUBTYPE_GAMEPAD;
  
 -    collections_count = controller->hid.caps.NumberLinkCollectionNodes;
 -    if (!(collections = malloc(sizeof(*collections) * controller->hid.caps.NumberLinkCollectionNodes))) return FALSE;
@@ -354,8 +411,7 @@ diff --color -urN hangover-10.14/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 -    }
 -    for (i = 0; i < waveform_caps_count; ++i) check_waveform_caps(controller, device, preparsed, collections, waveform_caps + i);
 -    free(collections);
-+    ioctlsocket(server_sock, FIONBIO, &non_blocking);
- 
+-
 -    if (controller->hid.haptics_rumble_caps.UsagePage ||
 -        controller->hid.haptics_buzz_caps.UsagePage)
 -    {
@@ -363,9 +419,7 @@ diff --color -urN hangover-10.14/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 -        caps->Vibration.wLeftMotorSpeed = 255;
 -        caps->Vibration.wRightMotorSpeed = 255;
 -    }
-+    res = bind(server_sock, (struct sockaddr*)&server_addr, sizeof(server_addr));
-+    if (res == SOCKET_ERROR) return FALSE;
- 
+-
      return TRUE;
  }
  
@@ -431,32 +485,21 @@ diff --color -urN hangover-10.14/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 -}
 -
 -static void controller_disable(struct xinput_controller *controller)
-+static void get_gamepad_request(void)
- {
+-{
 -    XINPUT_VIBRATION state = {0};
-+    char buffer[BUFFER_SIZE];
-+    struct sockaddr_in client_addr;
- 
+-
 -    if (!controller->enabled) return;
 -    if (controller->caps.Flags & XINPUT_CAPS_FFB_SUPPORTED) HID_set_state(controller, &state);
 -    controller->enabled = FALSE;
-+    client_addr.sin_family = AF_INET;
-+    client_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
-+    client_addr.sin_port = htons(CLIENT_PORT);
- 
+-
 -    CancelIoEx(controller->device, &controller->hid.read_ovl);
 -    WaitForSingleObject(controller->hid.read_ovl.hEvent, INFINITE);
 -    SetEvent(update_event);
-+    buffer[0] = REQUEST_CODE_GET_GAMEPAD;
-+    buffer[1] = 1;
-+    buffer[2] = 1;
-+    sendto(server_sock, buffer, BUFFER_SIZE, 0, (struct sockaddr*)&client_addr, sizeof(client_addr));
- }
- 
+-}
+-
 -static BOOL controller_init(struct xinput_controller *controller, PHIDP_PREPARSED_DATA preparsed,
 -                            HIDP_CAPS *caps, HANDLE device, const WCHAR *device_path)
-+static void release_gamepad_request(void)
- {
+-{
 -    HANDLE event = NULL;
 -
 -    controller->hid.caps = *caps;
@@ -500,15 +543,47 @@ diff --color -urN hangover-10.14/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 -    *appkey = 0;
 -    if (RegOpenKeyW(HKEY_CURRENT_USER, L"Software\\Wine\\DirectInput\\Joysticks", defkey))
 -        *defkey = 0;
-+    char buffer[BUFFER_SIZE];
-+    struct sockaddr_in client_addr;
- 
+-
 -    if (!(len = GetModuleFileNameW(0, buffer, MAX_PATH)) || len >= MAX_PATH)
--        return;
-+    client_addr.sin_family = AF_INET;
-+    client_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
-+    client_addr.sin_port = htons(CLIENT_PORT);
- 
++static void controller_destroy(void)
++{   
++    EnterCriticalSection(&controller.crit);
++    thread_running = FALSE;
++    release_gamepad_request();
++    xinput_min_index = 3;
++    
++    controller.enabled = FALSE;
++    controller.connected = FALSE;
++    
++    close_server_socket();
++    LeaveCriticalSection(&controller.crit);
++}
++
++static void controller_init(void)
++{
++    memset(&controller.state, 0, sizeof(controller.state));
++    controller_check_caps();
++    controller.connected = TRUE;
++    controller.enabled = TRUE;
++}
++
++static void controller_update_state(char *buffer)
++{
++    int i, gamepad_id;
++    char dpad;
++    short buttons, thumb_lx, thumb_ly, thumb_rx, thumb_ry;
++    XINPUT_STATE *state = &controller.state;
++    
++    EnterCriticalSection(&controller.crit);
++    
++    gamepad_id = *(int*)(buffer + 2);
++    if (buffer[1] != 1 || gamepad_id != controller.id) 
++    {
++        controller.connected = FALSE;
++        memset(&controller.state, 0, sizeof(controller.state));
++        LeaveCriticalSection(&controller.crit);
+         return;
+-
 -    if (!RegOpenKeyW(HKEY_CURRENT_USER, L"Software\\Wine\\AppDefaults", &hkey))
 -    {
 -        if ((tmp = wcsrchr(name, '/'))) name = tmp + 1;
@@ -516,14 +591,11 @@ diff --color -urN hangover-10.14/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 -        wcscat(name, L"\\DirectInput\\Joysticks");
 -        if (RegOpenKeyW(hkey, name, appkey)) *appkey = 0;
 -        RegCloseKey(hkey);
--    }
-+    buffer[0] = REQUEST_CODE_RELEASE_GAMEPAD;
-+    sendto(server_sock, buffer, BUFFER_SIZE, 0, (struct sockaddr*)&client_addr, sizeof(client_addr));
- }
- 
+     }
+-}
+-
 -static BOOL device_is_overridden(HANDLE device)
-+static BOOL controller_check_caps(void)
- {
+-{
 -    WCHAR name[MAX_PATH], buffer[MAX_PATH];
 -    DWORD size = sizeof(buffer);
 -    BOOL disable = FALSE;
@@ -553,19 +625,10 @@ diff --color -urN hangover-10.14/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 -    NTSTATUS status;
 -    HANDLE device;
 -    int i;
-+    XINPUT_CAPABILITIES *caps = &controller.caps;
-+    memset(caps, 0, sizeof(XINPUT_CAPABILITIES));
- 
+-
 -    if (find_opened_device(device_path, &i)) return TRUE; /* already opened */
 -    if (i == XUSER_MAX_COUNT) return FALSE; /* no more slots */
-+    caps->Gamepad.wButtons = 0xffff;
-+    caps->Gamepad.bLeftTrigger = (1u << (sizeof(caps->Gamepad.bLeftTrigger) + 1)) - 1;
-+    caps->Gamepad.bRightTrigger = (1u << (sizeof(caps->Gamepad.bRightTrigger) + 1)) - 1;
-+    caps->Gamepad.sThumbLX = (1u << (sizeof(caps->Gamepad.sThumbLX) + 1)) - 1;
-+    caps->Gamepad.sThumbLY = (1u << (sizeof(caps->Gamepad.sThumbLY) + 1)) - 1;
-+    caps->Gamepad.sThumbRX = (1u << (sizeof(caps->Gamepad.sThumbRX) + 1)) - 1;
-+    caps->Gamepad.sThumbRY = (1u << (sizeof(caps->Gamepad.sThumbRY) + 1)) - 1;
- 
+-
 -    device = CreateFileW(device_path, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE,
 -                         NULL, OPEN_EXISTING, FILE_FLAG_OVERLAPPED | FILE_FLAG_NO_BUFFERING, NULL);
 -    if (device == INVALID_HANDLE_VALUE) return TRUE;
@@ -586,14 +649,12 @@ diff --color -urN hangover-10.14/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 -        WARN("ignoring HID device, failed to initialize\n");
 -    else
 -        return TRUE;
-+    caps->Type = XINPUT_DEVTYPE_GAMEPAD;
-+    caps->SubType = XINPUT_DEVSUBTYPE_GAMEPAD;
- 
+-
 -    CloseHandle(device);
 -    HidD_FreePreparsedData(preparsed);
-     return TRUE;
- }
- 
+-    return TRUE;
+-}
+-
 -static void try_remove_device(const WCHAR *device_path)
 -{
 -    int i;
@@ -603,8 +664,7 @@ diff --color -urN hangover-10.14/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 -}
 -
 -static void update_controller_list(void)
-+static void controller_destroy(void)
- {
+-{
 -    char buffer[sizeof(SP_DEVICE_INTERFACE_DETAIL_DATA_W) + MAX_PATH * sizeof(WCHAR)];
 -    SP_DEVICE_INTERFACE_DETAIL_DATA_W *detail = (SP_DEVICE_INTERFACE_DETAIL_DATA_W *)buffer;
 -    SP_DEVICE_INTERFACE_DATA iface = {sizeof(iface)};
@@ -613,16 +673,10 @@ diff --color -urN hangover-10.14/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 -    GUID guid;
 -
 -    guid = GUID_DEVINTERFACE_WINEXINPUT;
-+    EnterCriticalSection(&controller.crit);
-+    thread_running = FALSE;
-+    release_gamepad_request();
-+    xinput_min_index = 3;
- 
+-
 -    set = SetupDiGetClassDevsW(&guid, NULL, NULL, DIGCF_DEVICEINTERFACE | DIGCF_PRESENT);
 -    detail->cbSize = sizeof(*detail);
-+    controller.enabled = FALSE;
-+    controller.connected = FALSE;
- 
+-
 -    idx = 0;
 -    while (SetupDiEnumDeviceInterfaces(set, NULL, &guid, idx++, &iface))
 -    {
@@ -633,13 +687,10 @@ diff --color -urN hangover-10.14/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 -    }
 -
 -    SetupDiDestroyDeviceInfoList(set);
-+    close_server_socket();
-+    LeaveCriticalSection(&controller.crit);
- }
- 
+-}
+-
 -static void controller_destroy(struct xinput_controller *controller, BOOL already_removed)
-+static void controller_init(void)
- {
+-{
 -    EnterCriticalSection(&controller->crit);
 -
 -    if (controller->device)
@@ -656,24 +707,15 @@ diff --color -urN hangover-10.14/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 -    }
 -
 -    LeaveCriticalSection(&controller->crit);
-+    memset(&controller.state, 0, sizeof(controller.state));
-+    controller_check_caps();
-+    controller.connected = TRUE;
-+    controller.enabled = TRUE;
- }
- 
+-}
+-
 -static LONG sign_extend(ULONG value, const HIDP_VALUE_CAPS *caps)
-+static void controller_update_state(char *buffer)
- {
+-{
 -    UINT sign = 1 << (caps->BitSize - 1);
 -    if (sign <= 1 || caps->LogicalMin >= 0) return value;
 -    return value - ((value & sign) << 1);
 -}
-+    int i, gamepad_id;
-+    char dpad;
-+    short buttons, thumb_lx, thumb_ly, thumb_rx, thumb_ry;
-+    XINPUT_STATE *state = &controller.state;
- 
+-
 -static LONG scale_value(ULONG value, const HIDP_VALUE_CAPS *caps, LONG min, LONG max)
 -{
 -    LONG tmp = sign_extend(value, caps);
@@ -681,8 +723,7 @@ diff --color -urN hangover-10.14/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 -    if (caps->LogicalMin > tmp || caps->LogicalMax < tmp) return 0;
 -    return min + MulDiv(tmp - caps->LogicalMin, max - min, caps->LogicalMax - caps->LogicalMin);
 -}
-+    EnterCriticalSection(&controller.crit);
- 
+-
 -static void read_controller_state(struct xinput_controller *controller)
 -{
 -    ULONG read_len, report_len = controller->hid.caps.InputReportByteLength;
@@ -694,26 +735,15 @@ diff --color -urN hangover-10.14/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 -    BOOL ret;
 -
 -    if (!GetOverlappedResult(controller->device, &controller->hid.read_ovl, &read_len, TRUE))
-+    gamepad_id = *(int*)(buffer + 2);
-+    if (buffer[1] != 1 || gamepad_id != controller.id)
-     {
+-    {
 -        if (GetLastError() == ERROR_OPERATION_ABORTED) return;
 -        if (GetLastError() == ERROR_ACCESS_DENIED || GetLastError() == ERROR_INVALID_HANDLE) controller_destroy(controller, TRUE);
 -        else ERR("Failed to read input report, GetOverlappedResult failed with error %lu\n", GetLastError());
-+        controller.connected = FALSE;
-+        memset(&controller.state, 0, sizeof(controller.state));
-+        LeaveCriticalSection(&controller.crit);
-         return;
-     }
- 
--    button_length = ARRAY_SIZE(buttons);
--    status = HidP_GetUsages(HidP_Input, HID_USAGE_PAGE_BUTTON, 0, buttons, &button_length, controller->hid.preparsed, report_buf, report_len);
--    if (status != HIDP_STATUS_SUCCESS) WARN("HidP_GetUsages HID_USAGE_PAGE_BUTTON returned %#lx\n", status);
-+    buttons = *(short*)(buffer + 6);
+-        return;
++    
++    buttons = *(short*)(buffer + 6);    
 +    dpad = buffer[8];
- 
--    state.Gamepad.wButtons = 0;
--    for (i = 0; i < button_length; i++)
++    
 +    thumb_lx = *(short*)(buffer + 9);
 +    thumb_ly = *(short*)(buffer + 11);
 +    thumb_rx = *(short*)(buffer + 13);
@@ -721,19 +751,7 @@ diff --color -urN hangover-10.14/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 +
 +    state->Gamepad.wButtons = 0;
 +    for (i = 0; i < 10; i++)
-     {
--        switch (buttons[i])
--        {
--        case 1: state.Gamepad.wButtons |= XINPUT_GAMEPAD_A; break;
--        case 2: state.Gamepad.wButtons |= XINPUT_GAMEPAD_B; break;
--        case 3: state.Gamepad.wButtons |= XINPUT_GAMEPAD_X; break;
--        case 4: state.Gamepad.wButtons |= XINPUT_GAMEPAD_Y; break;
--        case 5: state.Gamepad.wButtons |= XINPUT_GAMEPAD_LEFT_SHOULDER; break;
--        case 6: state.Gamepad.wButtons |= XINPUT_GAMEPAD_RIGHT_SHOULDER; break;
--        case 7: state.Gamepad.wButtons |= XINPUT_GAMEPAD_BACK; break;
--        case 8: state.Gamepad.wButtons |= XINPUT_GAMEPAD_START; break;
--        case 9: state.Gamepad.wButtons |= XINPUT_GAMEPAD_LEFT_THUMB; break;
--        case 10: state.Gamepad.wButtons |= XINPUT_GAMEPAD_RIGHT_THUMB; break;
++    {    
 +        if ((buttons & (1<<i))) {
 +            switch (i)
 +            {
@@ -748,9 +766,85 @@ diff --color -urN hangover-10.14/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 +            case IDX_BUTTON_L3: state->Gamepad.wButtons |= XINPUT_GAMEPAD_LEFT_THUMB; break;
 +            case IDX_BUTTON_R3: state->Gamepad.wButtons |= XINPUT_GAMEPAD_RIGHT_THUMB; break;
 +            }
-         }
++        }
      }
- 
+-
+-    button_length = ARRAY_SIZE(buttons);
+-    status = HidP_GetUsages(HidP_Input, HID_USAGE_PAGE_BUTTON, 0, buttons, &button_length, controller->hid.preparsed, report_buf, report_len);
+-    if (status != HIDP_STATUS_SUCCESS) WARN("HidP_GetUsages HID_USAGE_PAGE_BUTTON returned %#lx\n", status);
+-
+-    state.Gamepad.wButtons = 0;
+-    for (i = 0; i < button_length; i++)
++    
++    state->Gamepad.bLeftTrigger = (buttons & (1<<10)) ? 255 : 0;
++    state->Gamepad.bRightTrigger = (buttons & (1<<11)) ? 255 : 0;
++
++    switch (dpad)
++    {
++    case 0: state->Gamepad.wButtons |= XINPUT_GAMEPAD_DPAD_UP; break;
++    case 1: state->Gamepad.wButtons |= XINPUT_GAMEPAD_DPAD_UP | XINPUT_GAMEPAD_DPAD_RIGHT; break;
++    case 2: state->Gamepad.wButtons |= XINPUT_GAMEPAD_DPAD_RIGHT; break;
++    case 3: state->Gamepad.wButtons |= XINPUT_GAMEPAD_DPAD_RIGHT | XINPUT_GAMEPAD_DPAD_DOWN; break;
++    case 4: state->Gamepad.wButtons |= XINPUT_GAMEPAD_DPAD_DOWN; break;
++    case 5: state->Gamepad.wButtons |= XINPUT_GAMEPAD_DPAD_DOWN | XINPUT_GAMEPAD_DPAD_LEFT; break;
++    case 6: state->Gamepad.wButtons |= XINPUT_GAMEPAD_DPAD_LEFT; break;
++    case 7: state->Gamepad.wButtons |= XINPUT_GAMEPAD_DPAD_LEFT | XINPUT_GAMEPAD_DPAD_UP; break;
++    }
++
++    state->Gamepad.sThumbLX = thumb_lx;
++    state->Gamepad.sThumbLY = -thumb_ly;
++    state->Gamepad.sThumbRX = thumb_rx;
++    state->Gamepad.sThumbRY = -thumb_ry;
++    
++    state->dwPacketNumber++;
++    LeaveCriticalSection(&controller.crit);
++}
++
++static DWORD WINAPI controller_read_thread_proc(void *param) {
++    int res;
++    char buffer[BUFFER_SIZE];
++    BOOL started = FALSE;
++    DWORD curr_time, last_time;
++    
++    SetThreadDescription(GetCurrentThread(), L"wine_xinput_controller_read");
++    if (server_sock == INVALID_SOCKET && !create_server_socket()) 
++    {
++        SetEvent(start_event);
++        return 0;
++    }
++    
++    get_gamepad_request();
++    
++    last_time = GetCurrentTime();
++    while (thread_running)
+     {
+-        switch (buttons[i])
++        res = recvfrom(server_sock, buffer, BUFFER_SIZE, 0, NULL, 0);
++        if (res <= 0)
+         {
+-        case 1: state.Gamepad.wButtons |= XINPUT_GAMEPAD_A; break;
+-        case 2: state.Gamepad.wButtons |= XINPUT_GAMEPAD_B; break;
+-        case 3: state.Gamepad.wButtons |= XINPUT_GAMEPAD_X; break;
+-        case 4: state.Gamepad.wButtons |= XINPUT_GAMEPAD_Y; break;
+-        case 5: state.Gamepad.wButtons |= XINPUT_GAMEPAD_LEFT_SHOULDER; break;
+-        case 6: state.Gamepad.wButtons |= XINPUT_GAMEPAD_RIGHT_SHOULDER; break;
+-        case 7: state.Gamepad.wButtons |= XINPUT_GAMEPAD_BACK; break;
+-        case 8: state.Gamepad.wButtons |= XINPUT_GAMEPAD_START; break;
+-        case 9: state.Gamepad.wButtons |= XINPUT_GAMEPAD_LEFT_THUMB; break;
+-        case 10: state.Gamepad.wButtons |= XINPUT_GAMEPAD_RIGHT_THUMB; break;
++            if (WSAGetLastError() != WSAEWOULDBLOCK) break;
++            
++            curr_time = GetCurrentTime();
++            if ((curr_time - last_time) >= 2000) {
++                get_gamepad_request();
++                last_time = curr_time;
++            }
++            
++            Sleep(16);
++            continue;
+         }
+-    }
+-
 -    button_length = ARRAY_SIZE(buttons);
 -    status = HidP_GetUsages(HidP_Input, HID_USAGE_PAGE_VENDOR_DEFINED_BEGIN, 0, buttons, &button_length, controller->hid.preparsed, report_buf, report_len);
 -    if (status != HIDP_STATUS_SUCCESS) WARN("HidP_GetUsages HID_USAGE_PAGE_VENDOR_DEFINED_BEGIN returned %#lx\n", status);
@@ -759,11 +853,7 @@ diff --color -urN hangover-10.14/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 -    status = HidP_GetUsageValue(HidP_Input, HID_USAGE_PAGE_GENERIC, 0, HID_USAGE_GENERIC_HATSWITCH, &value, controller->hid.preparsed, report_buf, report_len);
 -    if (status != HIDP_STATUS_SUCCESS) WARN("HidP_GetUsageValue HID_USAGE_PAGE_GENERIC / HID_USAGE_GENERIC_HATSWITCH returned %#lx\n", status);
 -    else switch (value)
-+    state->Gamepad.bLeftTrigger = *(unsigned char*)(buffer + 17);
-+    state->Gamepad.bRightTrigger = *(unsigned char*)(buffer + 18);
-+
-+    switch (dpad)
-     {
+-    {
 -    /* 8 1 2
 -     * 7 0 3
 -     * 6 5 4 */
@@ -776,16 +866,8 @@ diff --color -urN hangover-10.14/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 -    case 6: state.Gamepad.wButtons |= XINPUT_GAMEPAD_DPAD_DOWN | XINPUT_GAMEPAD_DPAD_LEFT; break;
 -    case 7: state.Gamepad.wButtons |= XINPUT_GAMEPAD_DPAD_LEFT; break;
 -    case 8: state.Gamepad.wButtons |= XINPUT_GAMEPAD_DPAD_LEFT | XINPUT_GAMEPAD_DPAD_UP; break;
-+    case 0: state->Gamepad.wButtons |= XINPUT_GAMEPAD_DPAD_UP; break;
-+    case 1: state->Gamepad.wButtons |= XINPUT_GAMEPAD_DPAD_UP | XINPUT_GAMEPAD_DPAD_RIGHT; break;
-+    case 2: state->Gamepad.wButtons |= XINPUT_GAMEPAD_DPAD_RIGHT; break;
-+    case 3: state->Gamepad.wButtons |= XINPUT_GAMEPAD_DPAD_RIGHT | XINPUT_GAMEPAD_DPAD_DOWN; break;
-+    case 4: state->Gamepad.wButtons |= XINPUT_GAMEPAD_DPAD_DOWN; break;
-+    case 5: state->Gamepad.wButtons |= XINPUT_GAMEPAD_DPAD_DOWN | XINPUT_GAMEPAD_DPAD_LEFT; break;
-+    case 6: state->Gamepad.wButtons |= XINPUT_GAMEPAD_DPAD_LEFT; break;
-+    case 7: state->Gamepad.wButtons |= XINPUT_GAMEPAD_DPAD_LEFT | XINPUT_GAMEPAD_DPAD_UP; break;
-     }
- 
+-    }
+-
 -    status = HidP_GetUsageValue(HidP_Input, HID_USAGE_PAGE_GENERIC, 0, HID_USAGE_GENERIC_X, &value, controller->hid.preparsed, report_buf, report_len);
 -    if (status != HIDP_STATUS_SUCCESS) WARN("HidP_GetUsageValue HID_USAGE_PAGE_GENERIC / HID_USAGE_GENERIC_X returned %#lx\n", status);
 -    else state.Gamepad.sThumbLX = scale_value(value, &controller->hid.lx_caps, -32768, 32767);
@@ -809,11 +891,7 @@ diff --color -urN hangover-10.14/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 -    status = HidP_GetUsageValue(HidP_Input, HID_USAGE_PAGE_GENERIC, 0, HID_USAGE_GENERIC_Z, &value, controller->hid.preparsed, report_buf, report_len);
 -    if (status != HIDP_STATUS_SUCCESS) WARN("HidP_GetUsageValue HID_USAGE_PAGE_GENERIC / HID_USAGE_GENERIC_Z returned %#lx\n", status);
 -    else state.Gamepad.bLeftTrigger = scale_value(value, &controller->hid.lt_caps, 0, 255);
-+    state->Gamepad.sThumbLX = thumb_lx;
-+    state->Gamepad.sThumbLY = -thumb_ly;
-+    state->Gamepad.sThumbRX = thumb_rx;
-+    state->Gamepad.sThumbRY = -thumb_ry;
- 
+-
 -    EnterCriticalSection(&controller->crit);
 -    if (controller->enabled)
 -    {
@@ -825,42 +903,27 @@ diff --color -urN hangover-10.14/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 -        if (!ret && GetLastError() != ERROR_IO_PENDING) controller_destroy(controller, TRUE);
 -    }
 -    LeaveCriticalSection(&controller->crit);
-+    state->dwPacketNumber++;
-+    LeaveCriticalSection(&controller.crit);
- }
- 
+-}
+-
 -static LRESULT CALLBACK xinput_devnotify_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 -{
 -    if (msg == WM_DEVICECHANGE)
-+static DWORD WINAPI controller_read_thread_proc(void *param) {
-+    int res;
-+    char buffer[BUFFER_SIZE];
-+    BOOL started = FALSE;
-+    DWORD curr_time, last_time;
-+
-+    SetThreadDescription(GetCurrentThread(), L"wine_xinput_controller_read");
-+    if (server_sock == INVALID_SOCKET && !create_server_socket())
-     {
+-    {
 -        DEV_BROADCAST_DEVICEINTERFACE_W *iface = (DEV_BROADCAST_DEVICEINTERFACE_W *)lparam;
 -        if (wparam == DBT_DEVICEARRIVAL) try_add_device(iface->dbcc_name);
 -        if (wparam == DBT_DEVICEREMOVECOMPLETE) try_remove_device(iface->dbcc_name);
-+        SetEvent(start_event);
-+        return 0;
-     }
- 
+-    }
+-
 -    return DefWindowProcW(hwnd, msg, wparam, lparam);
 -}
-+    get_gamepad_request();
- 
+-
 -static DWORD WINAPI hid_update_thread_proc(void *param)
 -{
 -    struct xinput_controller *devices[XUSER_MAX_COUNT + 1];
 -    HANDLE events[XUSER_MAX_COUNT + 1];
 -    DWORD i, count = 1, ret = WAIT_TIMEOUT;
 -    DEV_BROADCAST_DEVICEINTERFACE_W filter =
-+    last_time = GetCurrentTime();
-+    while (thread_running)
-     {
+-    {
 -        .dbcc_size = sizeof(DEV_BROADCAST_DEVICEINTERFACE_W),
 -        .dbcc_devicetype = DBT_DEVTYP_DEVICEINTERFACE,
 -        .dbcc_classguid = GUID_DEVINTERFACE_WINEXINPUT,
@@ -875,73 +938,54 @@ diff --color -urN hangover-10.14/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 -    HDEVNOTIFY notif;
 -    HWND hwnd;
 -    MSG msg;
-+        res = recvfrom(server_sock, buffer, BUFFER_SIZE, 0, NULL, 0);
-+        if (res <= 0)
-+        {
-+            if (WSAGetLastError() != WSAEWOULDBLOCK) break;
- 
+-
 -    SetThreadDescription(GetCurrentThread(), L"wine_xinput_hid_update");
-+            curr_time = GetCurrentTime();
-+            if ((curr_time - last_time) >= 2000) {
-+                get_gamepad_request();
-+                last_time = curr_time;
-+            }
- 
+-
 -    RegisterClassExW(&cls);
 -    hwnd = CreateWindowExW(0, cls.lpszClassName, NULL, 0, 0, 0, 0, 0,
 -                           HWND_MESSAGE, NULL, NULL, NULL);
 -    notif = RegisterDeviceNotificationW(hwnd, &filter, DEVICE_NOTIFY_WINDOW_HANDLE);
-+            Sleep(16);
-+            continue;
-+        }
- 
+-
 -    update_controller_list();
 -    SetEvent(start_event);
-+        if (buffer[0] == REQUEST_CODE_GET_GAMEPAD)
-+        {
-+            int gamepad_id;
-+            gamepad_id = *(int*)(buffer + 1);
-+            input_type = buffer[5];
- 
+-
 -    do
 -    {
 -        if (ret == count) while (PeekMessageW(&msg, hwnd, 0, 0, PM_REMOVE)) DispatchMessageW(&msg);
 -        if (ret == WAIT_TIMEOUT) update_controller_list();
 -        if (ret < count - 1) read_controller_state(devices[ret]);
-+            EnterCriticalSection(&controller.crit);
-+            if (input_type & FLAG_INPUT_TYPE_XINPUT)
-+            {
-+                if (gamepad_id > 0)
-+                {
-+                    controller.id = gamepad_id;
-+                    if (!controller.connected) controller_init();
-+                }
-+                else if (gamepad_id == 0)
-+                {
-+                    controller.id = 0;
-+                    controller.connected = FALSE;
-+                }
-+            }
-+            else
-+            {
-+                controller.id = 0;
-+                controller.connected = FALSE;
-+            }
-+            LeaveCriticalSection(&controller.crit);
- 
+-
 -        count = 0;
 -        for (i = 0; i < XUSER_MAX_COUNT; ++i)
--        {
++        
++        if (buffer[0] == REQUEST_CODE_GET_GAMEPAD) 
+         {
 -            if (!controllers[i].device) continue;
 -            EnterCriticalSection(&controllers[i].crit);
 -            if (controllers[i].enabled)
-+            if (!started)
++            int gamepad_id;
++            gamepad_id = *(int*)(buffer + 1);
++            
++            EnterCriticalSection(&controller.crit);
++            if (gamepad_id > 0) 
++            {
++                controller.id = gamepad_id;
++                if (!controller.connected) controller_init();
++            }
++            else if (gamepad_id == 0) 
++            {
++                controller.id = 0;
++                controller.connected = FALSE;       
++            }
++            LeaveCriticalSection(&controller.crit);
++            
++            if (!started) 
              {
 -                devices[count] = controllers + i;
 -                events[count] = controllers[i].hid.read_event;
 -                count++;
 +                started = TRUE;
-+                SetEvent(start_event);
++                SetEvent(start_event);    
              }
 -            LeaveCriticalSection(&controllers[i].crit);
          }
@@ -955,12 +999,13 @@ diff --color -urN hangover-10.14/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 -            ret == WAIT_TIMEOUT);
 -
 -    ERR("wait failed in the update thread, ret %lu, error %lu\n", ret, GetLastError());
- 
+-
 -    UnregisterDeviceNotification(notif);
 -    DestroyWindow(hwnd);
 -    UnregisterClassW(cls.lpszClassName, xinput_instance);
 -
 -    FreeLibraryAndExitThread(xinput_instance, ret);
++    
 +    return 0;
  }
  
@@ -969,27 +1014,31 @@ diff --color -urN hangover-10.14/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
  {
      HANDLE thread;
 -    HMODULE module;
- 
+-
 -    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, (void*)hid_update_thread_proc, &module))
 -        WARN("Failed to increase module's reference count, error: %lu\n", GetLastError());
++    
 +    thread_running = TRUE;
  
      start_event = CreateEventA(NULL, FALSE, FALSE, NULL);
-     if (!start_event) ERR("failed to create start event, error %lu\n", GetLastError());
- 
+-    if (!start_event) ERR("failed to create start event, error %lu\n", GetLastError());
+-
 -    update_event = CreateEventA(NULL, FALSE, FALSE, NULL);
 -    if (!update_event) ERR("failed to create update event, error %lu\n", GetLastError());
 -
 -    thread = CreateThread(NULL, 0, hid_update_thread_proc, NULL, 0, NULL);
 -    if (!thread) ERR("failed to create update thread, error %lu\n", GetLastError());
++    if (!start_event) ERR("failed to create start event, error %lu\n", GetLastError());   
++    
 +    thread = CreateThread(NULL, 0, controller_read_thread_proc, NULL, 0, NULL);
 +    if (!thread) ERR("failed to create read thread, error %lu\n", GetLastError());
      CloseHandle(thread);
- 
+-
 -    WaitForSingleObject(start_event, INFINITE);
++    
 +    WaitForSingleObject(start_event, 2000);
 +    CloseHandle(start_event);
-+
++    
      return TRUE;
  }
  
@@ -998,10 +1047,12 @@ diff --color -urN hangover-10.14/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
  {
      static INIT_ONCE init_once = INIT_ONCE_STATIC_INIT;
 -    InitOnceExecuteOnce(&init_once, start_update_thread_once, NULL, NULL);
--}
--
++    InitOnceExecuteOnce(&init_once, start_read_thread_once, NULL, NULL);
+ }
+ 
 -static BOOL controller_lock(struct xinput_controller *controller)
--{
++static BOOL controller_is_connected(DWORD index) 
+ {
 -    if (!controller->device) return FALSE;
 -
 -    EnterCriticalSection(&controller->crit);
@@ -1013,12 +1064,10 @@ diff --color -urN hangover-10.14/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 -    }
 -
 -    return TRUE;
-+    InitOnceExecuteOnce(&init_once, start_read_thread_once, NULL, NULL);
- }
- 
+-}
+-
 -static void controller_unlock(struct xinput_controller *controller)
-+static BOOL controller_is_connected(DWORD index)
- {
+-{
 -    LeaveCriticalSection(&controller->crit);
 +    BOOL connected;
 +    EnterCriticalSection(&controller.crit);
@@ -1028,9 +1077,7 @@ diff --color -urN hangover-10.14/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
  }
  
  BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved)
- {
--    TRACE("inst %p, reason %lu, reserved %p.\n", inst, reason, reserved);
--
+@@ -792,175 +395,143 @@
      switch (reason)
      {
      case DLL_PROCESS_ATTACH:
@@ -1066,7 +1113,7 @@ diff --color -urN hangover-10.14/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 -        controller_unlock(&controllers[index]);
 -    }
 +    if (!controller.connected) return;
-+    controller.enabled = enable;
++    controller.enabled = enable;    
  }
  
  DWORD WINAPI DECLSPEC_HOTPATCH XInputSetState(DWORD index, XINPUT_VIBRATION *vibration)
@@ -1082,20 +1129,23 @@ diff --color -urN hangover-10.14/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 -    if (!controller_lock(&controllers[index])) return ERROR_DEVICE_NOT_CONNECTED;
 -
 -    ret = HID_set_state(&controllers[index], vibration);
+-
+-    controller_unlock(&controllers[index]);
 +    if (!controller_is_connected(index)) return ERROR_DEVICE_NOT_CONNECTED;
  
--    controller_unlock(&controllers[index]);
--
 -    return ret;
 +    return ERROR_SUCCESS;
  }
  
  /* Some versions of SteamOverlayRenderer hot-patch XInputGetStateEx() and call
 - * XInputGetState() in the hook, so we need a wrapper. */
--static DWORD xinput_get_state(DWORD index, XINPUT_STATE *state)
-+ * it from other thread contexts. The function signature is identical to
-+ * XInputGetState() except it also returns the Guide button state */
-+DWORD WINAPI DECLSPEC_HOTPATCH XInputGetStateEx(DWORD index, XINPUT_STATE *state)
++ * it directly, so we need to export it. */
++DWORD WINAPI XInputGetStateEx(DWORD index, XINPUT_STATE *state)
++{
++    return xinput_get_state(index, state);
++}
++
+ static DWORD xinput_get_state(DWORD index, XINPUT_STATE *state)
  {
      if (!state) return ERROR_BAD_ARGUMENTS;
  
@@ -1111,7 +1161,7 @@ diff --color -urN hangover-10.14/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 +    if (index < xinput_min_index) xinput_min_index = index;
 +    if (index == xinput_min_index) index = 0;
 +    if (!controller_is_connected(index)) return ERROR_DEVICE_NOT_CONNECTED;
-+
++    
 +    EnterCriticalSection(&controller.crit);
 +    *state = controller.state;
 +    LeaveCriticalSection(&controller.crit);
@@ -1122,7 +1172,7 @@ diff --color -urN hangover-10.14/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
  {
 -    DWORD ret;
 -
--    TRACE("index %lu, state %p.\n", index, state);
+     TRACE("index %lu, state %p.\n", index, state);
 -
 -    ret = xinput_get_state(index, state);
 -    if (ret != ERROR_SUCCESS) return ret;
@@ -1131,39 +1181,34 @@ diff --color -urN hangover-10.14/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 -    state->Gamepad.wButtons &= ~XINPUT_GAMEPAD_GUIDE;
 -
 -    return ERROR_SUCCESS;
-+    return XInputGetStateEx(index, state);
++    return xinput_get_state(index, state);
  }
  
 -DWORD WINAPI DECLSPEC_HOTPATCH XInputGetStateEx(DWORD index, XINPUT_STATE *state)
-+DWORD WINAPI DECLSPEC_HOTPATCH XInputGetCapabilities(DWORD index, DWORD flags, XINPUT_CAPABILITIES *capabilities)
++DWORD WINAPI DECLSPEC_HOTPATCH XInputGetState(DWORD index, XINPUT_STATE *state)
  {
--    TRACE("index %lu, state %p.\n", index, state);
-+    TRACE("index %lu, flags %#lx, capabilities %p.\n", index, flags, capabilities);
- 
--    return xinput_get_state(index, state);
--}
-+    start_read_thread();
+     TRACE("index %lu, state %p.\n", index, state);
+-
+     return xinput_get_state(index, state);
+ }
  
 -static const int JS_STATE_OFF = 0;
 -static const int JS_STATE_LOW = 1;
 -static const int JS_STATE_HIGH = 2;
-+    if (!capabilities) return ERROR_BAD_ARGUMENTS;
-+    if (index >= XUSER_MAX_COUNT) return ERROR_BAD_ARGUMENTS;
-+    if (!controller_is_connected(index)) return ERROR_DEVICE_NOT_CONNECTED;
- 
+-
 -static int joystick_state(const SHORT value)
 -{
 -    if (value > 20000) return JS_STATE_HIGH;
 -    if (value < -20000) return JS_STATE_LOW;
 -    return JS_STATE_OFF;
 -}
-+    if (flags & XINPUT_FLAG_GAMEPAD && controller.caps.SubType != XINPUT_DEVSUBTYPE_GAMEPAD)
-+        return ERROR_DEVICE_NOT_CONNECTED;
- 
--static WORD js_vk_offs(const int x, const int y)
--{
+-
+ static WORD js_vk_offs(const int x, const int y)
+ {
 -    if (y == JS_STATE_OFF)
--    {
++    /* X axis -128..127, Y axis -128..127 */
++    if (y >= 50) /* Up */
+     {
 -      /*if (x == JS_STATE_OFF) shouldn't get here */
 -        if (x == JS_STATE_LOW) return 3; /* LEFT */
 -      /*if (x == JS_STATE_HIGH)*/ return 2; /* RIGHT */
@@ -1180,18 +1225,30 @@ diff --color -urN hangover-10.14/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 -        if (x == JS_STATE_LOW) return 7; /* DOWNLEFT */
 -      /*if (x == JS_STATE_HIGH)*/ return 6; /* DOWNRIGHT */
 -    }
-+    *capabilities = controller.caps;
-+    return ERROR_SUCCESS;
++        if (x >= 50) return VK_PAD_LTHUMB_UPRIGHT;
++        if (x <= -50) return VK_PAD_LTHUMB_UPLEFT;
++        return VK_PAD_LTHUMB_UP;
++    }
++    if (y <= -50) /* Down */
++    {
++        if (x >= 50) return VK_PAD_LTHUMB_DOWNRIGHT;
++        if (x <= -50) return VK_PAD_LTHUMB_DOWNLEFT;
++        return VK_PAD_LTHUMB_DOWN;
++    }
++    if (x >= 50) /* Right */
++        return VK_PAD_LTHUMB_RIGHT;
++    if (x <= -50) /* Left */
++        return VK_PAD_LTHUMB_LEFT;
++    return 0;
  }
  
 -static DWORD check_joystick_keystroke(const DWORD index, XINPUT_KEYSTROKE *keystroke, const SHORT *cur_x,
 -                                      const SHORT *cur_y, SHORT *last_x, SHORT *last_y, const WORD base_vk)
-+static DWORD check_joystick_keystroke(XINPUT_KEYSTROKE *keystroke, const SHORT *cur_x, const SHORT *cur_y,
++static DWORD check_joystick_keystroke(XINPUT_KEYSTROKE *keystroke, const SHORT *cur_x, const SHORT *cur_y, 
 +                                      SHORT *last_x, SHORT *last_y, const WORD base_vk)
  {
      int cur_vk = 0, cur_x_st, cur_y_st;
      int last_vk = 0, last_x_st, last_y_st;
-+    int i;
  
 -    cur_x_st = joystick_state(*cur_x);
 -    cur_y_st = joystick_state(*cur_y);
@@ -1202,33 +1259,17 @@ diff --color -urN hangover-10.14/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 -    last_y_st = joystick_state(*last_y);
 -    if (last_x_st || last_y_st)
 -        last_vk = base_vk + js_vk_offs(last_x_st, last_y_st);
-+    if (cur_x)
-+    {
-+        cur_x_st = *cur_x > 0 ? 1 : (*cur_x < 0 ? -1 : 0);
-+        last_x_st = *last_x > 0 ? 1 : (*last_x < 0 ? -1 : 0);
-+        if (cur_x_st != last_x_st)
-+        {
-+            if (cur_x_st != 0) cur_vk = (cur_x_st > 0) ? (base_vk + 1) : (base_vk + 3);
-+            else if (last_x_st != 0) last_vk = (last_x_st > 0) ? (base_vk + 1) : (base_vk + 3);
-+        }
-+    }
- 
--    if (cur_vk != last_vk)
-+    if (cur_y)
-     {
--        if (last_vk)
-+        cur_y_st = *cur_y > 0 ? 1 : (*cur_y < 0 ? -1 : 0);
-+        last_y_st = *last_y > 0 ? 1 : (*last_y < 0 ? -1 : 0);
-+        if (cur_y_st != last_y_st)
-+        {
-+            if (cur_y_st != 0) cur_vk = (cur_y_st > 0) ? (base_vk + 0) : (base_vk + 2);
-+            else if (last_y_st != 0) last_vk = (last_y_st > 0) ? (base_vk + 0) : (base_vk + 2);
-+        }
-+    }
++    cur_x_st = (*cur_x) >> 8;
++    cur_y_st = (*cur_y) >> 8;
++    last_x_st = (*last_x) >> 8;
++    last_y_st = (*last_y) >> 8;
 +
-+    for (i = 0; i < ARRAY_SIZE(buttons); ++i)
-+    {
-+        if (cur_vk == buttons[i].vk || last_vk == buttons[i].vk)
++    cur_vk = js_vk_offs(cur_x_st, cur_y_st);
++    last_vk = js_vk_offs(last_x_st, last_y_st);
+ 
+     if (cur_vk != last_vk)
+     {
+         if (last_vk)
          {
 -            /* joystick was set, and now different. send a KEYUP event, and set
 -             * last pos to centered, so the appropriate KEYDOWN event will be
@@ -1242,28 +1283,30 @@ diff --color -urN hangover-10.14/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
  
              *last_x = 0;
              *last_y = 0;
- 
--            return ERROR_SUCCESS;
--        }
 -
+             return ERROR_SUCCESS;
+         }
+ 
 -        /* joystick was unset, send KEYDOWN. */
 -        keystroke->VirtualKey = cur_vk;
 -        keystroke->Unicode = 0; /* unused */
 -        keystroke->Flags = XINPUT_KEYSTROKE_KEYDOWN;
 -        keystroke->UserIndex = index;
 -        keystroke->HidCode = 0;
+-
+-        *last_x = *cur_x;
+-        *last_y = *cur_y;
++        if (cur_vk)
++        {
 +            keystroke->VirtualKey = cur_vk;
 +            keystroke->Unicode = 0; /* unused */
 +            keystroke->Flags = XINPUT_KEYSTROKE_KEYDOWN;
 +            keystroke->UserIndex = 0;
 +            keystroke->HidCode = 0;
  
--        *last_x = *cur_x;
--        *last_y = *cur_y;
+-        return ERROR_SUCCESS;
 +            *last_x = *cur_x;
 +            *last_y = *cur_y;
- 
--        return ERROR_SUCCESS;
 +            return ERROR_SUCCESS;
 +        }
      }
@@ -1274,18 +1317,17 @@ diff --color -urN hangover-10.14/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
      return ERROR_EMPTY;
  }
  
--static BOOL trigger_is_on(const BYTE value)
-+static BOOL trigger_is_on(BYTE value)
- {
+@@ -969,57 +540,55 @@
      return value > 30;
  }
  
 -static DWORD check_for_keystroke(const DWORD index, XINPUT_KEYSTROKE *keystroke)
 +static DWORD check_for_keystroke(XINPUT_KEYSTROKE *keystroke)
  {
-     struct xinput_controller *controller = &controllers[index];
+-    struct xinput_controller *controller = &controllers[index];
      const XINPUT_GAMEPAD *cur;
-@@ -978,23 +558,24 @@
+     DWORD ret = ERROR_EMPTY;
+     int i;
  
      static const struct
      {
@@ -1317,8 +1359,8 @@ diff --color -urN hangover-10.14/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 +        {XINPUT_GAMEPAD_RIGHT_SHOULDER, VK_PAD_RSHOULDER},
 +        {XINPUT_GAMEPAD_START, VK_PAD_START},
 +        {XINPUT_GAMEPAD_BACK, VK_PAD_BACK},
-+        {XINPUT_GAMEPAD_LEFT_THUMB, VK_PAD_LTHUMB_PRESS},
-+        {XINPUT_GAMEPAD_RIGHT_THUMB, VK_PAD_RTHUMB_PRESS},
++        {XINPUT_GAMEPAD_LEFT_THUMB, VK_PAD_LTHUMB},
++        {XINPUT_GAMEPAD_RIGHT_THUMB, VK_PAD_RTHUMB},
 +        {XINPUT_GAMEPAD_DPAD_UP, VK_PAD_DPAD_UP},
 +        {XINPUT_GAMEPAD_DPAD_DOWN, VK_PAD_DPAD_DOWN},
 +        {XINPUT_GAMEPAD_DPAD_LEFT, VK_PAD_DPAD_LEFT},
@@ -1326,12 +1368,102 @@ diff --color -urN hangover-10.14/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
          /* note: guide button does not send an event */
      };
  
-@@ -1075,80 +656,47 @@
+-    if (!controller_lock(controller)) return ERROR_DEVICE_NOT_CONNECTED;
+-
+-    cur = &controller->state.Gamepad;
++    cur = &controller.state.Gamepad;
+ 
+     /*** buttons ***/
+     for (i = 0; i < ARRAY_SIZE(buttons); ++i)
+     {
+-        if ((cur->wButtons & buttons[i].mask) ^ (controller->last_keystroke.wButtons & buttons[i].mask))
++        if ((cur->wButtons & buttons[i].mask) ^ (controller.last_keystroke.wButtons & buttons[i].mask))
+         {
+             keystroke->VirtualKey = buttons[i].vk;
+             keystroke->Unicode = 0; /* unused */
+             if (cur->wButtons & buttons[i].mask)
+             {
+                 keystroke->Flags = XINPUT_KEYSTROKE_KEYDOWN;
+-                controller->last_keystroke.wButtons |= buttons[i].mask;
++                controller.last_keystroke.wButtons |= buttons[i].mask;
+             }
+             else
+             {
+                 keystroke->Flags = XINPUT_KEYSTROKE_KEYUP;
+-                controller->last_keystroke.wButtons &= ~buttons[i].mask;
++                controller.last_keystroke.wButtons &= ~buttons[i].mask;
+             }
+-            keystroke->UserIndex = index;
++            keystroke->UserIndex = 0;
+             keystroke->HidCode = 0;
+             ret = ERROR_SUCCESS;
+             goto done;
+@@ -1027,128 +596,107 @@
+     }
+ 
+     /*** triggers ***/
+-    if (trigger_is_on(cur->bLeftTrigger) ^ trigger_is_on(controller->last_keystroke.bLeftTrigger))
++    if (trigger_is_on(cur->bLeftTrigger) ^ trigger_is_on(controller.last_keystroke.bLeftTrigger))
+     {
+         keystroke->VirtualKey = VK_PAD_LTRIGGER;
+         keystroke->Unicode = 0; /* unused */
+         keystroke->Flags = trigger_is_on(cur->bLeftTrigger) ? XINPUT_KEYSTROKE_KEYDOWN : XINPUT_KEYSTROKE_KEYUP;
+-        keystroke->UserIndex = index;
++        keystroke->UserIndex = 0;
+         keystroke->HidCode = 0;
+-        controller->last_keystroke.bLeftTrigger = cur->bLeftTrigger;
++        controller.last_keystroke.bLeftTrigger = cur->bLeftTrigger;
+         ret = ERROR_SUCCESS;
+         goto done;
+     }
+ 
+-    if (trigger_is_on(cur->bRightTrigger) ^ trigger_is_on(controller->last_keystroke.bRightTrigger))
++    if (trigger_is_on(cur->bRightTrigger) ^ trigger_is_on(controller.last_keystroke.bRightTrigger))
+     {
+         keystroke->VirtualKey = VK_PAD_RTRIGGER;
+         keystroke->Unicode = 0; /* unused */
+         keystroke->Flags = trigger_is_on(cur->bRightTrigger) ? XINPUT_KEYSTROKE_KEYDOWN : XINPUT_KEYSTROKE_KEYUP;
+-        keystroke->UserIndex = index;
++        keystroke->UserIndex = 0;
+         keystroke->HidCode = 0;
+-        controller->last_keystroke.bRightTrigger = cur->bRightTrigger;
++        controller.last_keystroke.bRightTrigger = cur->bRightTrigger;
+         ret = ERROR_SUCCESS;
+         goto done;
+     }
+ 
+     /*** joysticks ***/
+-    ret = check_joystick_keystroke(index, keystroke, &cur->sThumbLX, &cur->sThumbLY,
+-            &controller->last_keystroke.sThumbLX,
+-            &controller->last_keystroke.sThumbLY, VK_PAD_LTHUMB_UP);
++    ret = check_joystick_keystroke(keystroke, &cur->sThumbLX, &cur->sThumbLY,
++            &controller.last_keystroke.sThumbLX,
++            &controller.last_keystroke.sThumbLY, VK_PAD_LTHUMB_UP);
+     if (ret == ERROR_SUCCESS)
+         goto done;
+ 
+-    ret = check_joystick_keystroke(index, keystroke, &cur->sThumbRX, &cur->sThumbRY,
+-            &controller->last_keystroke.sThumbRX,
+-            &controller->last_keystroke.sThumbRY, VK_PAD_RTHUMB_UP);
++    ret = check_joystick_keystroke(keystroke, &cur->sThumbRX, &cur->sThumbRY,
++            &controller.last_keystroke.sThumbRX,
++            &controller.last_keystroke.sThumbRY, VK_PAD_RTHUMB_UP);
+     if (ret == ERROR_SUCCESS)
+         goto done;
+ 
+ done:
+-    controller_unlock(controller);
+ 
+     return ret;
+ }
+ 
+ DWORD WINAPI DECLSPEC_HOTPATCH XInputGetKeystroke(DWORD index, DWORD reserved, PXINPUT_KEYSTROKE keystroke)
+-{
++{    
      TRACE("index %lu, reserved %lu, keystroke %p.\n", index, reserved, keystroke);
  
      if (index >= XUSER_MAX_COUNT && index != XUSER_INDEX_ANY) return ERROR_BAD_ARGUMENTS;
-+    if (!controller_is_connected(index != XUSER_INDEX_ANY ? index : 0)) return ERROR_DEVICE_NOT_CONNECTED;
- 
+-
 -    if (index == XUSER_INDEX_ANY)
 -    {
 -        int i;
@@ -1342,19 +1474,24 @@ diff --color -urN hangover-10.14/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 -    }
 -
 -    return check_for_keystroke(index, keystroke);
--}
--
--DWORD WINAPI DECLSPEC_HOTPATCH XInputGetCapabilities(DWORD index, DWORD flags, XINPUT_CAPABILITIES *capabilities)
--{
--    XINPUT_CAPABILITIES_EX caps_ex;
--    DWORD ret;
--
--    ret = XInputGetCapabilitiesEx(1, index, flags, &caps_ex);
--
--    if (!ret) *capabilities = caps_ex.Capabilities;
--
--    return ret;
++    if (!controller_is_connected(index != XUSER_INDEX_ANY ? index : 0)) return ERROR_DEVICE_NOT_CONNECTED;
++  
 +    return check_for_keystroke(keystroke);
+ }
+ 
+ DWORD WINAPI DECLSPEC_HOTPATCH XInputGetCapabilities(DWORD index, DWORD flags, XINPUT_CAPABILITIES *capabilities)
+ {
+-    XINPUT_CAPABILITIES_EX caps_ex;
+     DWORD ret;
++    XINPUT_CAPABILITIES_EX caps_ex;
++
++    TRACE("index %lu, flags %#lx, capabilities %p.\n", index, flags, capabilities);
+ 
+     ret = XInputGetCapabilitiesEx(1, index, flags, &caps_ex);
+ 
+     if (!ret) *capabilities = caps_ex.Capabilities;
+-
+     return ret;
  }
  
  DWORD WINAPI DECLSPEC_HOTPATCH XInputGetDSoundAudioDeviceGuids(DWORD index, GUID *render_guid, GUID *capture_guid)
@@ -1395,15 +1532,16 @@ diff --color -urN hangover-10.14/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
  
      if (index >= XUSER_MAX_COUNT) return ERROR_BAD_ARGUMENTS;
 +    if (!controller_is_connected(index)) return ERROR_DEVICE_NOT_CONNECTED;
- 
--    if (!controller_lock(&controllers[index])) return ERROR_DEVICE_NOT_CONNECTED;
++    
 +    EnterCriticalSection(&controller.crit);
  
+-    if (!controller_lock(&controllers[index])) return ERROR_DEVICE_NOT_CONNECTED;
+-
 -    if (flags & XINPUT_FLAG_GAMEPAD && controllers[index].caps.SubType != XINPUT_DEVSUBTYPE_GAMEPAD)
 -        ret = ERROR_DEVICE_NOT_CONNECTED;
 -    else if (!HidD_GetAttributes(controllers[index].device, &attr))
 -        ret = ERROR_DEVICE_NOT_CONNECTED;
-+    if (flags & XINPUT_FLAG_GAMEPAD && controller.caps.SubType != XINPUT_DEVSUBTYPE_GAMEPAD)
++    if (flags & XINPUT_FLAG_GAMEPAD && controller.caps.SubType != XINPUT_DEVSUBTYPE_GAMEPAD) 
 +        return ERROR_DEVICE_NOT_CONNECTED;
      else
      {
@@ -1423,4 +1561,5 @@ diff --color -urN hangover-10.14/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
 +    LeaveCriticalSection(&controller.crit);
 +    return ERROR_SUCCESS;
 +}
+
 
