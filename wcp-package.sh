@@ -99,7 +99,11 @@ else
         box64 $winePath/wine reg delete "HKEY_CURRENT_USER\Control Panel\Desktop\WindowMetrics" /f || exit 1
         sleep 3
     else
-        [[ $isArm64ec == "arm64ec" ]] && export HODLL="libwow64fex.dll"
+        if [[ $isArm64ec == "arm64ec" ]] && [[ ! -z $fexDllPath ]]; then
+          mkdir -p $WINEPREFIX/drive_c/windows/system32/ || exit 1
+          cp -r -p $fexDllPath/*.dll $WINEPREFIX/drive_c/windows/system32/ || exit 1
+          export HODLL="libwow64fex.dll"
+        fi
         $winePath/wineboot || exit 1
         sleep 3
         echo "Delete Registry Key: HKEY_CURRENT_USER\Control Panel\Desktop\WindowMetrics"
