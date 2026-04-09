@@ -100,6 +100,7 @@ else
         sleep 3
     else
         if [[ $isArm64ec == "arm64ec" ]] && [[ ! -z $fexDllPath ]]; then
+          echo "获取到fex-dll文件路径: $fexDllPath"
           mkdir -p $WINEPREFIX/drive_c/windows/system32/ || exit 1
           cp -r -p $fexDllPath/*.dll $WINEPREFIX/drive_c/windows/system32/ || exit 1
           export HODLL="libwow64fex.dll"
