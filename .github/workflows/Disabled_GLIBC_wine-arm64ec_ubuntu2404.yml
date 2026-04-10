@@ -1,4 +1,4 @@
-name: Compile Wine for Arm64ec (Glibc) (env BCC ubuntu)
+name: Compile Wine-TKG for Arm64ec (Glibc) (env BCC ubuntu)
 
 permissions:
   contents: write
@@ -39,11 +39,11 @@ on:
 jobs:
   build_wine:
     runs-on: ubuntu-24.04
-    name: Download & Compile
+    name: Download
     outputs:
       wineVer: ${{ steps.download.outputs.wineVer }}
     steps:
-      - name: Pull Wine Source & Download BCC
+      - name: Pull Wine-TKG Source & Download BCC
         id: download
         run: |
           aria2c -s$(nproc) -x$(nproc) ${{ github.event.inputs.llvmURL }} || exit 1
@@ -83,20 +83,80 @@ jobs:
           sudo chroot ubuntu2404 bash -x /tmp/wine-winlator/ubuntu_arm64ec.sh ${{ steps.download.outputs.wineVer }} ${{ github.event.inputs.makeWineVK }} || exit 1
           sudo chmod 644 ubuntu2404/tmp/*.tar.xz
 
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build_arm64ec_wine
+          path: /tmp/build_arm64ec_wine.tar.xz
+
+  create_wcp:
+    runs-on: ubuntu-24.04-arm
+    container:
+      image: ubuntu:24.04
+      volumes:
+        - /tmp:/tmp
+      env:
+        wineVer: ${{ needs.build_wine.outputs.wineVer }}
+        wineTag: ${{ github.event.inputs.customTag }}
+        targetImagefs: ${{ github.event.inputs.targetImagefs }}
+    name: Create WCP Package
+    needs: build_wine
+    steps:
+      - name: Download Artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: build_arm64ec_wine
+          path: /tmp/
+
+      - name: Create WCP Package
+        run: |
+          if [[ -z $wineVer ]]; then
+            echo "未定义wineVer!"
+            exit 1
+          else
+            echo "wineVer: $wienVer"
+          fi
+          mkdir -p /data/data/com.winlator/files/imagefs
+          apt update
+          apt install -y patchelf 7zip aria2 zstd xz-utils locales
+          echo "en_US.UTF-8" >> /etc/locale.gen
+          locale-gen
+          export LC_ALL=en_US.UTF-8
+          aria2c -s16 -x16 $targetImagefs || exit 1
+          if ! tar xf *.tzst -C /data/data/com.winlator/files/imagefs/; then
+            tar xf *.txz -C /data/data/com.winlator/files/imagefs/
+          else
+            rm -rf *.tzst
+          fi
+          cd /tmp
+
+          7z x build_arm64ec_wine.zip && rm -rf build_arm64ec_wine.zip
+          tar xvf build_arm64ec_wine.tar.xz && rm -rf build_arm64ec_wine.tar.xz
+
+          aria2c https://raw.githubusercontent.com/Waim908/wine-winlator/main/wcp-package.sh || exit 1
+          aria2c https://raw.githubusercontent.com/Waim908/wine-winlator/main/fex-dll/libarm64ecfex.dll || exit 1
+          aria2c https://raw.githubusercontent.com/Waim908/wine-winlator/main/fex-dll/libwow64fex.dll || exit 1
+
+          fexDllPath=/tmp customDescription="${wineVer}-${wineTag}-arm64ec; Built form [https://github.com/Waim908/wine-winlator]" customWcpName=wine-${{ needs.build_wine.outputs.wineVer }}-arm64ec doNotCleanStaticLibrary=0 doNotFixLibrary=1 isArm64ec=1 bash -x wcp-package.sh /tmp/wine_build $wineVer || exit 1
+          chmod 644 /tmp/output-wcp/*.wcp
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ steps.download.outputs.wineVer }}-${{ github.event.inputs.customTag }}-arm64ec
-          name: Wine ${{ steps.download.outputs.wineVer }} Arm64ec for Winlator Glibc (${{ github.event.inputs.customTag }})
+          tag_name: ${{ needs.build_wine.outputs.wineVer }}-${{ github.event.inputs.customTag }}-arm64ec
+          name: Wine ${{ needs.build_wine.outputs.wineVer }} Arm64ec for Winlator Glibc (${{ github.event.inputs.customTag }})
           body: |
             自动编译版本。
+            移植Proton MF
+            启用Esync
+            启用Fsync
             修改请查看此仓库源码。
             此版本请勿使用在cmod与Winlator Bionic分支，否则可能失败！
             Remake: ${{ github.event.inputs.customTag }}
             Update Description: ${{ github.event.inputs.customDescription }}
 
-          files: /tmp/build_arm64ec_wine.tar.xz
+          files: /tmp/output-wcp/*.wcp
           draft: false
           prerelease: false
