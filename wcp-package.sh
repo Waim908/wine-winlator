@@ -153,9 +153,6 @@ cp -r -p $wineRoot/bin /tmp/output-wcp/tmp/
 cp -r -p $wineRoot/lib /tmp/output-wcp/tmp/
 cp -r -p $wineRoot/share /tmp/output-wcp/tmp/
 
-cd /tmp/output-wcp/tmp/lib
-find . -name "*.a" -type f -exec rm -v {} +
-
 cd /tmp/output-wcp/tmp/
 if [[ ! $doNotFixLibrary == 1 ]] && [[ $isArm64ec == "arm64ec" ]]; then
     command -v patchelf || { echo "patchelf未安装" && exit 1;}
