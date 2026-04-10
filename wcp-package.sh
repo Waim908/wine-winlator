@@ -89,7 +89,6 @@ if [[ -z $winePath ]]; then
     echo "没有在参数1定义wine可执路径"
     exit 1
 else
-    mkdir -p $WINEPREFIX/dosdevices/
     export USER=xuser
     unset DISPLAY
     if [[ $useBox64 == 1 ]]; then
