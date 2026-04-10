@@ -104,6 +104,8 @@ else
           mkdir -p $WINEPREFIX/drive_c/windows/system32/ || exit 1
           cp -r -p $fexDllPath/*.dll $WINEPREFIX/drive_c/windows/system32/ || exit 1
           export HODLL="libwow64fex.dll"
+          export HODLL64=$HODLL
+          export WINEARCH=win64
         fi
         $winePath/wineboot || exit 1
         sleep 3
