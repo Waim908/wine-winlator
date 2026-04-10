@@ -89,6 +89,8 @@ if [[ -z $winePath ]]; then
     echo "没有在参数1定义wine可执路径"
     exit 1
 else
+    mkdir -p $WINEPREFIX/dosdevices/
+    ln -sf / $WINEPREFIX/dosdevices/z:
     export USER=xuser
     unset DISPLAY
     if [[ $useBox64 == 1 ]]; then
@@ -158,7 +160,7 @@ if [[ ! $doNotFixLibrary == 1 ]] && [[ $isArm64ec == "arm64ec" ]]; then
     command -v patchelf || { echo "patchelf未安装" && exit 1;}
     patchelf_fix
 fi
-
+cd /tmp/output-wcp/tmp/lib
 [[ $doNotCleanStaticLibrary == 1 ]] || {
     echo "Deleting static libraries..."
     find . -type f -name "*.a" -print0 | while IFS= read -r -d '' file; do
@@ -166,6 +168,7 @@ fi
         rm -f "$file" || { echo "Error: failed to delete $file" >&2; exit 1; }
     done
 }
+cd /tmp/output-wcp/tmp/
 
 create_json
 
