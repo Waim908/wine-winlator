@@ -37,4 +37,4 @@ source /tmp/wine-winlator/compile.conf arm64
 make -j $(nproc) || exit 1
 make install || exit 1
 cd /tmp
-tar -I "xz -T$(nproc)" -cvf /tmp/build_arm64ec_wine.tar.xz wine_build || exit 1
+tar -I "xz -T$(nproc) -9e" -cvf /tmp/build_arm64ec_wine.tar.xz wine_build || exit 1
