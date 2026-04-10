@@ -90,7 +90,6 @@ if [[ -z $winePath ]]; then
     exit 1
 else
     mkdir -p $WINEPREFIX/dosdevices/
-    ln -sf / $WINEPREFIX/dosdevices/z:
     export USER=xuser
     unset DISPLAY
     if [[ $useBox64 == 1 ]]; then
