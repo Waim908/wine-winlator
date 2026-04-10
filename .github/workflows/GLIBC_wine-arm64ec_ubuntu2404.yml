@@ -22,7 +22,7 @@ on:
       targetImagefs:
         description: "Fake Imagefs Environment, Download Package URL"
         required: false
-        default: "https://github.com/Waim908/rootfs-winlator/releases/download/rootfs-g7.1.5-1.1/imagefs-g7.1.5-1.1.tzst"
+        default: "https://github.com/Waim908/rootfs-winlator/releases/download/rootfs-ori-7.1.5/imagefs.txz"
       customTag:
         description: "Custom Releases Tag"
         required: false
@@ -123,7 +123,11 @@ jobs:
           locale-gen
           export LC_ALL=en_US.UTF-8
           aria2c -s16 -x16 $targetImagefs || exit 1
-          tar xf *.tzst -C /data/data/com.winlator/files/imagefs/ && rm -rf *.tzst
+          if ! tar xf *.tzst -C /data/data/com.winlator/files/imagefs/; then
+            tar xf *.txz -C /data/data/com.winlator/files/imagefs/
+          else
+            rm -rf *.tzst
+          fi
           cd /tmp
 
           7z x build_arm64ec_wine.zip && rm -rf build_arm64ec_wine.zip
