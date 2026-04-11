@@ -155,12 +155,13 @@ cp -r -p $wineRoot/share /tmp/output-wcp/tmp/
 
 cd /tmp/output-wcp/tmp/
 if [[ ! $fixLibrary == 1 ]] && [[ $isArm64ec == "arm64ec" ]]; then
+    echo "修复寻库..."
     command -v patchelf || { echo "patchelf未安装" && exit 1;}
     patchelf_fix
 fi
 cd /tmp/output-wcp/tmp/lib
 [[ $cleanStaticLibrary == 1 ]] && {
-    echo "Deleting static libraries..."
+    echo "删除静态库文件..."
     find . -type f -name "*.a" -print0 | while IFS= read -r -d '' file; do
         echo "Deleting: $file"
         rm -f "$file" || { echo "Error: failed to delete $file" >&2; exit 1; }
