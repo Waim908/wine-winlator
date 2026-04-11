@@ -154,12 +154,12 @@ cp -r -p $wineRoot/lib /tmp/output-wcp/tmp/
 cp -r -p $wineRoot/share /tmp/output-wcp/tmp/
 
 cd /tmp/output-wcp/tmp/
-if [[ ! $doNotFixLibrary == 1 ]] && [[ $isArm64ec == "arm64ec" ]]; then
+if [[ ! $fixLibrary == 1 ]] && [[ $isArm64ec == "arm64ec" ]]; then
     command -v patchelf || { echo "patchelf未安装" && exit 1;}
     patchelf_fix
 fi
 cd /tmp/output-wcp/tmp/lib
-[[ $doNotCleanStaticLibrary == 1 ]] || {
+[[ $cleanStaticLibrary == 1 ]] && {
     echo "Deleting static libraries..."
     find . -type f -name "*.a" -print0 | while IFS= read -r -d '' file; do
         echo "Deleting: $file"

@@ -137,7 +137,7 @@ jobs:
           aria2c https://raw.githubusercontent.com/Waim908/wine-winlator/main/fex-dll/libarm64ecfex.dll || exit 1
           aria2c https://raw.githubusercontent.com/Waim908/wine-winlator/main/fex-dll/libwow64fex.dll || exit 1
 
-          fexDllPath=/tmp customDescription="${wineVer}-${wineTag}-arm64ec; Built form [https://github.com/Waim908/wine-winlator]" customWcpName=wine-${{ needs.build_wine.outputs.wineVer }}-arm64ec doNotCleanStaticLibrary=0 doNotFixLibrary=1 isArm64ec=1 bash -x wcp-package.sh /tmp/wine_build $wineVer || exit 1
+          fexDllPath=/tmp customDescription="${wineVer}-${wineTag}-arm64ec; Built form [https://github.com/Waim908/wine-winlator]" customWcpName=wine-${{ needs.build_wine.outputs.wineVer }}-arm64ec isArm64ec=1 bash -x wcp-package.sh /tmp/wine_build $wineVer || exit 1
           chmod 644 /tmp/output-wcp/*.wcp
 
       - name: Create GitHub Release
