@@ -114,6 +114,19 @@ else
     fi
 fi
 
+a=()
+for i in system.reg userdef.reg  user.reg; do
+  if [[ -f $WINEPREFIX/$i ]] ; then
+    echo "✅已找到注册表文件=> $i"
+  else
+    echo "❌找不到注册表文件=> $i"
+    a+=($i)
+  fi
+done
+
+[[ ! -z ${a[@]} ]] && { echo "致命错误！无法找到注册表文件！" && exit 1;}
+
+
 if [[ $useBox64 == 1 ]]; then
     wine_version=$(box64 $winePath/wine --version)
 else
