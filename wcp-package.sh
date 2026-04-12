@@ -166,7 +166,7 @@ cp -r -p $wineRoot/lib /tmp/output-wcp/tmp/
 cp -r -p $wineRoot/share /tmp/output-wcp/tmp/
 
 cd /tmp/output-wcp/tmp/
-if [[ ! $fixLibrary == 1 ]] && [[ $isArm64ec == "arm64ec" ]]; then
+if [[ $fixLibrary == 1 ]] && [[ $isArm64ec == "arm64ec" ]]; then
     echo "修复寻库..."
     command -v patchelf || { echo "patchelf未安装" && exit 1;}
     patchelf_fix
