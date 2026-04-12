@@ -85,6 +85,27 @@ if ! command -v xz; then
     exit 1
 fi
 
+cat > /data/data/com.winlator/files/imagefs/tmp/fix_wm.reg << EOF
+Windows Registry Editor Version 5.00
+
+[HKEY_CURRENT_USER\Control Panel\Desktop\WindowMetrics]
+"BorderWidth"="1"
+"CaptionHeight"="25"
+"CaptionWidth"="18"
+"IconSpacing"="-1125"
+"IconTitleWrap"="1"
+"IconVerticalSpacing"="-1125"
+"MenuHeight"="18"
+"MenuWidth"="18"
+"PaddedBorderWidth"="0"
+"ScrollHeight"="17"
+"ScrollWidth"="17"
+"SmCaptionHeight"="17"
+"SmCaptionWidth"="17"
+
+
+EOF
+
 if [[ -z $winePath ]]; then
     echo "没有在参数1定义wine可执路径"
     exit 1
@@ -95,9 +116,12 @@ else
         echo "使用box64执行"
         box64 $winePath/wineboot || exit 1
         $winePath/wineserver -w || exit 1
-        # echo "Delete Registry Key: HKEY_CURRENT_USER\Control Panel\Desktop\WindowMetrics"
-        # box64 $winePath/wine reg delete "HKEY_CURRENT_USER\Control Panel\Desktop\WindowMetrics" /f || exit
-        # $winePath/wineserver -w || exit 1
+        echo "删除注册表: HKEY_CURRENT_USER\Control Panel\Desktop\WindowMetrics"
+        box64 $winePath/wine reg delete "HKEY_CURRENT_USER\Control Panel\Desktop\WindowMetrics" /f || exit
+        $winePath/wineserver -w || exit 1
+        echo "导入新的注册表"
+        box64 $winePath/wine reg import /data/data/com.winlator/files/imagefs/tmp/fix_wm.reg || exit 1
+        box64 $winePath/wineserver -w || exit 1
     else
         if [[ $isArm64ec == "arm64ec" ]] && [[ ! -z $fexDllPath ]]; then
           echo "获取到fex-dll文件路径: $fexDllPath"
@@ -108,9 +132,12 @@ else
         fi
         $winePath/wineboot || exit 1
         $winePath/wineserver -w || exit 1
-        # echo "Delete Registry Key: HKEY_CURRENT_USER\Control Panel\Desktop\WindowMetrics"
-        # $winePath/wine reg delete "HKEY_CURRENT_USER\Control Panel\Desktop\WindowMetrics" /f || exit 1
-        # $winePath/wineserver -w || exit 1
+        echo "删除注册表: HKEY_CURRENT_USER\Control Panel\Desktop\WindowMetrics"
+        $winePath/wine reg delete "HKEY_CURRENT_USER\Control Panel\Desktop\WindowMetrics" /f || exit 1
+        $winePath/wineserver -w || exit 1
+        echo "导入新的注册表"
+        $winePath/wine reg import /data/data/com.winlator/files/imagefs/tmp/fix_wm.reg || exit 1
+        $winePath/wineserver -w || exit 1
     fi
 fi
 
