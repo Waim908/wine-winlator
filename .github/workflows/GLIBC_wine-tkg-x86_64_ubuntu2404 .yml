@@ -19,9 +19,16 @@ on:
         description: "Custom Releases Description"
         required: false
         default: ""
+      cleanStaticLibrary:
+        description: "Clean Static Library Files"
+        type: boolean
+        required: false
+        default: true
 
 env:
   wineVer: ${{ github.event.inputs.version }}
+  cleanStaticLibrary: ${{ inputs.cleanStaticLibrary == true && '1' || '0' }}
+
 
 jobs:
   build_wine:
