@@ -94,10 +94,10 @@ else
     if [[ $useBox64 == 1 ]]; then
         echo "使用box64执行"
         box64 $winePath/wineboot || exit 1
-        sleep 3
+        $winePath/wineserver -w || exit 1
         echo "Delete Registry Key: HKEY_CURRENT_USER\Control Panel\Desktop\WindowMetrics"
-        box64 $winePath/wine reg delete "HKEY_CURRENT_USER\Control Panel\Desktop\WindowMetrics" /f || exit 1
-        sleep 3
+        box64 $winePath/wine reg delete "HKEY_CURRENT_USER\Control Panel\Desktop\WindowMetrics" /f || exit
+        $winePath/wineserver -w || exit 1
     else
         if [[ $isArm64ec == "arm64ec" ]] && [[ ! -z $fexDllPath ]]; then
           echo "获取到fex-dll文件路径: $fexDllPath"
@@ -105,13 +105,12 @@ else
           cp -r -p $fexDllPath/*.dll $WINEPREFIX/drive_c/windows/system32/ || exit 1
           export HODLL="libwow64fex.dll"
           export HODLL64=$HODLL
-          export WINEARCH=win64
         fi
         $winePath/wineboot || exit 1
-        sleep 3
+        $winePath/wineserver -w || exit 1
         echo "Delete Registry Key: HKEY_CURRENT_USER\Control Panel\Desktop\WindowMetrics"
         $winePath/wine reg delete "HKEY_CURRENT_USER\Control Panel\Desktop\WindowMetrics" /f || exit 1
-        sleep 3
+        $winePath/wineserver -w || exit 1
     fi
 fi
 
