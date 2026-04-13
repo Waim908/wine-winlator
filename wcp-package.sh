@@ -166,7 +166,7 @@ fi
   else
     txtFileName="TkG-version.txt"
   fi
-    cat > '/data/data/com.winlator/files/imagefs/home/xuser/.wine/drive_c/ProgramData/Microsoft/Windows/Start Menu/${txtFileName}' << EOF
+  cat > "/data/data/com.winlator/files/imagefs/home/xuser/.wine/drive_c/ProgramData/Microsoft/Windows/Start Menu/${txtFileName}" << EOF
 Version: $wine_version
 Others: More staging settings in winecfg
 [Waim908/wine-winlator](https://github.com/Waim908/wine-winlator)
