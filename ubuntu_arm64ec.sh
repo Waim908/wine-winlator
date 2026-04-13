@@ -1,6 +1,15 @@
 [[ -d /tmp/llvm_mingw ]] || { echo "无法找到编译器目录" && exit 1;}
 export PATH=/tmp/llvm_mingw/bin:$PATH
 export LC_ALL=en_US.UTF-8
+
+if [[ -f /tmp/wineVer.conf ]]; then
+  source /tmp/wineVer.conf
+  echo "wineVer: $wineVer"
+else
+  echo "没有wineVer.conf文件，退出！"
+  exit 1
+fi
+
 apt clean
 chmod 777 /tmp
 apt update
@@ -8,9 +17,9 @@ apt install -y patch xz-utils || exit 1
 
 cd /tmp/wine-src
 
-echo "Patch Ver=> $1"
+echo "Patch Ver=> $wineVer"
 
-bash -x /tmp/wine-winlator/apply_patch.sh wine-glibc-arm64ec $1 || exit 1
+bash -x /tmp/wine-winlator/apply_patch.sh wine-glibc-arm64ec $wineVer || exit 1
 source /tmp/wine-winlator/compile.conf amd64
 mkdir amd64
 cd amd64
@@ -20,7 +29,7 @@ make -C nls -j $(nproc) || exit 1
 cd ..
 source /tmp/wine-winlator/compile.conf arm64
 
-[[ $2 == y ]] && dlls/winevulkan/make_vulkan
+[[ $makeWineVK == 1 ]] && dlls/winevulkan/make_vulkan
 
 ./configure --prefix=/tmp/wine_build \
   --with-mingw=clang \

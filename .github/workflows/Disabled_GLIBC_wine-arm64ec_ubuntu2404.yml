@@ -32,9 +32,19 @@ on:
         required: false
         default: ""
       makeWineVK:
-        description: "make wine vk (y/n)"
+        description: "make wine vk"
+        type: boolean
         required: false
-        default: "y"
+        default: true
+      cleanStaticLibrary:
+        description: "Clean Static Library Files"
+        type: boolean
+        required: false
+        default: true
+
+env:
+  cleanStaticLibrary: ${{ inputs.cleanStaticLibrary == true && '1' || '0' }}
+  makeWineVK: ${{ inputs.makeWineVK == true && '1' || '0' }}
 
 jobs:
   build_wine:
@@ -77,10 +87,11 @@ jobs:
           sudo cp -r -p wine-winlator/ ubuntu2404/tmp/
           sudo mv wine-src/ ubuntu2404/tmp/
           sudo mv llvm_mingw/ ubuntu2404/tmp/
+          sudo echo "export wineVer=${{ steps.download.outputs.wineVer }} && export makeWineVK=${makeWineVK} && export cleanStaticLibrary=${cleanStaticLibrary}" > ubuntu2404/tmp/wineVer.conf
 
       - name: Compile
         run: |
-          sudo chroot ubuntu2404 bash -x /tmp/wine-winlator/ubuntu_arm64ec.sh ${{ steps.download.outputs.wineVer }} ${{ github.event.inputs.makeWineVK }} || exit 1
+          sudo chroot ubuntu2404 bash -x /tmp/wine-winlator/ubuntu_arm64ec.sh || exit 1
           sudo chmod 644 ubuntu2404/tmp/*.tar.xz
 
       - name: Upload Artifacts
