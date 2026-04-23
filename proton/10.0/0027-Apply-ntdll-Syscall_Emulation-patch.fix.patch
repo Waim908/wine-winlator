@@ -1,0 +1,50 @@
+--- a/dlls/ntdll/unix/signal_x86_64.c	2026-04-23 22:17:05.841516541 +0800
++++ b/dlls/ntdll/unix/signal_x86_64.c	2026-04-24 07:41:12.875602795 +0800
+@@ -76,6 +76,10 @@
+ # include <linux/audit.h>
+ #endif
+ 
++#include <sys/prctl.h>
++#include <errno.h>
++#include <fcntl.h>
++
+ #include "ntstatus.h"
+ #define WIN32_NO_STATUS
+ #include "windef.h"
+@@ -1794,6 +1798,25 @@
+     user_mode_callback_return( ret_ptr, ret_len, status, NtCurrentTeb() );
+ }
+ 
++static void sigsys_handler( int signal, siginfo_t *siginfo, void *sigcontext )
++{
++    extern const void *__wine_syscall_dispatcher_prolog_end_ptr;
++    struct syscall_frame *frame = get_syscall_frame();
++    ucontext_t *ctx = sigcontext;
++
++    TRACE_(seh)("SIGSYS, rax %#llx, rip %#llx.\n", ctx->uc_mcontext.gregs[REG_RAX],
++            ctx->uc_mcontext.gregs[REG_RIP]);
++
++    frame->rip = ctx->uc_mcontext.gregs[REG_RIP] + 0xb;
++    frame->rcx = ctx->uc_mcontext.gregs[REG_RIP];
++    frame->eflags = ctx->uc_mcontext.gregs[REG_EFL];
++    frame->restore_flags = 0;
++    ctx->uc_mcontext.gregs[REG_RCX] = (ULONG_PTR)frame;
++    ctx->uc_mcontext.gregs[REG_R11] = frame->eflags;
++    ctx->uc_mcontext.gregs[REG_EFL] &= ~0x100;  /* clear single-step flag */
++    ctx->uc_mcontext.gregs[REG_RIP] = (ULONG64)__wine_syscall_dispatcher_prolog_end_ptr;
++}
++
+ 
+ /***********************************************************************
+  *           is_privileged_instr
+@@ -2951,10 +2974,8 @@
+     if (sigaction( SIGSEGV, &sig_act, NULL ) == -1) goto error;
+     if (sigaction( SIGILL, &sig_act, NULL ) == -1) goto error;
+     if (sigaction( SIGBUS, &sig_act, NULL ) == -1) goto error;
+-#ifdef __APPLE__
+     sig_act.sa_sigaction = sigsys_handler;
+     if (sigaction( SIGSYS, &sig_act, NULL ) == -1) goto error;
+-#endif
+     install_bpf(&sig_act);
+     return;
+ 
