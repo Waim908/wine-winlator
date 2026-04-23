@@ -4,8 +4,6 @@
 
 # [![License: LGPL-2.1](https://img.shields.io/badge/License-LGPL--2.1-blue.svg)](LICENSE)
 
-winlator11 hostei mod wine  x86_64 补丁与releases
-
 部分补丁请通过```get_file_9.2.sh```和```patch.sh```生成，其中大部分无效，可能导致编译错误
 
 midi必须使用winlator版midimap.c！
@@ -20,13 +18,19 @@ midi必须使用winlator版midimap.c！
 
 原版
 
-- *wine/* : 仅对wine10.15进行适配无法保证兼容性
+- *wine-old/* : 仅对wine10.15进行适配无法保证兼容性
 
 Glibc 7.1.x
 
 - *wine-glibc/* : 实验性通过LLM完善了补丁
 
 - *wine-glibc-arm64ec/* : Arm64ec补丁
+
+# 构建参数
+
+```bash
+--enable-archs=i386,x86_64 --disable-win16 --disable-tests --without-capi --without-coreaudio --without-cups --without-gphoto --without-osmesa --without-oss --without-pcap --without-pcsclite --without-sane --without-udev --without-unwind --without-usb --without-v4l2 --without-wayland --without-xinerama --without-piper --without-gphoto
+```
 
 # Arm64ec Wine
 
@@ -111,6 +115,8 @@ A: 你可以直接在box64官方仓库的工作流下载到最新的box64 wcp文
  - [hostei/wine-tkg](https://github.com/hostei33/wine-tkg)
 
  - [brunodev85/wine-9.2-custom](https://github.com/brunodev85/wine-9.2-custom)
+
+ - [brunodev85/wine-10.10-custom](https://github.com/brunodev85/wine-10.10-custom.git)
 
  - [longjunyu2/wine-custom](https://github.com/longjunyu2/wine-custom)
 

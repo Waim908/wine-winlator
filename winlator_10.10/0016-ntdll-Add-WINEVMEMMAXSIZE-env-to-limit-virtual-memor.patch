@@ -1,0 +1,57 @@
+From 251b32d29bfe4055613d4884be2ef64aa57a9591 Mon Sep 17 00:00:00 2001
+From: BrunoSX <brunodeveloper85@gmail.com>
+Date: Tue, 23 Sep 2025 13:30:15 -0300
+Subject: [PATCH 16/40] ntdll: Add WINEVMEMMAXSIZE env to limit virtual memory
+ allocation
+
+---
+ dlls/ntdll/unix/virtual.c | 12 +++++++++++-
+ 1 file changed, 11 insertions(+), 1 deletion(-)
+
+diff --git a/dlls/ntdll/unix/virtual.c b/dlls/ntdll/unix/virtual.c
+index 955f721..4d76a93 100755
+--- a/dlls/ntdll/unix/virtual.c
++++ b/dlls/ntdll/unix/virtual.c
+@@ -199,6 +199,8 @@ static void *working_set_limit   = (void *)0x7fff0000;
+ 
+ static void *host_addr_space_limit;  /* top of the host virtual address space */
+ 
++static SIZE_T vmem_max_size = 0;
++
+ static struct file_view *arm64ec_view;
+ 
+ ULONG_PTR user_space_wow_limit = 0;
+@@ -3634,6 +3636,7 @@ void virtual_init(void)
+ {
+     const struct preload_info **preload_info = dlsym( RTLD_DEFAULT, "wine_main_preload_info" );
+     const char *preload;
++    const char *vmem_max_size_env;
+     size_t size;
+     int i;
+     pthread_mutexattr_t attr;
+@@ -3701,6 +3704,12 @@ void virtual_init(void)
+     size = (char *)address_space_start - (char *)0x10000;
+     if (size && mmap_is_in_reserved_area( (void*)0x10000, size ) == 1)
+         anon_mmap_fixed( (void *)0x10000, size, PROT_READ | PROT_WRITE, 0 );
++
++    if ((vmem_max_size_env = getenv( "WINEVMEMMAXSIZE" )))
++    {
++        vmem_max_size = (SIZE_T)strtol(vmem_max_size_env, NULL, 10) << 20;
++        TRACE( "virtual memory max size: %ld\n", vmem_max_size );
++    }
+ }
+ 
+ 
+@@ -4929,7 +4938,8 @@ static NTSTATUS allocate_virtual_memory( void **ret, SIZE_T *size_ptr, ULONG typ
+ 
+     /* Round parameters to a page boundary */
+ 
+-    if (is_beyond_limit( 0, size, working_set_limit )) return STATUS_WORKING_SET_LIMIT_RANGE;
++    if (is_beyond_limit( 0, size, working_set_limit ) || (vmem_max_size > 0 && size > vmem_max_size))
++        return STATUS_WORKING_SET_LIMIT_RANGE;
+ 
+     if (*ret)
+     {
+-- 
+2.53.0
+

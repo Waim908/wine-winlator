@@ -1,0 +1,95 @@
+From 82078144c53fc36ad2fc10c338e7886602cb879c Mon Sep 17 00:00:00 2001
+From: BrunoSX <brunodeveloper85@gmail.com>
+Date: Thu, 25 Sep 2025 16:51:00 -0300
+Subject: [PATCH 04/10] winex11: Do not use additional extensions by default
+
+---
+ dlls/winex11.drv/mouse.c       | 1 +
+ dlls/winex11.drv/x11drv.h      | 1 +
+ dlls/winex11.drv/x11drv_main.c | 8 ++++++--
+ dlls/winex11.drv/xvidmode.c    | 5 +----
+ 4 files changed, 9 insertions(+), 6 deletions(-)
+
+diff --git a/dlls/winex11.drv/mouse.c b/dlls/winex11.drv/mouse.c
+index 6107b16..e38cb6d 100755
+--- a/dlls/winex11.drv/mouse.c
++++ b/dlls/winex11.drv/mouse.c
+@@ -1790,6 +1790,7 @@ static BOOL X11DRV_TouchEvent( HWND hwnd, XGenericEventCookie *xev )
+  */
+ void x11drv_xinput2_load(void)
+ {
++    if (!usexinput2) return;
+ #if defined(SONAME_LIBXI) && defined(HAVE_X11_EXTENSIONS_XINPUT2_H)
+     int event, error;
+     void *libxi_handle = dlopen( SONAME_LIBXI, RTLD_NOW );
+diff --git a/dlls/winex11.drv/x11drv.h b/dlls/winex11.drv/x11drv.h
+index 089ae1a..6b66472 100755
+--- a/dlls/winex11.drv/x11drv.h
++++ b/dlls/winex11.drv/x11drv.h
+@@ -461,6 +461,7 @@ extern BOOL grab_fullscreen;
+ extern BOOL usexcomposite;
+ extern BOOL managed_mode;
+ extern BOOL private_color_map;
++extern BOOL usexinput2;
+ extern int primary_monitor;
+ extern int copy_default_colors;
+ extern int alloc_system_colors;
+diff --git a/dlls/winex11.drv/x11drv_main.c b/dlls/winex11.drv/x11drv_main.c
+index 2b1757b..993940a 100755
+--- a/dlls/winex11.drv/x11drv_main.c
++++ b/dlls/winex11.drv/x11drv_main.c
+@@ -64,8 +64,8 @@ Atom systray_atom = 0;
+ HWND systray_hwnd = 0;
+ unsigned int screen_bpp;
+ Window root_window;
+-BOOL usexvidmode = TRUE;
+-BOOL usexrandr = TRUE;
++BOOL usexvidmode = FALSE;
++BOOL usexrandr = FALSE;
+ BOOL usexcomposite = TRUE;
+ BOOL use_take_focus = TRUE;
+ BOOL use_primary_selection = FALSE;
+@@ -77,6 +77,7 @@ int primary_monitor = 0;
+ BOOL client_side_graphics = TRUE;
+ BOOL client_side_with_render = TRUE;
+ BOOL shape_layered_windows = TRUE;
++BOOL usexinput2 = FALSE;
+ int copy_default_colors = 128;
+ int alloc_system_colors = 256;
+ int xrender_error_base = 0;
+@@ -497,6 +498,9 @@ static void setup_options(void)
+     if (!get_config_key( hkey, appkey, "AllocSystemColors", buffer, sizeof(buffer) ))
+         alloc_system_colors = wcstol( buffer, NULL, 0 );
+ 
++    if (!get_config_key( hkey, appkey, "UseXInput2", buffer, sizeof(buffer) ))
++        usexinput2 = IS_OPTION_TRUE( buffer[0] );
++
+     get_config_key( hkey, appkey, "InputStyle", input_style, sizeof(input_style) );
+ 
+     NtClose( appkey );
+diff --git a/dlls/winex11.drv/xvidmode.c b/dlls/winex11.drv/xvidmode.c
+index dd762f2..d0a26e6 100755
+--- a/dlls/winex11.drv/xvidmode.c
++++ b/dlls/winex11.drv/xvidmode.c
+@@ -251,7 +251,7 @@ void X11DRV_XF86VM_Init(void)
+   void *xvidmode_handle;
+   Bool ok;
+ 
+-  if (xf86vm_major) return; /* already initialized? */
++  if (!usexvidmode || xf86vm_major) return;
+ 
+   xvidmode_handle = dlopen(SONAME_LIBXXF86VM, RTLD_NOW);
+   if (!xvidmode_handle)
+@@ -301,9 +301,6 @@ void X11DRV_XF86VM_Init(void)
+   }
+ #endif /* X_XF86VidModeSetGammaRamp */
+ 
+-  if (!usexvidmode)
+-    return;
+-
+   xf86vm_handler.name = "XF86VidMode";
+   xf86vm_handler.priority = 100;
+   xf86vm_handler.get_id = xf86vm_get_id;
+-- 
+2.53.0
+

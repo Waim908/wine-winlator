@@ -1,0 +1,156 @@
+diff --color -urN b/programs/winebrowser/main.c b_fixed/programs/winebrowser/main.c
+--- b/programs/winebrowser/main.c	2026-04-23 22:49:14.329378316 +0800
++++ b_fixed/programs/winebrowser/main.c	2026-04-23 23:01:34.297408783 +0800
+@@ -1,5 +1,5 @@
+ /*
+- * winebrowser - winelib app to launch native OS browser or mail client.
++ * winebrowser - winelib app to launch OS browser or mail client.
+  *
+  * Copyright (C) 2004 Chris Morgan
+  * Copyright (C) 2005 Hans Leidekker
+@@ -18,21 +18,6 @@
+  * License along with this library; if not, write to the Free Software
+  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
+  *
+- * NOTES:
+- *  Winebrowser is a winelib application that will start the appropriate
+- *  native browser or mail client for a wine installation that lacks a 
+- *  windows browser/mail client. For example, you will be able to open
+- *  URLs via native mozilla if no browser has yet been installed in wine.
+- *
+- *  The application to launch is chosen from a default set or, if set,
+- *  taken from a registry key.
+- *  
+- *  The argument may be a regular Windows file name, a file URL, an
+- *  URL or a mailto URL. In the first three cases the argument
+- *  will be fed to a web browser. In the last case the argument is fed
+- *  to a mail client. A mailto URL is composed as follows:
+- *
+- *   mailto:[E-MAIL]?subject=[TOPIC]&cc=[E-MAIL]&bcc=[E-MAIL]&body=[TEXT]
+  */
+ 
+ #define WIN32_LEAN_AND_MEAN
+@@ -130,14 +115,6 @@
+ 
+ static int open_http_url( const WCHAR *url )
+ {
+-    static const WCHAR defaultbrowsers[] =
+-        L"xdg-open\0"
+-        "/usr/bin/open\0"
+-        "firefox\0"
+-        "konqueror\0"
+-        "mozilla\0"
+-        "opera\0"
+-        "dillo\0";
+     WCHAR browsers[256];
+     HKEY key;
+     LONG r;
+@@ -149,19 +126,13 @@
+         RegCloseKey( key );
+     }
+     if (r != ERROR_SUCCESS)
+-        memcpy( browsers, defaultbrowsers, sizeof(defaultbrowsers) );
++        return 1;
+ 
+     return launch_app( browsers, url );
+ }
+ 
+ static int open_mailto_url( const WCHAR *url )
+ {
+-    static const WCHAR defaultmailers[] =
+-        L"/usr/bin/open\0"
+-        "xdg-email\0"
+-        "mozilla-thunderbird\0"
+-        "thunderbird\0"
+-        "evolution\0";
+     WCHAR mailers[256];
+     HKEY key;
+     LONG r;
+@@ -173,7 +144,7 @@
+         RegCloseKey( key );
+     }
+     if (r != ERROR_SUCCESS)
+-        memcpy( mailers, defaultmailers, sizeof(defaultmailers) );
++        return 1;
+ 
+     return launch_app( mailers, url );
+ }
+diff --color -urN b/programs/winebrowser/main.c.rej b_fixed/programs/winebrowser/main.c.rej
+--- b/programs/winebrowser/main.c.rej	1970-01-01 08:00:00.000000000 +0800
++++ b_fixed/programs/winebrowser/main.c.rej	2026-04-23 23:01:34.298140836 +0800
+@@ -0,0 +1,75 @@
++--- programs/winebrowser/main.c
+++++ programs/winebrowser/main.c
++@@ -39,45 +24,41 @@
++ 
++ WINE_DEFAULT_DEBUG_CHANNEL(winebrowser);
++ 
++-static char *strdup_unixcp( const WCHAR *str )
++-{
++-    char *ret;
++-    int len = WideCharToMultiByte( CP_UNIXCP, 0, str, -1, NULL, 0, NULL, NULL );
++-    if ((ret = malloc( len )))
++-        WideCharToMultiByte( CP_UNIXCP, 0, str, -1, ret, len, NULL, NULL );
++-    return ret;
++-}
++-
++-/* try to launch a unix app from a comma separated string of app names */
+++/* try to launch a win32 app from a comma separated string of app names */
++ static int launch_app( const WCHAR *candidates, const WCHAR *argv1 )
++-{
++-    char *cmdline;
++-    int i, count;
++-    char **argv_new;
++-
++-    if (!(cmdline = strdup_unixcp( argv1 ))) return 1;
++-
+++{   
+++    int i, j, k, size, num_args;
+++    WCHAR *parameters;
+++    
++     while (*candidates)
++     {
++-        WCHAR **args = CommandLineToArgvW( candidates, &count );
++-
++-        if (!(argv_new = malloc( (count + 2) * sizeof(*argv_new) ))) break;
++-        for (i = 0; i < count; i++) argv_new[i] = strdup_unixcp( args[i] );
++-        argv_new[count] = cmdline;
++-        argv_new[count + 1] = NULL;
++-
++-        TRACE( "Trying" );
++-        for (i = 0; i <= count; i++) TRACE( " %s", wine_dbgstr_a( argv_new[i] ));
++-        TRACE( "\n" );
+++        WCHAR **args = CommandLineToArgvW( candidates, &num_args );
+++        
+++        TRACE( "Trying %s\n", debugstr_w( candidates ) );
+++        
+++        parameters = NULL;
+++        if (num_args > 1) {
+++            size = 0;
+++            for (i = 1; i < num_args; i++) size += lstrlenW( args[i] );
+++            parameters = malloc(sizeof(WCHAR) * size + 2 * sizeof(WCHAR));
+++            
+++            for (i = 1, j = 0, k = 0; i < num_args; i++) {
+++                for (k = 0; k < lstrlenW( args[i] ); k++) parameters[j++] = args[i][k];
+++                parameters[j++] = L' ';
+++            }
+++            
+++            for (i = 0; i < lstrlenW( argv1 ); i++) parameters[j++] = argv1[i];
+++            parameters[j++] = L'\0';
+++        }
++ 
++-        if (!__wine_unix_spawnvp( argv_new, FALSE )) ExitProcess(0);
++-        for (i = 0; i < count; i++) free( argv_new[i] );
++-        free( argv_new );
+++        if (ShellExecuteW( NULL, L"open", args[0], num_args > 1 ? parameters : argv1, NULL, SW_SHOWNORMAL ) > (HINSTANCE)32)
+++            ExitProcess(EXIT_SUCCESS);
+++        
+++        if (parameters) free( parameters );
++         candidates += lstrlenW( candidates ) + 1;  /* grab the next app */
++     }
++     WINE_ERR( "could not find a suitable app to open %s\n", debugstr_w( argv1 ));
++ 
++-    free( cmdline );
++     return 1;
++ }
++ 

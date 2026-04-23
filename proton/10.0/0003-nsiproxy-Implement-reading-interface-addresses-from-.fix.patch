@@ -1,0 +1,399 @@
+diff --color -urN b/dlls/nsiproxy.sys/ip.c b_fixed/dlls/nsiproxy.sys/ip.c
+--- b/dlls/nsiproxy.sys/ip.c	2026-04-23 22:49:13.809522140 +0800
++++ b_fixed/dlls/nsiproxy.sys/ip.c	2026-04-23 23:01:33.951397027 +0800
+@@ -1063,7 +1063,7 @@
+     TRACE( "%p %d %p %d %p %d %p %d %p\n", key_data, key_size, rw_data, rw_size,
+            dynamic_data, dynamic_size, static_data, static_size, count );
+ 
+-    if (getifaddrs( &addrs )) return STATUS_NO_MORE_ENTRIES;
++    if (!(addrs = read_ifaddrs_from_file())) return STATUS_NO_MORE_ENTRIES;
+ 
+     for (entry = addrs; entry; entry = entry->ifa_next)
+     {
+@@ -1080,8 +1080,6 @@
+         num++;
+     }
+ 
+-    freeifaddrs( addrs );
+-
+     if (!want_data || num <= *count) *count = num;
+     else status = STATUS_BUFFER_OVERFLOW;
+ 
+@@ -1120,7 +1118,7 @@
+ 
+     if (!convert_luid_to_unix_name( &key6->luid, &unix_name )) return STATUS_NOT_FOUND;
+ 
+-    if (getifaddrs( &addrs )) return STATUS_NO_MORE_ENTRIES;
++    if (!(addrs = read_ifaddrs_from_file())) return STATUS_NO_MORE_ENTRIES;
+ 
+     for (entry = addrs; entry; entry = entry->ifa_next)
+     {
+@@ -1137,7 +1135,6 @@
+         break;
+     }
+ 
+-    freeifaddrs( addrs );
+     return status;
+ }
+ 
+@@ -1543,7 +1540,11 @@
+         }
+         freeifaddrs( addrs );
+ 
+-        if (!(fp = fopen( "/proc/net/route", "r" ))) return STATUS_NOT_SUPPORTED;
++        if (!(fp = fopen( "/proc/net/route", "r" )))
++        {
++            *count = 0;
++            return STATUS_SUCCESS;
++        }
+ 
+         /* skip header line */
+         fgets( buf, sizeof(buf), fp );
+@@ -1703,7 +1704,6 @@
+     return status;
+ }
+ 
+-#ifdef __linux__
+ struct ipv6_route_data
+ {
+     NET_LUID luid;
+@@ -1759,7 +1759,6 @@
+         stat->if_index = entry->if_index;
+     }
+ }
+-#endif
+ 
+ struct in6_addr str_to_in6_addr(char *nptr, char **endptr)
+ {
+diff --color -urN b/dlls/nsiproxy.sys/ndis.c b_fixed/dlls/nsiproxy.sys/ndis.c
+--- b/dlls/nsiproxy.sys/ndis.c	2026-04-23 22:49:13.809522140 +0800
++++ b_fixed/dlls/nsiproxy.sys/ndis.c	2026-04-23 23:02:14.777791016 +0800
+@@ -29,6 +29,8 @@
+ #include <sys/socket.h>
+ #include <sys/ioctl.h>
+ #include <unistd.h>
++#include <ifaddrs.h>
++#include <arpa/inet.h>
+ 
+ #ifdef HAVE_NET_IF_H
+ #include <net/if.h>
+@@ -90,6 +92,8 @@
+ 
+ WINE_DEFAULT_DEBUG_CHANNEL(nsi);
+ 
++#define IFADDRS_PATH "/data/data/com.winlator/files/rootfs/tmp/ifaddrs"
++
+ struct if_entry
+ {
+     struct list entry;
+@@ -104,6 +108,91 @@
+ 
+ static struct list if_list = LIST_INIT( if_list );
+ static pthread_mutex_t if_list_lock = PTHREAD_MUTEX_INITIALIZER;
++static struct ifaddrs *cached_ifaddrs = NULL;
++
++struct ifaddrs *read_ifaddrs_from_file( void )
++{
++    FILE *file;
++
++    if (cached_ifaddrs)
++        return cached_ifaddrs;
++
++    file = fopen( IFADDRS_PATH, "r" );
++    if (file)
++    {
++        struct ifaddrs *first = NULL;
++        struct ifaddrs *last = NULL;
++        struct ifaddrs *curr = NULL;
++        int col;
++        int addr_family;
++        int addr_scope_id;
++        char *value;
++        char line[128] = {0};
++
++        while (fgets( line, 128, file ))
++        {
++            curr = calloc( 1, sizeof(struct ifaddrs) );
++
++            col = 0;
++            addr_family = 0;
++            value = strtok( line, "," );
++            while (value)
++            {
++                switch (col)
++                {
++                case 0:
++                    curr->ifa_name = strdup( value );
++                    break;
++                case 1:
++                    curr->ifa_flags = strtol( value, NULL, 10 );
++                    break;
++                case 2:
++                    addr_family = strtol( value, NULL, 10 );
++                    break;
++                case 3:
++                    addr_scope_id = strtol( value, NULL, 10 );
++                    break;
++                case 4:
++                case 5:
++                {
++                    struct sockaddr *ifa_addr = NULL;
++                    if (addr_family == AF_INET6)
++                    {
++                        struct sockaddr_in6 *sin6 = calloc( 1, sizeof(struct sockaddr_in6) );
++                        sin6->sin6_family = AF_INET6;
++                        sin6->sin6_scope_id = addr_scope_id;
++                        inet_pton(AF_INET6, value, &sin6->sin6_addr);
++                        ifa_addr = (struct sockaddr *)sin6;
++                    }
++                    else if (addr_family == AF_INET)
++                    {
++                        struct sockaddr_in *sin = calloc( 1, sizeof(struct sockaddr_in) );
++                        sin->sin_family = AF_INET;
++                        inet_pton(AF_INET, value, &sin->sin_addr);
++                        ifa_addr = (struct sockaddr *)sin;
++                    }
++
++                    if (col == 4) curr->ifa_addr = ifa_addr;
++                    else curr->ifa_netmask = ifa_addr;
++                    break;
++                }
++                }
++
++                value = strtok( NULL, "," );
++                col++;
++            }
++            
++            if (!first) first = curr;
++            if (last) last->ifa_next = curr;
++            last = curr;
++        }
++
++        fclose( file );
++        cached_ifaddrs = first;
++    }
++
++    return cached_ifaddrs;
++}
+ 
+ static BOOL have_ethernet_iface;
+ 
+@@ -292,7 +381,7 @@
+     return cached;
+ }
+ 
+-static struct if_entry *add_entry( UINT index, const char *name )
++static struct if_entry *add_entry( UINT index, const char *name, BOOL is_fake_eth )
+ {
+     struct if_entry *entry;
+     int name_len = strlen( name );
+@@ -310,7 +399,11 @@
+         return NULL;
+     }
+ 
+-    if_get_physical( name, &entry->if_type, &entry->if_phys_addr );
++    if (is_fake_eth)
++    {
++        entry->if_type = MIB_IF_TYPE_ETHERNET;
++        memset( &entry->if_phys_addr, 0, sizeof(entry->if_phys_addr) );
++    } else if_get_physical( name, &entry->if_type, &entry->if_phys_addr );
+ 
+     entry->if_luid.Info.Reserved = 0;
+     entry->if_luid.Info.NetLuidIndex = index;
+@@ -330,23 +423,24 @@
+ 
+ static unsigned int update_if_table( void )
+ {
+-    struct if_nameindex *indices = if_nameindex(), *entry;
++    struct ifaddrs *addrs, *entry;
+     unsigned int append_count = 0;
+-    struct if_entry *if_entry;
++    char *last_name = NULL;
++    
++    addrs = read_ifaddrs_from_file();
++    if (!addrs) return 0;
+ 
+-    for (entry = indices; entry->if_index; entry++)
++    for (entry = addrs; entry; entry = entry->ifa_next)
+     {
+-        if (!find_entry_from_index( entry->if_index ) && add_entry( entry->if_index, entry->if_name ))
+-            ++append_count;
+-    }
++        if (!entry->ifa_addr) continue;
+ 
+-    if_freenameindex( indices );
++        if (!last_name || strcmp( entry->ifa_name, last_name ) != 0)
++        {
++            if (!find_entry_from_index( append_count+1 ) && add_entry( append_count+1, entry->ifa_name, TRUE ))
++                ++append_count;
+ 
+-    if (!have_ethernet_iface && fake_ethernet_adapter() && (if_entry = add_entry( 0xdeadbeef, "eth0faked" )))
+-    {
+-        if_entry->if_type = if_entry->if_luid.Info.IfType = MIB_IF_TYPE_ETHERNET;
+-        have_ethernet_iface = TRUE;
+-        ++append_count;
++            last_name = entry->ifa_name;
++        }
+     }
+ 
+     return append_count;
+diff --color -urN b/dlls/nsiproxy.sys/ndis.c.rej b_fixed/dlls/nsiproxy.sys/ndis.c.rej
+--- b/dlls/nsiproxy.sys/ndis.c.rej	1970-01-01 08:00:00.000000000 +0800
++++ b_fixed/dlls/nsiproxy.sys/ndis.c.rej	2026-04-23 23:01:33.962790873 +0800
+@@ -0,0 +1,43 @@
++--- dlls/nsiproxy.sys/ndis.c
+++++ dlls/nsiproxy.sys/ndis.c
++@@ -364,7 +453,7 @@ static WCHAR *strdupAtoW( const char *str )
++     return ret;
++ }
++ 
++-static struct if_entry *add_entry( UINT index, char *name )
+++static struct if_entry *add_entry( UINT index, char *name, BOOL is_fake_eth )
++ {
++     struct if_entry *entry;
++     int name_len = strlen( name );
++@@ -402,16 +495,26 @@ static struct if_entry *add_entry( UINT index, char *name )
++ 
++ static unsigned int update_if_table( void )
++ {
++-    struct if_nameindex *indices = if_nameindex(), *entry;
+++    struct ifaddrs *addrs, *entry;
++     unsigned int append_count = 0;
+++    char *last_name = NULL;
+++    
+++    addrs = read_ifaddrs_from_file();
+++    if (!addrs) return 0;
++ 
++-    for (entry = indices; entry->if_index; entry++)
+++    for (entry = addrs; entry; entry = entry->ifa_next)
++     {
++-        if (!find_entry_from_index( entry->if_index ) && add_entry( entry->if_index, entry->if_name ))
++-            ++append_count;
+++        if (!entry->ifa_addr) continue;
+++
+++        if (!last_name || strcmp( entry->ifa_name, last_name ) != 0)
+++        {
+++            if (!find_entry_from_index( append_count+1 ) && add_entry( append_count+1, entry->ifa_name, TRUE ))
+++                ++append_count;
+++
+++            last_name = entry->ifa_name;
+++        }
++     }
++ 
++-    if_freenameindex( indices );
++     return append_count;
++ }
++ 
+diff --color -urN b/dlls/nsiproxy.sys/tcp.c b_fixed/dlls/nsiproxy.sys/tcp.c
+--- b/dlls/nsiproxy.sys/tcp.c	2026-04-23 22:49:13.809522140 +0800
++++ b_fixed/dlls/nsiproxy.sys/tcp.c	2026-04-23 23:01:33.963397434 +0800
+@@ -189,82 +189,30 @@
+ {
+     struct ipv6_addr_scope *table = NULL, *new_table;
+     unsigned int table_size = 0, num = 0;
++    struct ifaddrs *addrs, *cur;
+ 
+-#ifdef __linux__
+-    {
+-        char buf[512], *ptr;
+-        FILE *fp;
+-
+-        if (!(fp = fopen( "/proc/net/if_inet6", "r" ))) goto failed;
+-
+-        while ((ptr = fgets( buf, sizeof(buf), fp )))
+-        {
+-            WORD a[8];
+-            UINT scope;
+-            struct ipv6_addr_scope *entry;
+-            unsigned int i;
+-
+-            if (sscanf( ptr, "%4hx%4hx%4hx%4hx%4hx%4hx%4hx%4hx %*s %*s %x",
+-                        a, a + 1, a + 2, a + 3, a + 4, a + 5, a + 6, a + 7, &scope ) != 9)
+-                continue;
+-
+-            if (++num > table_size)
+-            {
+-                if (!table_size) table_size = 4;
+-                else table_size *= 2;
+-                if (!(new_table = realloc( table, table_size * sizeof(table[0]) )))
+-                {
+-                    fclose( fp );
+-                    goto failed;
+-                }
+-                table = new_table;
+-            }
+-
+-            entry = table + num - 1;
+-            for (i = 0; i < 8; i++)
+-                entry->addr.u.Word[i] = htons( a[i] );
+-            entry->scope = htons( scope );
+-        }
++    if (!(addrs = read_ifaddrs_from_file()))  goto failed;
+ 
+-        fclose( fp );
+-    }
+-#elif defined(HAVE_GETIFADDRS)
++    for (cur = addrs; cur; cur = cur->ifa_next)
+     {
+-        struct ifaddrs *addrs, *cur;
++        struct sockaddr_in6 *sin6;
++        struct ipv6_addr_scope *entry;
+ 
+-        if (getifaddrs( &addrs ) == -1)  goto failed;
++        if (cur->ifa_addr->sa_family != AF_INET6) continue;
+ 
+-        for (cur = addrs; cur; cur = cur->ifa_next)
++        if (++num > table_size)
+         {
+-            struct sockaddr_in6 *sin6;
+-            struct ipv6_addr_scope *entry;
+-
+-            if (cur->ifa_addr->sa_family != AF_INET6) continue;
+-
+-            if (++num > table_size)
+-            {
+-                if (!table_size) table_size = 4;
+-                else table_size *= 2;
+-                if (!(new_table = realloc( table, table_size * sizeof(table[0]) )))
+-                {
+-                    freeifaddrs( addrs );
+-                    goto failed;
+-                }
+-                table = new_table;
+-            }
+-
+-            sin6 = (struct sockaddr_in6 *)cur->ifa_addr;
+-            entry = table + num - 1;
+-            memcpy( &entry->addr, &sin6->sin6_addr, sizeof(entry->addr) );
+-            entry->scope = sin6->sin6_scope_id;
++            if (!table_size) table_size = 4;
++            else table_size *= 2;
++            if (!(new_table = realloc( table, table_size * sizeof(table[0]) ))) goto failed;
++            table = new_table;
+         }
+ 
+-        freeifaddrs( addrs );
++        sin6 = (struct sockaddr_in6 *)cur->ifa_addr;
++        entry = table + num - 1;
++        memcpy( &entry->addr, &sin6->sin6_addr, sizeof(entry->addr) );
++        entry->scope = sin6->sin6_scope_id;
+     }
+-#else
+-    FIXME( "not implemented\n" );
+-    goto failed;
+-#endif
+ 
+     *size = num;
+     return table;
+diff --color -urN b/dlls/nsiproxy.sys/unix_private.h b_fixed/dlls/nsiproxy.sys/unix_private.h
+--- b/dlls/nsiproxy.sys/unix_private.h	2026-04-23 22:49:13.809522140 +0800
++++ b_fixed/dlls/nsiproxy.sys/unix_private.h	2026-04-23 23:01:33.964634625 +0800
+@@ -28,6 +28,8 @@
+ NTSTATUS nsi_get_all_parameters_ex( struct nsi_get_all_parameters_ex *params );
+ NTSTATUS nsi_get_parameter_ex( struct nsi_get_parameter_ex *params );
+ 
++struct ifaddrs *read_ifaddrs_from_file( void );
++
+ static inline NTSTATUS nsi_enumerate_all( UINT unk, UINT unk2, const NPI_MODULEID *module, UINT table,
+                                           void *key_data, UINT key_size, void *rw_data, UINT rw_size,
+                                           void *dynamic_data, UINT dynamic_size, void *static_data, UINT static_size,

@@ -1,0 +1,48 @@
+From 4c391f42b9b36c9fce5e2a9899c17037803c1357 Mon Sep 17 00:00:00 2001
+From: BrunoSX <brunodeveloper85@gmail.com>
+Date: Sat, 1 Nov 2025 16:16:51 -0300
+Subject: [PATCH 06/10] xinput: Improve gamepad device implementation
+
+---
+ dlls/xinput1_3/main.c | 7 +++++--
+ 1 file changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
+index 38c88d7..725b9ac 100755
+--- a/dlls/xinput1_3/main.c
++++ b/dlls/xinput1_3/main.c
+@@ -120,6 +120,7 @@ static SOCKET server_sock = INVALID_SOCKET;
+ static BOOL winsock_loaded = FALSE;
+ static BOOL force_update = FALSE;
+ static BOOL updated_once = FALSE;
++static char xinput_min_index = 3;
+ static struct sockaddr_in client_addr = {0};
+ 
+ static void close_server_socket(void) 
+@@ -214,6 +215,7 @@ static void destroy_controllers(void)
+ 
+     thread_running = FALSE;
+     release_gamepad_request();
++    xinput_min_index = 3;
+ 
+     for (i = 0; i < XUSER_MAX_COUNT; i++)
+     {
+@@ -553,12 +555,13 @@ DWORD WINAPI DECLSPEC_HOTPATCH XInputSetState(DWORD index, XINPUT_VIBRATION *vib
+  * XInputGetState() in the hook, so we need a wrapper. */
+ static DWORD xinput_get_state(DWORD index, XINPUT_STATE *state)
+ {
+-    if (!state) return ERROR_BAD_ARGUMENTS;
++    if (!state || index >= XUSER_MAX_COUNT) return ERROR_BAD_ARGUMENTS;
+ 
+     updated_once = TRUE;
+     start_read_thread();
+ 
+-    if (index >= XUSER_MAX_COUNT) return ERROR_BAD_ARGUMENTS;
++    if (index < xinput_min_index) xinput_min_index = index;
++    if (index == xinput_min_index) index = 0;
+     if (!controller_lock(&controllers[index])) return ERROR_DEVICE_NOT_CONNECTED;
+ 
+     *state = controllers[index].state;
+-- 
+2.53.0
+

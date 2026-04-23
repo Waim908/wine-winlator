@@ -1,0 +1,137 @@
+--- b/dlls/xinput1_3/main.c	2026-04-23 22:49:14.076030169 +0800
++++ b_fixed/dlls/xinput1_3/main.c	2026-04-23 23:01:33.972397740 +0800
+@@ -3,6 +3,7 @@
+  * Copyright 2008 Andrew Fenn
+  * Copyright 2018 Aric Stewart
+  * Copyright 2021 Rémi Bernon for CodeWeavers
++ * Copyright 2024 BrunoSX 
+  *
+  * This library is free software; you can redistribute it and/or
+  * modify it under the terms of the GNU Lesser General Public
+@@ -32,23 +33,41 @@
+ #include "wingdi.h"
+ #include "winnls.h"
+ #include "winternl.h"
++#include "winsock2.h"
+ 
+ #include "dbt.h"
+ #include "setupapi.h"
+-#include "devpkey.h"
+-#include "hidusage.h"
+-#include "ddk/hidsdi.h"
+ #include "initguid.h"
+ #include "devguid.h"
+ #include "xinput.h"
+ 
+ #include "wine/debug.h"
+ 
+-DEFINE_GUID(GUID_DEVINTERFACE_WINEXINPUT,0x6c53d5fd,0x6480,0x440f,0xb6,0x18,0x47,0x67,0x50,0xc5,0xe1,0xa6);
+-
+ /* Not defined in the headers, used only by XInputGetStateEx */
+ #define XINPUT_GAMEPAD_GUIDE 0x0400
+ 
++#define SERVER_PORT 7949
++#define CLIENT_PORT 7947
++#define BUFFER_SIZE 64
++
++#define REQUEST_CODE_GET_GAMEPAD 8
++#define REQUEST_CODE_GET_GAMEPAD_STATE 9
++#define REQUEST_CODE_RELEASE_GAMEPAD 10
++#define REQUEST_CODE_SET_GAMEPAD_STATE 19
++
++#define IDX_BUTTON_A 0
++#define IDX_BUTTON_B 1
++#define IDX_BUTTON_X 2
++#define IDX_BUTTON_Y 3
++#define IDX_BUTTON_L1 4
++#define IDX_BUTTON_R1 5
++#define IDX_BUTTON_L2 10
++#define IDX_BUTTON_R2 11
++#define IDX_BUTTON_SELECT 6
++#define IDX_BUTTON_START 7
++#define IDX_BUTTON_L3 8
++#define IDX_BUTTON_R3 9
++
+ WINE_DEFAULT_DEBUG_CHANNEL(xinput);
+ 
+ struct xinput_controller
+@@ -787,9 +806,12 @@
+     switch (reason)
+     {
+     case DLL_PROCESS_ATTACH:
+-        xinput_instance = inst;
+         DisableThreadLibraryCalls(inst);
+         break;
++    case DLL_PROCESS_DETACH:
++        if (reserved) break;
++        destroy_controllers();
++        break;
+     }
+     return TRUE;
+ }
+@@ -797,6 +819,7 @@
+ void WINAPI DECLSPEC_HOTPATCH XInputEnable(BOOL enable)
+ {
+     int index;
++    XINPUT_VIBRATION state = {0};
+ 
+     TRACE("enable %d.\n", enable);
+ 
+@@ -804,15 +827,25 @@
+     to the controllers. Setting to true will send the last vibration
+     value (sent to XInputSetState) to the controller and allow messages to
+     be sent */
+-    start_update_thread();
++    start_read_thread();
+ 
+     for (index = 0; index < XUSER_MAX_COUNT; index++)
+     {
+         if (!controller_lock(&controllers[index])) continue;
+-        if (enable) controller_enable(&controllers[index]);
+-        else controller_disable(&controllers[index]);
++
++        if (enable)
++        {
++            controllers[index].enabled = TRUE;
++        }
++        else {
++            controller_set_state(index, &state);
++            controllers[index].enabled = FALSE;
++        }
++
+         controller_unlock(&controllers[index]);
+     }
++
++    force_update = TRUE;
+ }
+ 
+ DWORD WINAPI DECLSPEC_HOTPATCH XInputSetState(DWORD index, XINPUT_VIBRATION *vibration)
+@@ -996,7 +1029,7 @@
+         /* note: guide button does not send an event */
+     };
+ 
+-    if (!controller_lock(controller)) return ERROR_DEVICE_NOT_CONNECTED;
++    if (!controller_lock(controller)) return ERROR_DEVICE_NOT_CONNECTED;    
+ 
+     cur = &controller->state.Gamepad;
+ 
+@@ -1091,8 +1124,9 @@
+     XINPUT_CAPABILITIES_EX caps_ex;
+     DWORD ret;
+ 
+-    ret = XInputGetCapabilitiesEx(1, index, flags, &caps_ex);
++    TRACE("index %lu, flags %#lx, capabilities %p.\n", index, flags, capabilities);
+ 
++    ret = XInputGetCapabilitiesEx(0, index, flags, &caps_ex);
+     if (!ret) *capabilities = caps_ex.Capabilities;
+ 
+     return ret;
+@@ -1116,7 +1150,7 @@
+     if (!once++) FIXME("index %lu, type %u, battery %p.\n", index, type, battery);
+ 
+     if (index >= XUSER_MAX_COUNT) return ERROR_BAD_ARGUMENTS;
+-    if (!controllers[index].device) return ERROR_DEVICE_NOT_CONNECTED;
++    if (!controllers[index].connected) return ERROR_DEVICE_NOT_CONNECTED;
+ 
+     return ERROR_NOT_SUPPORTED;
+ }

@@ -1,0 +1,36 @@
+From b9497e93e8c5008ba47d1ad4e1b3d4851563453e Mon Sep 17 00:00:00 2001
+From: BrunoSX <brunodeveloper85@gmail.com>
+Date: Thu, 25 Sep 2025 16:49:31 -0300
+Subject: [PATCH 33/40] dinput: Improve gamepad device implementation
+
+---
+ dlls/dinput/gamepad.c | 10 +++++++++-
+ 1 file changed, 9 insertions(+), 1 deletion(-)
+ mode change 100644 => 100755 dlls/dinput/gamepad.c
+
+diff --git a/dlls/dinput/gamepad.c b/dlls/dinput/gamepad.c
+old mode 100644
+new mode 100755
+index d89ac8c..4c3844c
+--- a/dlls/dinput/gamepad.c
++++ b/dlls/dinput/gamepad.c
+@@ -373,7 +373,15 @@ static void update_gamepad_list( char *data )
+             memcpy( gamepads[i].name, data + (j + 1), name_len );
+             gamepads[i].name[name_len] = '\0';
+         }
+-        else memset( &gamepads[i].state, 0, sizeof(gamepads[i].state) );
++        else
++        {
++            memset( &gamepads[i].state, 0, sizeof(gamepads[i].state) );
++            if (gamepads[i].acquired && gamepads[i].hEvent)
++            {
++                SetEvent( gamepads[i].hEvent );
++                gamepads[i].hEvent = NULL;
++            }
++        }
+ 
+         LeaveCriticalSection( &gamepads[i].crit );
+ 
+-- 
+2.53.0
+

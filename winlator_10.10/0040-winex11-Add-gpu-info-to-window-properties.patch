@@ -1,0 +1,192 @@
+From 133e418dce3f0941665f4ae3db8e297ef81ae00f Mon Sep 17 00:00:00 2001
+From: BrunoSX <brunodeveloper85@gmail.com>
+Date: Thu, 16 Apr 2026 07:53:14 -0300
+Subject: [PATCH 40/40] winex11: Add gpu info to window properties
+
+---
+ dlls/winex11.drv/init.c        |  4 ++++
+ dlls/winex11.drv/opengl.c      | 18 +++++++++++++++---
+ dlls/winex11.drv/vulkan.c      | 15 ++++++++++++++-
+ dlls/winex11.drv/window.c      |  8 +++++++-
+ dlls/winex11.drv/x11drv.h      |  5 ++++-
+ dlls/winex11.drv/x11drv_main.c |  3 ++-
+ 6 files changed, 46 insertions(+), 7 deletions(-)
+
+diff --git a/dlls/winex11.drv/init.c b/dlls/winex11.drv/init.c
+index 4d5d7a4..f11bf9b 100755
+--- a/dlls/winex11.drv/init.c
++++ b/dlls/winex11.drv/init.c
+@@ -46,6 +46,8 @@ static pthread_once_t init_once = PTHREAD_ONCE_INIT;
+ static const struct user_driver_funcs x11drv_funcs;
+ static const struct gdi_dc_funcs *xrender_funcs;
+ 
++BOOL wnd_gpu_info = FALSE;
++
+ 
+ void init_recursive_mutex( pthread_mutex_t *mutex )
+ {
+@@ -74,6 +76,8 @@ static void device_init(void)
+     palette_size = X11DRV_PALETTE_Init();
+ 
+     stock_bitmap_pixmap = XCreatePixmap( gdi_display, root_window, 1, 1, 1 );
++
++    wnd_gpu_info = getenv( "X11_WND_GPU_INFO" ) && atoi( getenv( "X11_WND_GPU_INFO" ) );
+ }
+ 
+ 
+diff --git a/dlls/winex11.drv/opengl.c b/dlls/winex11.drv/opengl.c
+index c277e57..076a9fe 100755
+--- a/dlls/winex11.drv/opengl.c
++++ b/dlls/winex11.drv/opengl.c
+@@ -184,6 +184,7 @@ static const char *glxExtensions;
+ static char wglExtensions[4096];
+ static int glxVersion[2];
+ static int glx_opcode;
++static char *cached_gpu_info = NULL;
+ 
+ struct glx_pixel_format
+ {
+@@ -428,7 +429,18 @@ static BOOL X11DRV_WineGL_InitOpenglInfo(void)
+     }
+     gl_renderer = (const char *)pglGetString(GL_RENDERER);
+     gl_version  = (const char *)pglGetString(GL_VERSION);
+-    glExtensions = (const char *) pglGetString(GL_EXTENSIONS);
++    glExtensions = (const char *)pglGetString(GL_EXTENSIONS);
++
++    if (wnd_gpu_info)
++    {
++        if (cached_gpu_info)
++        {
++            free(cached_gpu_info);
++            cached_gpu_info = NULL;
++        }
++
++        if (gl_renderer) cached_gpu_info = strdup(gl_renderer);
++    }
+ 
+     /* Get the common GLX version supported by GLX client and server ( major/minor) */
+     pglXQueryVersion(gdi_display, &glxVersion[0], &glxVersion[1]);
+@@ -1054,7 +1066,7 @@ static struct gl_drawable *create_gl_drawable( HWND hwnd, const struct glx_pixel
+         gl->colormap = XCreateColormap( gdi_display, get_dummy_parent(), visual->visual,
+                                         (visual->class == PseudoColor || visual->class == GrayScale ||
+                                          visual->class == DirectColor) ? AllocAll : AllocNone );
+-        gl->window = create_client_window( hwnd, visual, gl->colormap );
++        gl->window = create_client_window( hwnd, visual, gl->colormap, cached_gpu_info );
+         if (gl->window)
+             gl->drawable = pglXCreateWindow( gdi_display, gl->format->fbconfig, gl->window, NULL );
+         TRACE( "%p created client %lx drawable %lx\n", hwnd, gl->window, gl->drawable );
+@@ -1066,7 +1078,7 @@ static struct gl_drawable *create_gl_drawable( HWND hwnd, const struct glx_pixel
+         gl->colormap = XCreateColormap( gdi_display, get_dummy_parent(), visual->visual,
+                                         (visual->class == PseudoColor || visual->class == GrayScale ||
+                                          visual->class == DirectColor) ? AllocAll : AllocNone );
+-        gl->window = create_client_window( hwnd, visual, gl->colormap );
++        gl->window = create_client_window( hwnd, visual, gl->colormap, cached_gpu_info );
+         if (gl->window)
+         {
+             struct x11drv_win_data *data;
+diff --git a/dlls/winex11.drv/vulkan.c b/dlls/winex11.drv/vulkan.c
+index f444280..cdc8072 100755
+--- a/dlls/winex11.drv/vulkan.c
++++ b/dlls/winex11.drv/vulkan.c
+@@ -82,6 +82,8 @@ static void vulkan_surface_destroy( HWND hwnd, struct x11drv_vulkan_surface *sur
+ 
+ static VkResult X11DRV_vulkan_surface_create( HWND hwnd, const struct vulkan_instance *instance, VkSurfaceKHR *handle, void **private )
+ {
++    char *gpu_info = NULL;
++
+     VkXlibSurfaceCreateInfoKHR info =
+     {
+         .sType = VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR,
+@@ -96,7 +98,18 @@ static VkResult X11DRV_vulkan_surface_create( HWND hwnd, const struct vulkan_ins
+         ERR("Failed to allocate vulkan surface for hwnd=%p\n", hwnd);
+         return VK_ERROR_OUT_OF_HOST_MEMORY;
+     }
+-    if (!(surface->window = create_client_window( hwnd, &default_visual, default_colormap )))
++
++    if (wnd_gpu_info)
++    {
++        VkPhysicalDevice physical_device;
++        VkPhysicalDeviceProperties properties;
++        uint32_t device_count = 1;
++        instance->p_vkEnumeratePhysicalDevices( instance->host.instance, &device_count, &physical_device );
++        instance->p_vkGetPhysicalDeviceProperties( physical_device, &properties );
++        gpu_info = properties.deviceName;
++    }
++
++    if (!(surface->window = create_client_window( hwnd, &default_visual, default_colormap, gpu_info )))
+     {
+         ERR("Failed to allocate client window for hwnd=%p\n", hwnd);
+         free( surface );
+diff --git a/dlls/winex11.drv/window.c b/dlls/winex11.drv/window.c
+index 74118fe..d9c19ab 100755
+--- a/dlls/winex11.drv/window.c
++++ b/dlls/winex11.drv/window.c
+@@ -2166,7 +2166,7 @@ void destroy_client_window( HWND hwnd, Window client_window )
+ /**********************************************************************
+  *		create_client_window
+  */
+-Window create_client_window( HWND hwnd, const XVisualInfo *visual, Colormap colormap )
++Window create_client_window( HWND hwnd, const XVisualInfo *visual, Colormap colormap, const char *gpu_info )
+ {
+     Window dummy_parent = get_dummy_parent();
+     struct x11drv_win_data *data = get_win_data( hwnd );
+@@ -2212,6 +2212,12 @@ Window create_client_window( HWND hwnd, const XVisualInfo *visual, Colormap colo
+         XChangeProperty( gdi_display, data->client_window, x11drv_atom(_NET_WM_SURFACE),
+                          XA_CARDINAL, 8, PropModeReplace, (unsigned char *)&is_surface, 1 );
+ 
++        if (gpu_info)
++        {
++            XChangeProperty( gdi_display, data->client_window, x11drv_atom(_NET_WM_GPU_INFO),
++                             XA_CARDINAL, 8, PropModeReplace, (unsigned char *)gpu_info, strlen(gpu_info) );
++        }
++
+         XMapWindow( gdi_display, data->client_window );
+         if (data->whole_window)
+         {
+diff --git a/dlls/winex11.drv/x11drv.h b/dlls/winex11.drv/x11drv.h
+index 6b66472..32aa76f 100755
+--- a/dlls/winex11.drv/x11drv.h
++++ b/dlls/winex11.drv/x11drv.h
+@@ -314,6 +314,8 @@ extern int X11DRV_PALETTE_mapEGAPixel[16];
+ extern int X11DRV_PALETTE_Init(void);
+ extern BOOL X11DRV_IsSolidColor(COLORREF color);
+ 
++extern BOOL wnd_gpu_info;
++
+ extern COLORREF X11DRV_PALETTE_ToLogical(X11DRV_PDEVICE *physDev, int pixel);
+ extern int X11DRV_PALETTE_ToPhysical(X11DRV_PDEVICE *physDev, COLORREF color);
+ extern COLORREF X11DRV_PALETTE_GetColor( X11DRV_PDEVICE *physDev, COLORREF color );
+@@ -564,6 +566,7 @@ enum x11drv_atoms
+     XATOM__NET_WM_HWND,
+     XATOM__NET_WM_WOW64,
+     XATOM__NET_WM_SURFACE,
++    XATOM__NET_WM_GPU_INFO,
+     NB_XATOMS
+ };
+ 
+@@ -707,7 +710,7 @@ extern Window init_clip_window(void);
+ extern void window_set_user_time( struct x11drv_win_data *data, Time time, BOOL init );
+ extern UINT get_window_net_wm_state( Display *display, Window window );
+ extern void make_window_embedded( struct x11drv_win_data *data );
+-extern Window create_client_window( HWND hwnd, const XVisualInfo *visual, Colormap colormap );
++extern Window create_client_window( HWND hwnd, const XVisualInfo *visual, Colormap colormap, const char *gpu_info );
+ extern void detach_client_window( struct x11drv_win_data *data, Window client_window );
+ extern void attach_client_window( struct x11drv_win_data *data, Window client_window );
+ extern void destroy_client_window( HWND hwnd, Window client_window );
+diff --git a/dlls/winex11.drv/x11drv_main.c b/dlls/winex11.drv/x11drv_main.c
+index 993940a..29a5d7e 100755
+--- a/dlls/winex11.drv/x11drv_main.c
++++ b/dlls/winex11.drv/x11drv_main.c
+@@ -192,7 +192,8 @@ static const char * const atom_names[NB_XATOMS - FIRST_XATOM] =
+     "text/uri-list",
+     "_NET_WM_HWND",
+     "_NET_WM_WOW64",
+-    "_NET_WM_SURFACE"
++    "_NET_WM_SURFACE",
++    "_NET_WM_GPU_INFO"
+ };
+ 
+ /***********************************************************************
+-- 
+2.53.0
+

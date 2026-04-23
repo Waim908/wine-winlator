@@ -1,0 +1,45 @@
+From 61fe8ba96a4ac1b3530224b88febca0151d76d75 Mon Sep 17 00:00:00 2001
+From: BrunoSX <brunodeveloper85@gmail.com>
+Date: Tue, 23 Sep 2025 11:48:39 -0300
+Subject: [PATCH 15/40] dbghelp: Validate process handle
+
+---
+ dlls/dbghelp/dbghelp.c | 15 ++++++++++++++-
+ 1 file changed, 14 insertions(+), 1 deletion(-)
+
+diff --git a/dlls/dbghelp/dbghelp.c b/dlls/dbghelp/dbghelp.c
+index a46d052..e37dd3f 100755
+--- a/dlls/dbghelp/dbghelp.c
++++ b/dlls/dbghelp/dbghelp.c
+@@ -458,7 +458,13 @@ BOOL WINAPI SymInitializeW(HANDLE hProcess, PCWSTR UserSearchPath, BOOL fInvadeP
+ 
+     TRACE("(%p %s %u)\n", hProcess, debugstr_w(UserSearchPath), fInvadeProcess);
+ 
+-    if (process_find_by_handle(hProcess))
++    if (hProcess == INVALID_HANDLE_VALUE)
++    {
++        WARN("an invalid process handle was provided!\n");
++
++        return TRUE;
++    }
++    else if (process_find_by_handle(hProcess))
+     {
+         WARN("the symbols for this process have already been initialized!\n");
+ 
+@@ -548,6 +554,13 @@ BOOL WINAPI SymCleanup(HANDLE hProcess)
+ 
+     TRACE("(%p)\n", hProcess);
+ 
++    if (hProcess == INVALID_HANDLE_VALUE)
++    {
++        WARN("an invalid process handle was provided!\n");
++
++        return TRUE;
++    }
++
+     for (ppcs = &process_first; *ppcs; ppcs = &(*ppcs)->next)
+     {
+         if ((*ppcs)->handle == hProcess)
+-- 
+2.53.0
+

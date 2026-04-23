@@ -1,0 +1,55 @@
+From 60c7dd5c33f89f66e943520f0830245c15ae50ed Mon Sep 17 00:00:00 2001
+From: BrunoSX <brunodeveloper85@gmail.com>
+Date: Tue, 23 Sep 2025 09:52:03 -0300
+Subject: [PATCH 10/40] win32u: Fix text offset on menu
+
+---
+ dlls/win32u/menu.c | 9 +++------
+ 1 file changed, 3 insertions(+), 6 deletions(-)
+
+diff --git a/dlls/win32u/menu.c b/dlls/win32u/menu.c
+index 1bcc7fa..40883e7 100755
+--- a/dlls/win32u/menu.c
++++ b/dlls/win32u/menu.c
+@@ -2070,7 +2070,7 @@ static void calc_menu_item_size( HDC hdc, struct menu_item *item, HWND owner, IN
+             /* Keep the size of the bitmap in callback mode to be able
+              * to draw it correctly */
+             item->bmpsize = size;
+-            menu->textOffset = max( menu->textOffset, size.cx );
++            menu->textOffset = !(menu->dwStyle & MNS_CHECKORBMP) ? max( menu->textOffset, size.cx ) : 4;
+             item->rect.right += size.cx + 2;
+             item_height = size.cy + 2;
+         }
+@@ -2251,7 +2251,6 @@ static void draw_bitmap_item( HWND hwnd, HDC hdc, struct menu_item *item, const
+     HBITMAP bmp_to_draw = item->hbmpItem;
+     HBITMAP bmp = bmp_to_draw;
+     BITMAP bm;
+-    DWORD rop;
+     HDC mem_hdc;
+ 
+     /* Check if there is a magic menu item associated with this item */
+@@ -2372,10 +2371,9 @@ got_bitmap:
+     /* handle fontsize > bitmap_height */
+     top = (h>bm.bmHeight) ? rect->top + (h - bm.bmHeight) / 2 : rect->top;
+     left=rect->left;
+-    rop= ((item->fState & MF_HILITE) && !IS_MAGIC_BITMAP(bmp_to_draw)) ? NOTSRCCOPY : SRCCOPY;
+     if ((item->fState & MF_HILITE) && item->hbmpItem)
+         NtGdiGetAndSetDCDword( hdc, NtGdiSetBkColor, get_sys_color( COLOR_HIGHLIGHT ), NULL );
+-    NtGdiBitBlt( hdc, left, top, w, h, mem_hdc, bmp_xoffset, 0, rop, 0, 0 );
++    NtGdiBitBlt( hdc, left, top, w, h, mem_hdc, bmp_xoffset, 0, SRCCOPY, 0, 0 );
+     NtGdiDeleteObjectApp( mem_hdc );
+ }
+ 
+@@ -2657,8 +2655,7 @@ static void draw_menu_item( HWND hwnd, struct menu *menu, HWND owner, HDC hdc,
+             DT_CENTER | DT_VCENTER | DT_SINGLELINE :
+             DT_LEFT | DT_VCENTER | DT_SINGLELINE;
+ 
+-        if (!(menu->dwStyle & MNS_CHECKORBMP))
+-            rect.left += menu->textOffset;
++        rect.left += menu->textOffset;
+ 
+         if (item->fState & MFS_DEFAULT)
+         {
+-- 
+2.53.0
+

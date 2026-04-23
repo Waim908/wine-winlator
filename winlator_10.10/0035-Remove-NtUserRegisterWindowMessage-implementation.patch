@@ -1,0 +1,893 @@
+From 41b704f7f1638d52a72139724d5ab49c5028c98a Mon Sep 17 00:00:00 2001
+From: BrunoSX <brunodeveloper85@gmail.com>
+Date: Tue, 30 Sep 2025 16:46:56 -0300
+Subject: [PATCH 35/40] Remove NtUserRegisterWindowMessage implementation
+
+---
+ dlls/user32/clipboard.c     |  18 +-
+ dlls/user32/message.c       |  27 +--
+ dlls/win32u/class.c         |  18 --
+ dlls/win32u/main.c          |   5 -
+ dlls/win32u/tests/win32u.c  | 274 +---------------------------
+ dlls/win32u/win32syscalls.h | 346 ++++++++++++++++++------------------
+ dlls/win32u/win32u.spec     |   2 +-
+ dlls/wow64win/user.c        |   7 -
+ include/ntuser.h            |   1 -
+ 9 files changed, 184 insertions(+), 514 deletions(-)
+
+diff --git a/dlls/user32/clipboard.c b/dlls/user32/clipboard.c
+index 6dd7879..79edf9e 100755
+--- a/dlls/user32/clipboard.c
++++ b/dlls/user32/clipboard.c
+@@ -33,7 +33,6 @@
+ 
+ WINE_DEFAULT_DEBUG_CHANNEL(clipboard);
+ 
+-#define MAX_ATOM_LEN 255
+ 
+ static CRITICAL_SECTION clipboard_cs;
+ static CRITICAL_SECTION_DEBUG critsect_debug =
+@@ -527,12 +526,7 @@ HANDLE render_synthesized_format( UINT format, UINT from )
+  */
+ UINT WINAPI RegisterClipboardFormatW( LPCWSTR name )
+ {
+-    UNICODE_STRING str;
+-
+-    TRACE( "%s\n", debugstr_w(name) );
+-
+-    RtlInitUnicodeString( &str, name );
+-    return NtUserRegisterWindowMessage( &str );
++    return GlobalAddAtomW( name );
+ }
+ 
+ 
+@@ -541,15 +535,7 @@ UINT WINAPI RegisterClipboardFormatW( LPCWSTR name )
+  */
+ UINT WINAPI RegisterClipboardFormatA( LPCSTR name )
+ {
+-    WCHAR buf[MAX_ATOM_LEN + 1];
+-    UNICODE_STRING str = {.Buffer = buf, .MaximumLength = sizeof(buf)};
+-    STRING ansi;
+-
+-    TRACE( "%s\n", debugstr_a(name) );
+-
+-    RtlInitAnsiString( &ansi, name );
+-    RtlAnsiStringToUnicodeString( &str, &ansi, FALSE );
+-    return NtUserRegisterWindowMessage( &str );
++    return GlobalAddAtomA( name );
+ }
+ 
+ 
+diff --git a/dlls/user32/message.c b/dlls/user32/message.c
+index 205d3e0..a699930 100755
+--- a/dlls/user32/message.c
++++ b/dlls/user32/message.c
+@@ -29,7 +29,6 @@
+ 
+ WINE_DEFAULT_DEBUG_CHANNEL(msg);
+ 
+-#define MAX_ATOM_LEN  255
+ 
+ /* pack a pointer into a 32/64 portable format */
+ static inline ULONGLONG pack_ptr( const void *ptr )
+@@ -989,34 +988,24 @@ DWORD WINAPI WaitForInputIdle( HANDLE process, DWORD timeout )
+  *		RegisterWindowMessageA (USER32.@)
+  *		RegisterWindowMessage (USER.118)
+  */
+-UINT WINAPI RegisterWindowMessageA( LPCSTR name )
++UINT WINAPI RegisterWindowMessageA( LPCSTR str )
+ {
+-    WCHAR buf[MAX_ATOM_LEN + 1];
+-    UNICODE_STRING str = {.Buffer = buf, .MaximumLength = sizeof(buf)};
+-    STRING ansi;
+-
+-    TRACE( "%s\n", debugstr_a(name) );
+-
+-    RtlInitAnsiString( &ansi, name );
+-    RtlAnsiStringToUnicodeString( &str, &ansi, FALSE );
+-    return NtUserRegisterWindowMessage( &str );
++    UINT ret = GlobalAddAtomA(str);
++    TRACE("%s, ret=%x\n", str, ret);
++    return ret;
+ }
+ 
+ 
+ /***********************************************************************
+  *		RegisterWindowMessageW (USER32.@)
+  */
+-UINT WINAPI RegisterWindowMessageW( LPCWSTR name )
++UINT WINAPI RegisterWindowMessageW( LPCWSTR str )
+ {
+-    UNICODE_STRING str;
+-
+-    TRACE( "%s\n", debugstr_w(name) );
+-
+-    RtlInitUnicodeString( &str, name );
+-    return NtUserRegisterWindowMessage( &str );
++    UINT ret = GlobalAddAtomW(str);
++    TRACE("%s ret=%x\n", debugstr_w(str), ret);
++    return ret;
+ }
+ 
+-
+ typedef struct BroadcastParm
+ {
+     DWORD flags;
+diff --git a/dlls/win32u/class.c b/dlls/win32u/class.c
+index c62e920..8c5f281 100755
+--- a/dlls/win32u/class.c
++++ b/dlls/win32u/class.c
+@@ -595,24 +595,6 @@ ULONG WINAPI NtUserGetAtomName( ATOM atom, UNICODE_STRING *name )
+     return size / sizeof(WCHAR);
+ }
+ 
+-/***********************************************************************
+- *       NtUserRegisterWindowMessage   (win32u.@)
+- */
+-ATOM WINAPI NtUserRegisterWindowMessage( UNICODE_STRING *name )
+-{
+-    RTL_ATOM atom;
+-
+-    TRACE( "%s\n", debugstr_us(name) );
+-
+-    if (!name)
+-    {
+-        RtlSetLastWin32Error( ERROR_INVALID_PARAMETER );
+-        return 0;
+-    }
+-    if (!set_ntstatus( NtAddAtom( name->Buffer, name->Length, &atom ) )) return 0;
+-    return atom;
+-}
+-
+ /***********************************************************************
+  *	     NtUserGetClassName   (win32u.@)
+  */
+diff --git a/dlls/win32u/main.c b/dlls/win32u/main.c
+index 3f757e9..105606c 100755
+--- a/dlls/win32u/main.c
++++ b/dlls/win32u/main.c
+@@ -2022,11 +2022,6 @@ BOOL SYSCALL_API NtUserRegisterTouchPadCapable( BOOL capable )
+     SYSCALL_FUNC( NtUserRegisterTouchPadCapable );
+ }
+ 
+-ATOM SYSCALL_API NtUserRegisterWindowMessage( UNICODE_STRING *name )
+-{
+-    SYSCALL_FUNC( NtUserRegisterWindowMessage );
+-}
+-
+ BOOL SYSCALL_API NtUserReleaseCapture(void)
+ {
+     SYSCALL_FUNC( NtUserReleaseCapture );
+diff --git a/dlls/win32u/tests/win32u.c b/dlls/win32u/tests/win32u.c
+index acbc5bc..3f0fe8d 100755
+--- a/dlls/win32u/tests/win32u.c
++++ b/dlls/win32u/tests/win32u.c
+@@ -24,8 +24,6 @@
+ #include "winbase.h"
+ #include "ntuser.h"
+ 
+-#define MAX_ATOM_LEN  255
+-
+ #define check_member_( file, line, val, exp, fmt, member )                                         \
+     ok_(file, line)( (val).member == (exp).member, "got " #member " " fmt "\n", (val).member )
+ #define check_member( val, exp, fmt, member )                                                      \
+@@ -179,77 +177,10 @@ static void test_window_props(void)
+ 
+ static void test_class(void)
+ {
+-    struct pinned_atom
+-    {
+-        ATOM atom;
+-        const WCHAR *name;
+-        BOOL class;
+-    };
+-    static const struct pinned_atom user_atoms[] =
+-    {
+-        { 0xc001, L"USER32" },
+-        { 0xc002, L"ObjectLink" },
+-        { 0xc003, L"OwnerLink" },
+-        { 0xc004, L"Native" },
+-        { 0xc005, L"Binary" },
+-        { 0xc006, L"FileName" },
+-        { 0xc007, L"FileNameW" },
+-        { 0xc008, L"NetworkName" },
+-        { 0xc009, L"DataObject" },
+-        { 0xc00a, L"Embedded Object" },
+-        { 0xc00b, L"Embed Source" },
+-        { 0xc00c, L"Custom Link Source" },
+-        { 0xc00d, L"Link Source" },
+-        { 0xc00e, L"Object Descriptor" },
+-        { 0xc00f, L"Link Source Descriptor" },
+-        { 0xc010, L"OleDraw" },
+-        { 0xc011, L"PBrush" },
+-        { 0xc012, L"MSDraw" },
+-        { 0xc013, L"Ole Private Data" },
+-        { 0xc014, L"Screen Picture" },
+-        { 0xc015, L"OleClipboardPersistOnFlush" },
+-        { 0xc016, L"MoreOlePrivateData" },
+-        { 0xc017, L"Button", TRUE },
+-        { 0xc018, L"Edit", TRUE },
+-        { 0xc019, L"Static", TRUE },
+-        { 0xc01a, L"ListBox", TRUE },
+-        { 0xc01b, L"ScrollBar", TRUE },
+-        { 0xc01c, L"ComboBox", TRUE },
+-    };
+-    static const struct pinned_atom global_atoms[] =
+-    {
+-        { 0xc001, L"StdExit" },
+-        { 0xc002, L"StdNewDocument" },
+-        { 0xc003, L"StdOpenDocument" },
+-        { 0xc004, L"StdEditDocument" },
+-        { 0xc005, L"StdNewfromTemplate" },
+-        { 0xc006, L"StdCloseDocument" },
+-        { 0xc007, L"StdShowItem" },
+-        { 0xc008, L"StdDoVerbItem" },
+-        { 0xc009, L"System" },
+-        { 0xc00a, L"OLEsystem" },
+-        { 0xc00b, L"StdDocumentName" },
+-        { 0xc00c, L"Protocols" },
+-        { 0xc00d, L"Topics" },
+-        { 0xc00e, L"Formats" },
+-        { 0xc00f, L"Status" },
+-        { 0xc010, L"EditEnvItems" },
+-        { 0xc011, L"True" },
+-        { 0xc012, L"False" },
+-        { 0xc013, L"Change" },
+-        { 0xc014, L"Save" },
+-        { 0xc015, L"Close" },
+-        { 0xc016, L"MSDraw" },
+-        { 0xc017, L"CC32SubclassInfo" },
+-    };
+-    char DECLSPEC_ALIGN(8) abi_buf[sizeof(ATOM_BASIC_INFORMATION) + MAX_ATOM_LEN * sizeof(WCHAR)];
+-    ATOM_BASIC_INFORMATION *abi = (ATOM_BASIC_INFORMATION *)abi_buf;
+-    HWINSTA old_winstation, winstation;
+     UNICODE_STRING name;
+-    ATOM class, global;
+-    NTSTATUS status;
+     WCHAR buf[64];
+     WNDCLASSW cls;
++    ATOM class;
+     HWND hwnd;
+     ULONG ret;
+ 
+@@ -267,10 +198,6 @@ static void test_class(void)
+     hwnd = CreateWindowW( L"test", L"test name", WS_OVERLAPPEDWINDOW | WS_HSCROLL | WS_VSCROLL,
+                           CW_USEDEFAULT, 0, CW_USEDEFAULT, 0, 0, 0, NULL, 0 );
+ 
+-    status = NtQueryInformationAtom( class, AtomBasicInformation, abi, sizeof(abi_buf), NULL );
+-    ok( status == STATUS_INVALID_HANDLE || !status, "NtQueryInformationAtom returned %#lx\n", status );
+-    if (!status) todo_wine ok( wcscmp( abi->Name, L"test" ), "buf = %s\n", debugstr_w(abi->Name) );
+-
+     memset( buf, 0xcc, sizeof(buf) );
+     name.Buffer = buf;
+     name.Length = 0xdead;
+@@ -341,105 +268,6 @@ static void test_class(void)
+         "NtUserGetAtomName returned %lx %lu\n", ret, GetLastError() );
+     ok( buf[0] == 0xcccc, "buf = %s\n", debugstr_w(buf) );
+ 
+-    for (int i = 0; i < ARRAY_SIZE(global_atoms); i++)
+-    {
+-        winetest_push_context( "%#x: %s", global_atoms[i].atom, debugstr_w(global_atoms[i].name) );
+-
+-        status = NtQueryInformationAtom( global_atoms[i].atom, AtomBasicInformation, abi, sizeof(abi_buf), NULL );
+-        ok( !status, "NtQueryInformationAtom returned %#lx\n", status );
+-        todo_wine ok( !wcscmp( abi->Name, global_atoms[i].name ), "buf = %s\n", debugstr_w(abi->Name) );
+-
+-        memset( buf, 0xcc, sizeof(buf) );
+-        name.Buffer = buf;
+-        name.Length = 0xdead;
+-        name.MaximumLength = sizeof(buf);
+-        ret = NtUserGetAtomName( global_atoms[i].atom, &name );
+-        ok( ret != wcslen( global_atoms[i].name ), "NtUserGetAtomName returned %lu\n", ret );
+-        ok( name.Length == 0xdead, "Length = %u\n", name.Length );
+-        ok( name.MaximumLength == sizeof(buf), "MaximumLength = %u\n", name.MaximumLength );
+-        ok( wcscmp( buf, global_atoms[i].name ), "buf = %s\n", debugstr_w(buf) );
+-
+-        winetest_pop_context();
+-    }
+-
+-    for (int i = 0; i < ARRAY_SIZE(user_atoms); i++)
+-    {
+-        winetest_push_context( "%#x: %s", user_atoms[i].atom, debugstr_w(user_atoms[i].name) );
+-
+-        status = NtQueryInformationAtom( user_atoms[i].atom, AtomBasicInformation, abi, sizeof(abi_buf), NULL );
+-        ok( !status, "NtQueryInformationAtom returned %#lx\n", status );
+-        ok( wcscmp( abi->Name, user_atoms[i].name ), "buf = %s\n", debugstr_w(abi->Name) );
+-
+-        memset( buf, 0xcc, sizeof(buf) );
+-        name.Buffer = buf;
+-        name.Length = 0xdead;
+-        name.MaximumLength = sizeof(buf);
+-        ret = NtUserGetAtomName( user_atoms[i].atom, &name );
+-        if (!wcscmp( buf, L"AdditionalFGBoostProp" ))
+-        {
+-            /* W11 has an extra 0xc017 atom instead of Button, and shifts the predefined classes */
+-            win_skip( "Skipping user atoms check on W11\n" );
+-            break;
+-        }
+-        todo_wine_if( i != 0 && i != 2 && i != 6 )
+-        ok( ret == wcslen( user_atoms[i].name ), "NtUserGetAtomName returned %lu\n", ret );
+-        ok( name.Length == 0xdead, "Length = %u\n", name.Length );
+-        ok( name.MaximumLength == sizeof(buf), "MaximumLength = %u\n", name.MaximumLength );
+-        todo_wine ok( !wcscmp( buf, user_atoms[i].name ), "buf = %s\n", debugstr_w(buf) );
+-
+-        SetLastError( 0xdeadbeef );
+-        hwnd = CreateWindowW( MAKEINTRESOURCEW(user_atoms[i].atom), NULL, WS_OVERLAPPEDWINDOW | WS_HSCROLL | WS_VSCROLL,
+-                              CW_USEDEFAULT, 0, CW_USEDEFAULT, 0, 0, 0, NULL, 0 );
+-        if (!user_atoms[i].class)
+-        {
+-            todo_wine_if( i < 9 ) ok( !hwnd, "CreateWindowW succeeded\n" );
+-            todo_wine ok( GetLastError() == ERROR_CANNOT_FIND_WND_CLASS, "got error %lu\n", GetLastError() );
+-            if (hwnd) DestroyWindow( hwnd );
+-        }
+-        else
+-        {
+-            todo_wine ok( !!hwnd, "CreateWindowW failed: %lu\n", GetLastError() );
+-            if (hwnd) DestroyWindow( hwnd );
+-        }
+-
+-        winetest_pop_context();
+-    }
+-
+-    status = NtAddAtom( L"WineTestGlobal", sizeof(L"WineTestGlobal"), &global );
+-    ok( !status, "NtAddAtom returned %#lx\n", status );
+-    cls.lpszClassName = L"WineTestClass";
+-    class = RegisterClassW( &cls );
+-    ok( class, "RegisterClassW failed: %lu\n", GetLastError() );
+-
+-    old_winstation = GetProcessWindowStation();
+-    winstation = CreateWindowStationW( L"WineTest", 0, WINSTA_ALL_ACCESS, NULL );
+-    ok( !!winstation && winstation != old_winstation, "CreateWindowStationW failed, error %#lx.\n", GetLastError() );
+-    ret = SetProcessWindowStation( winstation );
+-    ok( ret, "SetProcessWindowStation failed, error %#lx.\n", GetLastError() );
+-    ok( winstation == GetProcessWindowStation(), "Expected %p, got %p.\n", GetProcessWindowStation(), winstation );
+-
+-    status = NtQueryInformationAtom( global, AtomBasicInformation, abi, sizeof(abi_buf), NULL );
+-    ok( !status, "NtQueryInformationAtom returned %#lx\n", status );
+-    ok( !wcscmp( abi->Name, L"WineTestGlobal" ), "buf = %s\n", debugstr_w(abi->Name) );
+-
+-    memset( buf, 0xcc, sizeof(buf) );
+-    name.Buffer = buf;
+-    name.Length = 0xdead;
+-    name.MaximumLength = sizeof(buf);
+-    ret = NtUserGetAtomName( class, &name );
+-    ok( ret == wcslen( L"WineTestClass" ), "NtUserGetAtomName returned %lu\n", ret );
+-    ok( name.Length == 0xdead, "Length = %u\n", name.Length );
+-    ok( name.MaximumLength == sizeof(buf), "MaximumLength = %u\n", name.MaximumLength );
+-    ok( !wcscmp( buf, L"WineTestClass" ), "buf = %s\n", debugstr_w(buf) );
+-
+-    ret = SetProcessWindowStation( old_winstation );
+-    ok( ret, "SetProcessWindowStation failed, error %#lx.\n", GetLastError() );
+-    ok( old_winstation == GetProcessWindowStation(), "Expected %p, got %p.\n", GetProcessWindowStation(), old_winstation );
+-
+-    status = NtDeleteAtom( global );
+-    ok( !status, "NtDeleteAtom returned %#lx\n", status );
+-    ret = UnregisterClassW( MAKEINTRESOURCEW(class), GetModuleHandleW( NULL ) );
+-    ok( ret, "UnregisterClassW failed: %lu\n", GetLastError() );
+ }
+ 
+ static LRESULT CALLBACK test_adjust_window_style_proc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam )
+@@ -2764,104 +2592,6 @@ static void test_NtUserSetProcessDpiAwarenessContext( ULONG context )
+     winetest_pop_context();
+ }
+ 
+-static void test_RegisterClipboardFormat(void)
+-{
+-    char DECLSPEC_ALIGN(8) abi_buf[sizeof(ATOM_BASIC_INFORMATION) + MAX_ATOM_LEN * sizeof(WCHAR)];
+-    ATOM_BASIC_INFORMATION *abi = (ATOM_BASIC_INFORMATION *)abi_buf;
+-    UNICODE_STRING name;
+-    NTSTATUS status;
+-    WCHAR buf[64];
+-    ATOM atom;
+-
+-    SetLastError( 0xdeadbeef );
+-    atom = RegisterClipboardFormatW( NULL );
+-    ok( atom == 0, "got %#x\n", atom );
+-    ok( GetLastError() == ERROR_INVALID_PARAMETER, "got %#lx\n", GetLastError() );
+-
+-    SetLastError( 0xdeadbeef );
+-    atom = RegisterClipboardFormatW( L"" );
+-    ok( atom == 0, "got %#x\n", atom );
+-    todo_wine ok( GetLastError() == 0xdeadbeef, "got %#lx\n", GetLastError() );
+-
+-    SetLastError( 0xdeadbeef );
+-    atom = RegisterClipboardFormatW( L"#123" );
+-    ok( atom == 123, "got %#x\n", atom );
+-    ok( GetLastError() == 0xdeadbeef, "got %#lx\n", GetLastError() );
+-
+-    SetLastError( 0xdeadbeef );
+-    atom = RegisterClipboardFormatW( L"#49152" );
+-    ok( atom == 0, "got %#x\n", atom );
+-    ok( GetLastError() == ERROR_INVALID_PARAMETER, "got %#lx\n", GetLastError() );
+-
+-    SetLastError( 0xdeadbeef );
+-    atom = RegisterClipboardFormatW( L"#0xabc" );
+-    ok( atom != 0, "got %#x\n", atom );
+-    ok( GetLastError() == 0xdeadbeef, "got %#lx\n", GetLastError() );
+-    status = NtQueryInformationAtom( atom, AtomBasicInformation, abi, sizeof(abi_buf), NULL );
+-    todo_wine ok( status == STATUS_INVALID_HANDLE, "got %#lx\n", status );
+-
+-    memset( buf, 0xcc, sizeof(buf) );
+-    name.Buffer = buf;
+-    name.Length = 0xdead;
+-    name.MaximumLength = sizeof(buf);
+-    status = NtUserGetAtomName( atom, &name );
+-    ok( status == 6, "NtUserGetAtomName returned %lu\n", status );
+-    ok( name.Length == 0xdead, "Length = %u\n", name.Length );
+-    ok( name.MaximumLength == sizeof(buf), "MaximumLength = %u\n", name.MaximumLength );
+-    ok( !wcscmp( buf, L"#0xabc" ), "buf = %s\n", debugstr_w(buf) );
+-}
+-
+-static void test_NtUserRegisterWindowMessage(void)
+-{
+-    char DECLSPEC_ALIGN(8) abi_buf[sizeof(ATOM_BASIC_INFORMATION) + MAX_ATOM_LEN * sizeof(WCHAR)];
+-    ATOM_BASIC_INFORMATION *abi = (ATOM_BASIC_INFORMATION *)abi_buf;
+-    UNICODE_STRING name;
+-    NTSTATUS status;
+-    WCHAR buf[64];
+-    ATOM atom;
+-
+-    SetLastError( 0xdeadbeef );
+-    atom = NtUserRegisterWindowMessage( NULL );
+-    ok( atom == 0, "got %#x\n", atom );
+-    ok( GetLastError() == ERROR_INVALID_PARAMETER, "got %#lx\n", GetLastError() );
+-
+-    SetLastError( 0xdeadbeef );
+-    RtlInitUnicodeString( &name, L"" );
+-    atom = NtUserRegisterWindowMessage( &name );
+-    ok( atom == 0, "got %#x\n", atom );
+-    todo_wine ok( GetLastError() == 0xdeadbeef, "got %#lx\n", GetLastError() );
+-
+-    SetLastError( 0xdeadbeef );
+-    RtlInitUnicodeString( &name, L"#123" );
+-    atom = NtUserRegisterWindowMessage( &name );
+-    ok( atom == 123, "got %#x\n", atom );
+-    ok( GetLastError() == 0xdeadbeef, "got %#lx\n", GetLastError() );
+-
+-    SetLastError( 0xdeadbeef );
+-    RtlInitUnicodeString( &name, L"#49152" );
+-    atom = NtUserRegisterWindowMessage( &name );
+-    ok( atom == 0, "got %#x\n", atom );
+-    ok( GetLastError() == ERROR_INVALID_PARAMETER, "got %#lx\n", GetLastError() );
+-
+-    SetLastError( 0xdeadbeef );
+-    RtlInitUnicodeString( &name, L"#0xabc" );
+-    atom = NtUserRegisterWindowMessage( &name );
+-    ok( atom != 0, "got %#x\n", atom );
+-    ok( GetLastError() == 0xdeadbeef, "got %#lx\n", GetLastError() );
+-    status = NtQueryInformationAtom( atom, AtomBasicInformation, abi, sizeof(abi_buf), NULL );
+-    todo_wine ok( status == STATUS_INVALID_HANDLE, "got %#lx\n", status );
+-
+-    memset( buf, 0xcc, sizeof(buf) );
+-    name.Buffer = buf;
+-    name.Length = 0xdead;
+-    name.MaximumLength = sizeof(buf);
+-    status = NtUserGetAtomName( atom, &name );
+-    ok( status == 6, "NtUserGetAtomName returned %lu\n", status );
+-    ok( name.Length == 0xdead, "Length = %u\n", name.Length );
+-    ok( name.MaximumLength == sizeof(buf), "MaximumLength = %u\n", name.MaximumLength );
+-    ok( !wcscmp( buf, L"#0xabc" ), "buf = %s\n", debugstr_w(buf) );
+-}
+-
+ START_TEST(win32u)
+ {
+     char **argv;
+@@ -2911,8 +2641,6 @@ START_TEST(win32u)
+     test_NtUserCloseWindowStation();
+     test_NtUserDisplayConfigGetDeviceInfo();
+     test_NtUserQueryWindow();
+-    test_RegisterClipboardFormat();
+-    test_NtUserRegisterWindowMessage();
+ 
+     run_in_process( argv, "NtUserEnableMouseInPointer 0" );
+     run_in_process( argv, "NtUserEnableMouseInPointer 1" );
+diff --git a/dlls/win32u/win32syscalls.h b/dlls/win32u/win32syscalls.h
+index 287e1e4..2b22d25 100755
+--- a/dlls/win32u/win32syscalls.h
++++ b/dlls/win32u/win32syscalls.h
+@@ -378,93 +378,92 @@
+     SYSCALL_ENTRY( 0x1176, NtUserRegisterHotKey, 16 ) \
+     SYSCALL_ENTRY( 0x1177, NtUserRegisterRawInputDevices, 12 ) \
+     SYSCALL_ENTRY( 0x1178, NtUserRegisterTouchPadCapable, 4 ) \
+-    SYSCALL_ENTRY( 0x1179, NtUserRegisterWindowMessage, 4 ) \
+-    SYSCALL_ENTRY( 0x117a, NtUserReleaseCapture, 0 ) \
+-    SYSCALL_ENTRY( 0x117b, NtUserReleaseDC, 8 ) \
+-    SYSCALL_ENTRY( 0x117c, NtUserRemoveClipboardFormatListener, 4 ) \
+-    SYSCALL_ENTRY( 0x117d, NtUserRemoveMenu, 12 ) \
+-    SYSCALL_ENTRY( 0x117e, NtUserRemoveProp, 8 ) \
+-    SYSCALL_ENTRY( 0x117f, NtUserReplyMessage, 4 ) \
+-    SYSCALL_ENTRY( 0x1180, NtUserScrollDC, 28 ) \
+-    SYSCALL_ENTRY( 0x1181, NtUserScrollWindowEx, 32 ) \
+-    SYSCALL_ENTRY( 0x1182, NtUserSelectPalette, 12 ) \
+-    SYSCALL_ENTRY( 0x1183, NtUserSendInput, 12 ) \
+-    SYSCALL_ENTRY( 0x1184, NtUserSetActiveWindow, 4 ) \
+-    SYSCALL_ENTRY( 0x1185, NtUserSetAdditionalForegroundBoostProcesses, 12 ) \
+-    SYSCALL_ENTRY( 0x1186, NtUserSetCapture, 4 ) \
+-    SYSCALL_ENTRY( 0x1187, NtUserSetCaretBlinkTime, 4 ) \
+-    SYSCALL_ENTRY( 0x1188, NtUserSetCaretPos, 8 ) \
+-    SYSCALL_ENTRY( 0x1189, NtUserSetClassLong, 16 ) \
+-    SYSCALL_ENTRY( 0x118a, NtUserSetClassLongPtr, 16 ) \
+-    SYSCALL_ENTRY( 0x118b, NtUserSetClassWord, 12 ) \
+-    SYSCALL_ENTRY( 0x118c, NtUserSetClipboardData, 12 ) \
+-    SYSCALL_ENTRY( 0x118d, NtUserSetClipboardViewer, 4 ) \
+-    SYSCALL_ENTRY( 0x118e, NtUserSetCursor, 4 ) \
+-    SYSCALL_ENTRY( 0x118f, NtUserSetCursorIconData, 16 ) \
+-    SYSCALL_ENTRY( 0x1190, NtUserSetCursorPos, 8 ) \
+-    SYSCALL_ENTRY( 0x1191, NtUserSetFocus, 4 ) \
+-    SYSCALL_ENTRY( 0x1192, NtUserSetForegroundWindow, 4 ) \
+-    SYSCALL_ENTRY( 0x1193, NtUserSetInternalWindowPos, 16 ) \
+-    SYSCALL_ENTRY( 0x1194, NtUserSetKeyboardState, 4 ) \
+-    SYSCALL_ENTRY( 0x1195, NtUserSetLayeredWindowAttributes, 16 ) \
+-    SYSCALL_ENTRY( 0x1196, NtUserSetMenu, 8 ) \
+-    SYSCALL_ENTRY( 0x1197, NtUserSetMenuContextHelpId, 8 ) \
+-    SYSCALL_ENTRY( 0x1198, NtUserSetMenuDefaultItem, 12 ) \
+-    SYSCALL_ENTRY( 0x1199, NtUserSetObjectInformation, 16 ) \
+-    SYSCALL_ENTRY( 0x119a, NtUserSetParent, 8 ) \
+-    SYSCALL_ENTRY( 0x119b, NtUserSetProcessDefaultLayout, 4 ) \
+-    SYSCALL_ENTRY( 0x119c, NtUserSetProcessDpiAwarenessContext, 8 ) \
+-    SYSCALL_ENTRY( 0x119d, NtUserSetProcessWindowStation, 4 ) \
+-    SYSCALL_ENTRY( 0x119e, NtUserSetProgmanWindow, 4 ) \
+-    SYSCALL_ENTRY( 0x119f, NtUserSetProp, 12 ) \
+-    SYSCALL_ENTRY( 0x11a0, NtUserSetScrollInfo, 16 ) \
+-    SYSCALL_ENTRY( 0x11a1, NtUserSetShellWindowEx, 8 ) \
+-    SYSCALL_ENTRY( 0x11a2, NtUserSetSysColors, 12 ) \
+-    SYSCALL_ENTRY( 0x11a3, NtUserSetSystemMenu, 8 ) \
+-    SYSCALL_ENTRY( 0x11a4, NtUserSetSystemTimer, 12 ) \
+-    SYSCALL_ENTRY( 0x11a5, NtUserSetTaskmanWindow, 4 ) \
+-    SYSCALL_ENTRY( 0x11a6, NtUserSetThreadDesktop, 4 ) \
+-    SYSCALL_ENTRY( 0x11a7, NtUserSetTimer, 20 ) \
+-    SYSCALL_ENTRY( 0x11a8, NtUserSetWinEventHook, 32 ) \
+-    SYSCALL_ENTRY( 0x11a9, NtUserSetWindowContextHelpId, 8 ) \
+-    SYSCALL_ENTRY( 0x11aa, NtUserSetWindowLong, 16 ) \
+-    SYSCALL_ENTRY( 0x11ab, NtUserSetWindowLongPtr, 16 ) \
+-    SYSCALL_ENTRY( 0x11ac, NtUserSetWindowPlacement, 8 ) \
+-    SYSCALL_ENTRY( 0x11ad, NtUserSetWindowPos, 28 ) \
+-    SYSCALL_ENTRY( 0x11ae, NtUserSetWindowRgn, 12 ) \
+-    SYSCALL_ENTRY( 0x11af, NtUserSetWindowWord, 12 ) \
+-    SYSCALL_ENTRY( 0x11b0, NtUserSetWindowsHookEx, 24 ) \
+-    SYSCALL_ENTRY( 0x11b1, NtUserShowCaret, 4 ) \
+-    SYSCALL_ENTRY( 0x11b2, NtUserShowCursor, 4 ) \
+-    SYSCALL_ENTRY( 0x11b3, NtUserShowOwnedPopups, 8 ) \
+-    SYSCALL_ENTRY( 0x11b4, NtUserShowScrollBar, 12 ) \
+-    SYSCALL_ENTRY( 0x11b5, NtUserShowWindow, 8 ) \
+-    SYSCALL_ENTRY( 0x11b6, NtUserShowWindowAsync, 8 ) \
+-    SYSCALL_ENTRY( 0x11b7, NtUserSwitchDesktop, 4 ) \
+-    SYSCALL_ENTRY( 0x11b8, NtUserSystemParametersInfo, 16 ) \
+-    SYSCALL_ENTRY( 0x11b9, NtUserSystemParametersInfoForDpi, 20 ) \
+-    SYSCALL_ENTRY( 0x11ba, NtUserThunkedMenuInfo, 8 ) \
+-    SYSCALL_ENTRY( 0x11bb, NtUserThunkedMenuItemInfo, 24 ) \
+-    SYSCALL_ENTRY( 0x11bc, NtUserToUnicodeEx, 28 ) \
+-    SYSCALL_ENTRY( 0x11bd, NtUserTrackMouseEvent, 4 ) \
+-    SYSCALL_ENTRY( 0x11be, NtUserTrackPopupMenuEx, 24 ) \
+-    SYSCALL_ENTRY( 0x11bf, NtUserTranslateAccelerator, 12 ) \
+-    SYSCALL_ENTRY( 0x11c0, NtUserTranslateMessage, 8 ) \
+-    SYSCALL_ENTRY( 0x11c1, NtUserUnhookWinEvent, 4 ) \
+-    SYSCALL_ENTRY( 0x11c2, NtUserUnhookWindowsHook, 8 ) \
+-    SYSCALL_ENTRY( 0x11c3, NtUserUnhookWindowsHookEx, 4 ) \
+-    SYSCALL_ENTRY( 0x11c4, NtUserUnregisterClass, 12 ) \
+-    SYSCALL_ENTRY( 0x11c5, NtUserUnregisterHotKey, 8 ) \
+-    SYSCALL_ENTRY( 0x11c6, NtUserUpdateInputContext, 12 ) \
+-    SYSCALL_ENTRY( 0x11c7, NtUserUpdateLayeredWindow, 40 ) \
+-    SYSCALL_ENTRY( 0x11c8, NtUserValidateRect, 8 ) \
+-    SYSCALL_ENTRY( 0x11c9, NtUserValidateRgn, 8 ) \
+-    SYSCALL_ENTRY( 0x11ca, NtUserVkKeyScanEx, 8 ) \
+-    SYSCALL_ENTRY( 0x11cb, NtUserWaitForInputIdle, 12 ) \
+-    SYSCALL_ENTRY( 0x11cc, NtUserWaitMessage, 0 ) \
+-    SYSCALL_ENTRY( 0x11cd, NtUserWindowFromDC, 4 ) \
+-    SYSCALL_ENTRY( 0x11ce, NtUserWindowFromPoint, 8 ) \
+-    SYSCALL_ENTRY( 0x11cf, __wine_get_icm_profile, 16 )
++    SYSCALL_ENTRY( 0x1179, NtUserReleaseCapture, 0 ) \
++    SYSCALL_ENTRY( 0x117a, NtUserReleaseDC, 8 ) \
++    SYSCALL_ENTRY( 0x117b, NtUserRemoveClipboardFormatListener, 4 ) \
++    SYSCALL_ENTRY( 0x117c, NtUserRemoveMenu, 12 ) \
++    SYSCALL_ENTRY( 0x117d, NtUserRemoveProp, 8 ) \
++    SYSCALL_ENTRY( 0x117e, NtUserReplyMessage, 4 ) \
++    SYSCALL_ENTRY( 0x117f, NtUserScrollDC, 28 ) \
++    SYSCALL_ENTRY( 0x1180, NtUserScrollWindowEx, 32 ) \
++    SYSCALL_ENTRY( 0x1181, NtUserSelectPalette, 12 ) \
++    SYSCALL_ENTRY( 0x1182, NtUserSendInput, 12 ) \
++    SYSCALL_ENTRY( 0x1183, NtUserSetActiveWindow, 4 ) \
++    SYSCALL_ENTRY( 0x1184, NtUserSetAdditionalForegroundBoostProcesses, 12 ) \
++    SYSCALL_ENTRY( 0x1185, NtUserSetCapture, 4 ) \
++    SYSCALL_ENTRY( 0x1186, NtUserSetCaretBlinkTime, 4 ) \
++    SYSCALL_ENTRY( 0x1187, NtUserSetCaretPos, 8 ) \
++    SYSCALL_ENTRY( 0x1188, NtUserSetClassLong, 16 ) \
++    SYSCALL_ENTRY( 0x1189, NtUserSetClassLongPtr, 16 ) \
++    SYSCALL_ENTRY( 0x118a, NtUserSetClassWord, 12 ) \
++    SYSCALL_ENTRY( 0x118b, NtUserSetClipboardData, 12 ) \
++    SYSCALL_ENTRY( 0x118c, NtUserSetClipboardViewer, 4 ) \
++    SYSCALL_ENTRY( 0x118d, NtUserSetCursor, 4 ) \
++    SYSCALL_ENTRY( 0x118e, NtUserSetCursorIconData, 16 ) \
++    SYSCALL_ENTRY( 0x118f, NtUserSetCursorPos, 8 ) \
++    SYSCALL_ENTRY( 0x1190, NtUserSetFocus, 4 ) \
++    SYSCALL_ENTRY( 0x1191, NtUserSetForegroundWindow, 4 ) \
++    SYSCALL_ENTRY( 0x1192, NtUserSetInternalWindowPos, 16 ) \
++    SYSCALL_ENTRY( 0x1193, NtUserSetKeyboardState, 4 ) \
++    SYSCALL_ENTRY( 0x1194, NtUserSetLayeredWindowAttributes, 16 ) \
++    SYSCALL_ENTRY( 0x1195, NtUserSetMenu, 8 ) \
++    SYSCALL_ENTRY( 0x1196, NtUserSetMenuContextHelpId, 8 ) \
++    SYSCALL_ENTRY( 0x1197, NtUserSetMenuDefaultItem, 12 ) \
++    SYSCALL_ENTRY( 0x1198, NtUserSetObjectInformation, 16 ) \
++    SYSCALL_ENTRY( 0x1199, NtUserSetParent, 8 ) \
++    SYSCALL_ENTRY( 0x119a, NtUserSetProcessDefaultLayout, 4 ) \
++    SYSCALL_ENTRY( 0x119b, NtUserSetProcessDpiAwarenessContext, 8 ) \
++    SYSCALL_ENTRY( 0x119c, NtUserSetProcessWindowStation, 4 ) \
++    SYSCALL_ENTRY( 0x119d, NtUserSetProgmanWindow, 4 ) \
++    SYSCALL_ENTRY( 0x119e, NtUserSetProp, 12 ) \
++    SYSCALL_ENTRY( 0x119f, NtUserSetScrollInfo, 16 ) \
++    SYSCALL_ENTRY( 0x11a0, NtUserSetShellWindowEx, 8 ) \
++    SYSCALL_ENTRY( 0x11a1, NtUserSetSysColors, 12 ) \
++    SYSCALL_ENTRY( 0x11a2, NtUserSetSystemMenu, 8 ) \
++    SYSCALL_ENTRY( 0x11a3, NtUserSetSystemTimer, 12 ) \
++    SYSCALL_ENTRY( 0x11a4, NtUserSetTaskmanWindow, 4 ) \
++    SYSCALL_ENTRY( 0x11a5, NtUserSetThreadDesktop, 4 ) \
++    SYSCALL_ENTRY( 0x11a6, NtUserSetTimer, 20 ) \
++    SYSCALL_ENTRY( 0x11a7, NtUserSetWinEventHook, 32 ) \
++    SYSCALL_ENTRY( 0x11a8, NtUserSetWindowContextHelpId, 8 ) \
++    SYSCALL_ENTRY( 0x11a9, NtUserSetWindowLong, 16 ) \
++    SYSCALL_ENTRY( 0x11aa, NtUserSetWindowLongPtr, 16 ) \
++    SYSCALL_ENTRY( 0x11ab, NtUserSetWindowPlacement, 8 ) \
++    SYSCALL_ENTRY( 0x11ac, NtUserSetWindowPos, 28 ) \
++    SYSCALL_ENTRY( 0x11ad, NtUserSetWindowRgn, 12 ) \
++    SYSCALL_ENTRY( 0x11ae, NtUserSetWindowWord, 12 ) \
++    SYSCALL_ENTRY( 0x11af, NtUserSetWindowsHookEx, 24 ) \
++    SYSCALL_ENTRY( 0x11b0, NtUserShowCaret, 4 ) \
++    SYSCALL_ENTRY( 0x11b1, NtUserShowCursor, 4 ) \
++    SYSCALL_ENTRY( 0x11b2, NtUserShowOwnedPopups, 8 ) \
++    SYSCALL_ENTRY( 0x11b3, NtUserShowScrollBar, 12 ) \
++    SYSCALL_ENTRY( 0x11b4, NtUserShowWindow, 8 ) \
++    SYSCALL_ENTRY( 0x11b5, NtUserShowWindowAsync, 8 ) \
++    SYSCALL_ENTRY( 0x11b6, NtUserSwitchDesktop, 4 ) \
++    SYSCALL_ENTRY( 0x11b7, NtUserSystemParametersInfo, 16 ) \
++    SYSCALL_ENTRY( 0x11b8, NtUserSystemParametersInfoForDpi, 20 ) \
++    SYSCALL_ENTRY( 0x11b9, NtUserThunkedMenuInfo, 8 ) \
++    SYSCALL_ENTRY( 0x11ba, NtUserThunkedMenuItemInfo, 24 ) \
++    SYSCALL_ENTRY( 0x11bb, NtUserToUnicodeEx, 28 ) \
++    SYSCALL_ENTRY( 0x11bc, NtUserTrackMouseEvent, 4 ) \
++    SYSCALL_ENTRY( 0x11bd, NtUserTrackPopupMenuEx, 24 ) \
++    SYSCALL_ENTRY( 0x11be, NtUserTranslateAccelerator, 12 ) \
++    SYSCALL_ENTRY( 0x11bf, NtUserTranslateMessage, 8 ) \
++    SYSCALL_ENTRY( 0x11c0, NtUserUnhookWinEvent, 4 ) \
++    SYSCALL_ENTRY( 0x11c1, NtUserUnhookWindowsHook, 8 ) \
++    SYSCALL_ENTRY( 0x11c2, NtUserUnhookWindowsHookEx, 4 ) \
++    SYSCALL_ENTRY( 0x11c3, NtUserUnregisterClass, 12 ) \
++    SYSCALL_ENTRY( 0x11c4, NtUserUnregisterHotKey, 8 ) \
++    SYSCALL_ENTRY( 0x11c5, NtUserUpdateInputContext, 12 ) \
++    SYSCALL_ENTRY( 0x11c6, NtUserUpdateLayeredWindow, 40 ) \
++    SYSCALL_ENTRY( 0x11c7, NtUserValidateRect, 8 ) \
++    SYSCALL_ENTRY( 0x11c8, NtUserValidateRgn, 8 ) \
++    SYSCALL_ENTRY( 0x11c9, NtUserVkKeyScanEx, 8 ) \
++    SYSCALL_ENTRY( 0x11ca, NtUserWaitForInputIdle, 12 ) \
++    SYSCALL_ENTRY( 0x11cb, NtUserWaitMessage, 0 ) \
++    SYSCALL_ENTRY( 0x11cc, NtUserWindowFromDC, 4 ) \
++    SYSCALL_ENTRY( 0x11cd, NtUserWindowFromPoint, 8 ) \
++    SYSCALL_ENTRY( 0x11ce, __wine_get_icm_profile, 16 )
+ #ifdef _WIN64
+ #define ALL_SYSCALLS \
+     SYSCALL_ENTRY( 0x1000, NtGdiAbortDoc, 8 ) \
+@@ -844,93 +843,92 @@
+     SYSCALL_ENTRY( 0x1176, NtUserRegisterHotKey, 32 ) \
+     SYSCALL_ENTRY( 0x1177, NtUserRegisterRawInputDevices, 24 ) \
+     SYSCALL_ENTRY( 0x1178, NtUserRegisterTouchPadCapable, 8 ) \
+-    SYSCALL_ENTRY( 0x1179, NtUserRegisterWindowMessage, 8 ) \
+-    SYSCALL_ENTRY( 0x117a, NtUserReleaseCapture, 0 ) \
+-    SYSCALL_ENTRY( 0x117b, NtUserReleaseDC, 16 ) \
+-    SYSCALL_ENTRY( 0x117c, NtUserRemoveClipboardFormatListener, 8 ) \
+-    SYSCALL_ENTRY( 0x117d, NtUserRemoveMenu, 24 ) \
+-    SYSCALL_ENTRY( 0x117e, NtUserRemoveProp, 16 ) \
+-    SYSCALL_ENTRY( 0x117f, NtUserReplyMessage, 8 ) \
+-    SYSCALL_ENTRY( 0x1180, NtUserScrollDC, 56 ) \
+-    SYSCALL_ENTRY( 0x1181, NtUserScrollWindowEx, 64 ) \
+-    SYSCALL_ENTRY( 0x1182, NtUserSelectPalette, 24 ) \
+-    SYSCALL_ENTRY( 0x1183, NtUserSendInput, 24 ) \
+-    SYSCALL_ENTRY( 0x1184, NtUserSetActiveWindow, 8 ) \
+-    SYSCALL_ENTRY( 0x1185, NtUserSetAdditionalForegroundBoostProcesses, 24 ) \
+-    SYSCALL_ENTRY( 0x1186, NtUserSetCapture, 8 ) \
+-    SYSCALL_ENTRY( 0x1187, NtUserSetCaretBlinkTime, 8 ) \
+-    SYSCALL_ENTRY( 0x1188, NtUserSetCaretPos, 16 ) \
+-    SYSCALL_ENTRY( 0x1189, NtUserSetClassLong, 32 ) \
+-    SYSCALL_ENTRY( 0x118a, NtUserSetClassLongPtr, 32 ) \
+-    SYSCALL_ENTRY( 0x118b, NtUserSetClassWord, 24 ) \
+-    SYSCALL_ENTRY( 0x118c, NtUserSetClipboardData, 24 ) \
+-    SYSCALL_ENTRY( 0x118d, NtUserSetClipboardViewer, 8 ) \
+-    SYSCALL_ENTRY( 0x118e, NtUserSetCursor, 8 ) \
+-    SYSCALL_ENTRY( 0x118f, NtUserSetCursorIconData, 32 ) \
+-    SYSCALL_ENTRY( 0x1190, NtUserSetCursorPos, 16 ) \
+-    SYSCALL_ENTRY( 0x1191, NtUserSetFocus, 8 ) \
+-    SYSCALL_ENTRY( 0x1192, NtUserSetForegroundWindow, 8 ) \
+-    SYSCALL_ENTRY( 0x1193, NtUserSetInternalWindowPos, 32 ) \
+-    SYSCALL_ENTRY( 0x1194, NtUserSetKeyboardState, 8 ) \
+-    SYSCALL_ENTRY( 0x1195, NtUserSetLayeredWindowAttributes, 32 ) \
+-    SYSCALL_ENTRY( 0x1196, NtUserSetMenu, 16 ) \
+-    SYSCALL_ENTRY( 0x1197, NtUserSetMenuContextHelpId, 16 ) \
+-    SYSCALL_ENTRY( 0x1198, NtUserSetMenuDefaultItem, 24 ) \
+-    SYSCALL_ENTRY( 0x1199, NtUserSetObjectInformation, 32 ) \
+-    SYSCALL_ENTRY( 0x119a, NtUserSetParent, 16 ) \
+-    SYSCALL_ENTRY( 0x119b, NtUserSetProcessDefaultLayout, 8 ) \
+-    SYSCALL_ENTRY( 0x119c, NtUserSetProcessDpiAwarenessContext, 16 ) \
+-    SYSCALL_ENTRY( 0x119d, NtUserSetProcessWindowStation, 8 ) \
+-    SYSCALL_ENTRY( 0x119e, NtUserSetProgmanWindow, 8 ) \
+-    SYSCALL_ENTRY( 0x119f, NtUserSetProp, 24 ) \
+-    SYSCALL_ENTRY( 0x11a0, NtUserSetScrollInfo, 32 ) \
+-    SYSCALL_ENTRY( 0x11a1, NtUserSetShellWindowEx, 16 ) \
+-    SYSCALL_ENTRY( 0x11a2, NtUserSetSysColors, 24 ) \
+-    SYSCALL_ENTRY( 0x11a3, NtUserSetSystemMenu, 16 ) \
+-    SYSCALL_ENTRY( 0x11a4, NtUserSetSystemTimer, 24 ) \
+-    SYSCALL_ENTRY( 0x11a5, NtUserSetTaskmanWindow, 8 ) \
+-    SYSCALL_ENTRY( 0x11a6, NtUserSetThreadDesktop, 8 ) \
+-    SYSCALL_ENTRY( 0x11a7, NtUserSetTimer, 40 ) \
+-    SYSCALL_ENTRY( 0x11a8, NtUserSetWinEventHook, 64 ) \
+-    SYSCALL_ENTRY( 0x11a9, NtUserSetWindowContextHelpId, 16 ) \
+-    SYSCALL_ENTRY( 0x11aa, NtUserSetWindowLong, 32 ) \
+-    SYSCALL_ENTRY( 0x11ab, NtUserSetWindowLongPtr, 32 ) \
+-    SYSCALL_ENTRY( 0x11ac, NtUserSetWindowPlacement, 16 ) \
+-    SYSCALL_ENTRY( 0x11ad, NtUserSetWindowPos, 56 ) \
+-    SYSCALL_ENTRY( 0x11ae, NtUserSetWindowRgn, 24 ) \
+-    SYSCALL_ENTRY( 0x11af, NtUserSetWindowWord, 24 ) \
+-    SYSCALL_ENTRY( 0x11b0, NtUserSetWindowsHookEx, 48 ) \
+-    SYSCALL_ENTRY( 0x11b1, NtUserShowCaret, 8 ) \
+-    SYSCALL_ENTRY( 0x11b2, NtUserShowCursor, 8 ) \
+-    SYSCALL_ENTRY( 0x11b3, NtUserShowOwnedPopups, 16 ) \
+-    SYSCALL_ENTRY( 0x11b4, NtUserShowScrollBar, 24 ) \
+-    SYSCALL_ENTRY( 0x11b5, NtUserShowWindow, 16 ) \
+-    SYSCALL_ENTRY( 0x11b6, NtUserShowWindowAsync, 16 ) \
+-    SYSCALL_ENTRY( 0x11b7, NtUserSwitchDesktop, 8 ) \
+-    SYSCALL_ENTRY( 0x11b8, NtUserSystemParametersInfo, 32 ) \
+-    SYSCALL_ENTRY( 0x11b9, NtUserSystemParametersInfoForDpi, 40 ) \
+-    SYSCALL_ENTRY( 0x11ba, NtUserThunkedMenuInfo, 16 ) \
+-    SYSCALL_ENTRY( 0x11bb, NtUserThunkedMenuItemInfo, 48 ) \
+-    SYSCALL_ENTRY( 0x11bc, NtUserToUnicodeEx, 56 ) \
+-    SYSCALL_ENTRY( 0x11bd, NtUserTrackMouseEvent, 8 ) \
+-    SYSCALL_ENTRY( 0x11be, NtUserTrackPopupMenuEx, 48 ) \
+-    SYSCALL_ENTRY( 0x11bf, NtUserTranslateAccelerator, 24 ) \
+-    SYSCALL_ENTRY( 0x11c0, NtUserTranslateMessage, 16 ) \
+-    SYSCALL_ENTRY( 0x11c1, NtUserUnhookWinEvent, 8 ) \
+-    SYSCALL_ENTRY( 0x11c2, NtUserUnhookWindowsHook, 16 ) \
+-    SYSCALL_ENTRY( 0x11c3, NtUserUnhookWindowsHookEx, 8 ) \
+-    SYSCALL_ENTRY( 0x11c4, NtUserUnregisterClass, 24 ) \
+-    SYSCALL_ENTRY( 0x11c5, NtUserUnregisterHotKey, 16 ) \
+-    SYSCALL_ENTRY( 0x11c6, NtUserUpdateInputContext, 24 ) \
+-    SYSCALL_ENTRY( 0x11c7, NtUserUpdateLayeredWindow, 80 ) \
+-    SYSCALL_ENTRY( 0x11c8, NtUserValidateRect, 16 ) \
+-    SYSCALL_ENTRY( 0x11c9, NtUserValidateRgn, 16 ) \
+-    SYSCALL_ENTRY( 0x11ca, NtUserVkKeyScanEx, 16 ) \
+-    SYSCALL_ENTRY( 0x11cb, NtUserWaitForInputIdle, 24 ) \
+-    SYSCALL_ENTRY( 0x11cc, NtUserWaitMessage, 0 ) \
+-    SYSCALL_ENTRY( 0x11cd, NtUserWindowFromDC, 8 ) \
+-    SYSCALL_ENTRY( 0x11ce, NtUserWindowFromPoint, 16 ) \
+-    SYSCALL_ENTRY( 0x11cf, __wine_get_icm_profile, 32 )
++    SYSCALL_ENTRY( 0x1179, NtUserReleaseCapture, 0 ) \
++    SYSCALL_ENTRY( 0x117a, NtUserReleaseDC, 16 ) \
++    SYSCALL_ENTRY( 0x117b, NtUserRemoveClipboardFormatListener, 8 ) \
++    SYSCALL_ENTRY( 0x117c, NtUserRemoveMenu, 24 ) \
++    SYSCALL_ENTRY( 0x117d, NtUserRemoveProp, 16 ) \
++    SYSCALL_ENTRY( 0x117e, NtUserReplyMessage, 8 ) \
++    SYSCALL_ENTRY( 0x117f, NtUserScrollDC, 56 ) \
++    SYSCALL_ENTRY( 0x1180, NtUserScrollWindowEx, 64 ) \
++    SYSCALL_ENTRY( 0x1181, NtUserSelectPalette, 24 ) \
++    SYSCALL_ENTRY( 0x1182, NtUserSendInput, 24 ) \
++    SYSCALL_ENTRY( 0x1183, NtUserSetActiveWindow, 8 ) \
++    SYSCALL_ENTRY( 0x1184, NtUserSetAdditionalForegroundBoostProcesses, 24 ) \
++    SYSCALL_ENTRY( 0x1185, NtUserSetCapture, 8 ) \
++    SYSCALL_ENTRY( 0x1186, NtUserSetCaretBlinkTime, 8 ) \
++    SYSCALL_ENTRY( 0x1187, NtUserSetCaretPos, 16 ) \
++    SYSCALL_ENTRY( 0x1188, NtUserSetClassLong, 32 ) \
++    SYSCALL_ENTRY( 0x1189, NtUserSetClassLongPtr, 32 ) \
++    SYSCALL_ENTRY( 0x118a, NtUserSetClassWord, 24 ) \
++    SYSCALL_ENTRY( 0x118b, NtUserSetClipboardData, 24 ) \
++    SYSCALL_ENTRY( 0x118c, NtUserSetClipboardViewer, 8 ) \
++    SYSCALL_ENTRY( 0x118d, NtUserSetCursor, 8 ) \
++    SYSCALL_ENTRY( 0x118e, NtUserSetCursorIconData, 32 ) \
++    SYSCALL_ENTRY( 0x118f, NtUserSetCursorPos, 16 ) \
++    SYSCALL_ENTRY( 0x1190, NtUserSetFocus, 8 ) \
++    SYSCALL_ENTRY( 0x1191, NtUserSetForegroundWindow, 8 ) \
++    SYSCALL_ENTRY( 0x1192, NtUserSetInternalWindowPos, 32 ) \
++    SYSCALL_ENTRY( 0x1193, NtUserSetKeyboardState, 8 ) \
++    SYSCALL_ENTRY( 0x1194, NtUserSetLayeredWindowAttributes, 32 ) \
++    SYSCALL_ENTRY( 0x1195, NtUserSetMenu, 16 ) \
++    SYSCALL_ENTRY( 0x1196, NtUserSetMenuContextHelpId, 16 ) \
++    SYSCALL_ENTRY( 0x1197, NtUserSetMenuDefaultItem, 24 ) \
++    SYSCALL_ENTRY( 0x1198, NtUserSetObjectInformation, 32 ) \
++    SYSCALL_ENTRY( 0x1199, NtUserSetParent, 16 ) \
++    SYSCALL_ENTRY( 0x119a, NtUserSetProcessDefaultLayout, 8 ) \
++    SYSCALL_ENTRY( 0x119b, NtUserSetProcessDpiAwarenessContext, 16 ) \
++    SYSCALL_ENTRY( 0x119c, NtUserSetProcessWindowStation, 8 ) \
++    SYSCALL_ENTRY( 0x119d, NtUserSetProgmanWindow, 8 ) \
++    SYSCALL_ENTRY( 0x119e, NtUserSetProp, 24 ) \
++    SYSCALL_ENTRY( 0x119f, NtUserSetScrollInfo, 32 ) \
++    SYSCALL_ENTRY( 0x11a0, NtUserSetShellWindowEx, 16 ) \
++    SYSCALL_ENTRY( 0x11a1, NtUserSetSysColors, 24 ) \
++    SYSCALL_ENTRY( 0x11a2, NtUserSetSystemMenu, 16 ) \
++    SYSCALL_ENTRY( 0x11a3, NtUserSetSystemTimer, 24 ) \
++    SYSCALL_ENTRY( 0x11a4, NtUserSetTaskmanWindow, 8 ) \
++    SYSCALL_ENTRY( 0x11a5, NtUserSetThreadDesktop, 8 ) \
++    SYSCALL_ENTRY( 0x11a6, NtUserSetTimer, 40 ) \
++    SYSCALL_ENTRY( 0x11a7, NtUserSetWinEventHook, 64 ) \
++    SYSCALL_ENTRY( 0x11a8, NtUserSetWindowContextHelpId, 16 ) \
++    SYSCALL_ENTRY( 0x11a9, NtUserSetWindowLong, 32 ) \
++    SYSCALL_ENTRY( 0x11aa, NtUserSetWindowLongPtr, 32 ) \
++    SYSCALL_ENTRY( 0x11ab, NtUserSetWindowPlacement, 16 ) \
++    SYSCALL_ENTRY( 0x11ac, NtUserSetWindowPos, 56 ) \
++    SYSCALL_ENTRY( 0x11ad, NtUserSetWindowRgn, 24 ) \
++    SYSCALL_ENTRY( 0x11ae, NtUserSetWindowWord, 24 ) \
++    SYSCALL_ENTRY( 0x11af, NtUserSetWindowsHookEx, 48 ) \
++    SYSCALL_ENTRY( 0x11b0, NtUserShowCaret, 8 ) \
++    SYSCALL_ENTRY( 0x11b1, NtUserShowCursor, 8 ) \
++    SYSCALL_ENTRY( 0x11b2, NtUserShowOwnedPopups, 16 ) \
++    SYSCALL_ENTRY( 0x11b3, NtUserShowScrollBar, 24 ) \
++    SYSCALL_ENTRY( 0x11b4, NtUserShowWindow, 16 ) \
++    SYSCALL_ENTRY( 0x11b5, NtUserShowWindowAsync, 16 ) \
++    SYSCALL_ENTRY( 0x11b6, NtUserSwitchDesktop, 8 ) \
++    SYSCALL_ENTRY( 0x11b7, NtUserSystemParametersInfo, 32 ) \
++    SYSCALL_ENTRY( 0x11b8, NtUserSystemParametersInfoForDpi, 40 ) \
++    SYSCALL_ENTRY( 0x11b9, NtUserThunkedMenuInfo, 16 ) \
++    SYSCALL_ENTRY( 0x11ba, NtUserThunkedMenuItemInfo, 48 ) \
++    SYSCALL_ENTRY( 0x11bb, NtUserToUnicodeEx, 56 ) \
++    SYSCALL_ENTRY( 0x11bc, NtUserTrackMouseEvent, 8 ) \
++    SYSCALL_ENTRY( 0x11bd, NtUserTrackPopupMenuEx, 48 ) \
++    SYSCALL_ENTRY( 0x11be, NtUserTranslateAccelerator, 24 ) \
++    SYSCALL_ENTRY( 0x11bf, NtUserTranslateMessage, 16 ) \
++    SYSCALL_ENTRY( 0x11c0, NtUserUnhookWinEvent, 8 ) \
++    SYSCALL_ENTRY( 0x11c1, NtUserUnhookWindowsHook, 16 ) \
++    SYSCALL_ENTRY( 0x11c2, NtUserUnhookWindowsHookEx, 8 ) \
++    SYSCALL_ENTRY( 0x11c3, NtUserUnregisterClass, 24 ) \
++    SYSCALL_ENTRY( 0x11c4, NtUserUnregisterHotKey, 16 ) \
++    SYSCALL_ENTRY( 0x11c5, NtUserUpdateInputContext, 24 ) \
++    SYSCALL_ENTRY( 0x11c6, NtUserUpdateLayeredWindow, 80 ) \
++    SYSCALL_ENTRY( 0x11c7, NtUserValidateRect, 16 ) \
++    SYSCALL_ENTRY( 0x11c8, NtUserValidateRgn, 16 ) \
++    SYSCALL_ENTRY( 0x11c9, NtUserVkKeyScanEx, 16 ) \
++    SYSCALL_ENTRY( 0x11ca, NtUserWaitForInputIdle, 24 ) \
++    SYSCALL_ENTRY( 0x11cb, NtUserWaitMessage, 0 ) \
++    SYSCALL_ENTRY( 0x11cc, NtUserWindowFromDC, 8 ) \
++    SYSCALL_ENTRY( 0x11cd, NtUserWindowFromPoint, 16 ) \
++    SYSCALL_ENTRY( 0x11ce, __wine_get_icm_profile, 32 )
+ #else
+ #define ALL_SYSCALLS ALL_SYSCALLS32
+ #endif
+diff --git a/dlls/win32u/win32u.spec b/dlls/win32u/win32u.spec
+index 9e25f3d..1d32c12 100755
+--- a/dlls/win32u/win32u.spec
++++ b/dlls/win32u/win32u.spec
+@@ -1286,7 +1286,7 @@
+ @ stub NtUserRegisterUserApiHook
+ @ stub NtUserRegisterUserHungAppHandlers
+ @ stub NtUserRegisterWindowArrangementCallout
+-@ stdcall -syscall NtUserRegisterWindowMessage(ptr)
++@ stub NtUserRegisterWindowMessage
+ @ stdcall -syscall NtUserReleaseCapture()
+ @ stdcall -syscall NtUserReleaseDC(long long)
+ @ stub NtUserReleaseDwmHitTestWaiters
+diff --git a/dlls/wow64win/user.c b/dlls/wow64win/user.c
+index 318adde..4bed2bc 100755
+--- a/dlls/wow64win/user.c
++++ b/dlls/wow64win/user.c
+@@ -4079,13 +4079,6 @@ NTSTATUS WINAPI wow64_NtUserRemoveClipboardFormatListener( UINT *args )
+     return NtUserRemoveClipboardFormatListener( hwnd );
+ }
+ 
+-NTSTATUS WINAPI wow64_NtUserRegisterWindowMessage( UINT *args )
+-{
+-    UNICODE_STRING *name = get_ptr( &args );
+-
+-    return NtUserRegisterWindowMessage( name );
+-}
+-
+ NTSTATUS WINAPI wow64_NtUserRemoveMenu( UINT *args )
+ {
+     HMENU handle = get_handle( &args );
+diff --git a/include/ntuser.h b/include/ntuser.h
+index 6eba130..49bf0d0 100755
+--- a/include/ntuser.h
++++ b/include/ntuser.h
+@@ -944,7 +944,6 @@ W32KAPI ATOM    WINAPI NtUserRegisterClassExWOW( const WNDCLASSEXW *wc, UNICODE_
+ W32KAPI BOOL    WINAPI NtUserRegisterHotKey( HWND hwnd, INT id, UINT modifiers, UINT vk );
+ W32KAPI BOOL    WINAPI NtUserRegisterRawInputDevices( const RAWINPUTDEVICE *devices, UINT device_count, UINT size );
+ W32KAPI BOOL    WINAPI NtUserRegisterTouchPadCapable( BOOL capable );
+-W32KAPI ATOM    WINAPI NtUserRegisterWindowMessage( UNICODE_STRING *name );
+ W32KAPI BOOL    WINAPI NtUserReleaseCapture(void);
+ W32KAPI INT     WINAPI NtUserReleaseDC( HWND hwnd, HDC hdc );
+ W32KAPI BOOL    WINAPI NtUserRemoveClipboardFormatListener( HWND hwnd );
+-- 
+2.53.0
+

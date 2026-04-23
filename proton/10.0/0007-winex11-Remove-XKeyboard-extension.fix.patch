@@ -1,0 +1,126 @@
+--- b/dlls/winex11.drv/keyboard.c	2026-04-23 22:49:14.027302794 +0800
++++ b_fixed/dlls/winex11.drv/keyboard.c	2026-04-23 23:01:33.980398012 +0800
+@@ -34,7 +34,6 @@
+ #include <X11/Xlib.h>
+ #include <X11/Xresource.h>
+ #include <X11/Xutil.h>
+-#include <X11/XKBlib.h>
+ 
+ #include <ctype.h>
+ #include <stdarg.h>
+@@ -62,6 +61,7 @@
+ static const unsigned int ControlMask = 1 << 2;
+ 
+ static int min_keycode, max_keycode, keysyms_per_keycode;
++static KeySym *key_mapping;
+ static WORD keyc2vkey[256], keyc2scan[256];
+ 
+ static int NumLockMask, ScrollLockMask, AltGrMask; /* mask in the XKeyEvent state */
+@@ -1093,6 +1093,11 @@
+     0, 0, 0, 0, 0, 0, 0, 0                                      /* 1008FFF8 */
+ };
+ 
++static inline KeySym keycode_to_keysym( Display *display, KeyCode keycode, int index )
++{
++    return key_mapping[(keycode - min_keycode) * keysyms_per_keycode + index];
++}
++
+ /* Returns the Windows virtual key code associated with the X event <e> */
+ /* kbd_section must be held */
+ static WORD EVENT_event_to_vkey( XIC xic, XKeyEvent *e)
+@@ -1388,16 +1393,6 @@
+ 
+     pthread_mutex_lock( &kbd_mutex );
+ 
+-    /* If XKB extensions are used, the state mask for AltGr will use the group
+-       index instead of the modifier mask. The group index is set in bits
+-       13-14 of the state field in the XKeyEvent structure. So if AltGr is
+-       pressed, look if the group index is different than 0. From XKB
+-       extension documentation, the group index for AltGr should be 2
+-       (event->state = 0x2000). It's probably better to not assume a
+-       predefined group index and find it dynamically
+-
+-       Ref: X Keyboard Extension: Library specification (section 14.1.1 and 17.1.1) */
+-    /* Save also all possible modifier states. */
+     AltGrMask = event->state & (0x6000 | Mod1Mask | Mod2Mask | Mod3Mask | Mod4Mask | Mod5Mask);
+ 
+     if (TRACE_ON(key)){
+@@ -1610,7 +1605,8 @@
+ 
+     pthread_mutex_lock( &kbd_mutex );
+     XDisplayKeycodes(display, &min_keycode, &max_keycode);
+-    XFree( XGetKeyboardMapping( display, min_keycode, max_keycode + 1 - min_keycode, &keysyms_per_keycode ) );
++    if (key_mapping) XFree( key_mapping );
++    key_mapping = XGetKeyboardMapping( display, min_keycode, max_keycode + 1 - min_keycode, &keysyms_per_keycode );
+ 
+     mmp = XGetModifierMapping(display);
+     kcp = mmp->modifiermap;
+@@ -1624,12 +1620,12 @@
+ 		int k;
+ 
+ 		for (k = 0; k < keysyms_per_keycode; k += 1)
+-                    if (XkbKeycodeToKeysym( display, *kcp, 0, k ) == XK_Num_Lock)
++                    if (keycode_to_keysym( display, *kcp, k ) == XK_Num_Lock)
+ 		    {
+                         NumLockMask = 1 << i;
+                         TRACE_(key)("NumLockMask is %x\n", NumLockMask);
+ 		    }
+-                    else if (XkbKeycodeToKeysym( display, *kcp, 0, k ) == XK_Scroll_Lock)
++                    else if (keycode_to_keysym( display, *kcp, k ) == XK_Scroll_Lock)
+ 		    {
+                         ScrollLockMask = 1 << i;
+                         TRACE_(key)("ScrollLockMask is %x\n", ScrollLockMask);
+@@ -1819,7 +1815,7 @@
+     for (scan = 0x60, keyc = min_keycode; keyc <= max_keycode; keyc++)
+       if (keyc2vkey[keyc]&&!keyc2scan[keyc]) {
+ 	const char *ksname;
+-	keysym = XkbKeycodeToKeysym( display, keyc, 0, 0 );
++	keysym = keycode_to_keysym( display, keyc, 0 );
+ 	ksname = XKeysymToString(keysym);
+ 	if (!ksname) ksname = "NoSymbol";
+ 
+@@ -1941,7 +1937,7 @@
+     }
+ 
+     for (index = 0; index < 4; index++) /* find shift state */
+-        if (XkbKeycodeToKeysym( display, keycode, 0, index ) == keysym) break;
++        if (keycode_to_keysym( display, keycode, index ) == keysym) break;
+ 
+     pthread_mutex_unlock( &kbd_mutex );
+ 
+@@ -2191,7 +2187,7 @@
+       INT rc;
+ 
+       keyc = (KeyCode) keyi;
+-      keys = XkbKeycodeToKeysym( display, keyc, 0, 0 );
++      keys = keycode_to_keysym( display, keyc, 0 );
+       name = XKeysymToString(keys);
+ 
+       if (name && (vkey == VK_SHIFT || vkey == VK_CONTROL || vkey == VK_MENU))
+--- b/dlls/winex11.drv/x11drv_main.c	2026-04-23 22:49:30.731637259 +0800
++++ b_fixed/dlls/winex11.drv/x11drv_main.c	2026-04-23 23:01:33.983398114 +0800
+@@ -36,7 +36,6 @@
+ #include <dlfcn.h>
+ #include <X11/cursorfont.h>
+ #include <X11/Xlib.h>
+-#include <X11/XKBlib.h>
+ #ifdef HAVE_X11_EXTENSIONS_XRENDER_H
+ #include <X11/extensions/Xrender.h>
+ #endif
+@@ -762,7 +761,6 @@
+ #endif
+     x11drv_xinput2_load();
+ 
+-    XkbUseExtension( gdi_display, NULL, NULL );
+     X11DRV_InitKeyboard( gdi_display );
+     X11DRV_InitMouse( gdi_display );
+     if (use_xim) use_xim = xim_init( input_style );
+@@ -859,8 +857,6 @@
+ 
+     fcntl( ConnectionNumber(data->display), F_SETFD, 1 ); /* set close on exec flag */
+ 
+-    XkbUseExtension( data->display, NULL, NULL );
+-    XkbSetDetectableAutoRepeat( data->display, True, NULL );
+     if (TRACE_ON(synchronous)) XSynchronize( data->display, True );
+ 
+     set_queue_display_fd( data->display );

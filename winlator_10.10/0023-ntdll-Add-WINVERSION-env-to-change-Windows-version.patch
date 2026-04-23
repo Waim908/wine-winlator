@@ -1,0 +1,48 @@
+From e5733ceaed55d2884f262e2fdf847006bb9c8492 Mon Sep 17 00:00:00 2001
+From: BrunoSX <brunodeveloper85@gmail.com>
+Date: Tue, 23 Sep 2025 15:06:33 -0300
+Subject: [PATCH 23/40] ntdll: Add WINVERSION env to change Windows version
+
+---
+ dlls/ntdll/version.c | 24 ++++++++++++++++++++----
+ 1 file changed, 20 insertions(+), 4 deletions(-)
+
+diff --git a/dlls/ntdll/version.c b/dlls/ntdll/version.c
+index 5a11a6f..9e73f2c 100755
+--- a/dlls/ntdll/version.c
++++ b/dlls/ntdll/version.c
+@@ -521,11 +521,27 @@ done:
+     if (!got_win_ver)
+     {
+         static RTL_OSVERSIONINFOEXW registry_version;
++        WCHAR winver_env[10];
++        SIZE_T len;
+ 
+-        TRACE( "getting registry version\n" );
+-        if (get_nt_registry_version( &registry_version ) ||
+-            get_win9x_registry_version( &registry_version ))
+-            current_version = &registry_version;
++        if (!RtlQueryEnvironmentVariable( NULL, L"WINVERSION", 10, winver_env, ARRAY_SIZE(winver_env), &len ))
++        {
++            DWORD i;
++
++            TRACE( "getting envvar version\n" );
++            for (i = 0; i < ARRAY_SIZE(version_names); i++)
++            {
++                if (wcscmp( version_names[i].name, winver_env )) continue;
++                current_version = &VersionData[version_names[i].ver];
++                break;
++            }
++        }
++        else {
++            TRACE( "getting registry version\n" );
++            if (get_nt_registry_version( &registry_version ) ||
++                get_win9x_registry_version( &registry_version ))
++                current_version = &registry_version;
++        }
+     }
+ 
+ 
+-- 
+2.53.0
+

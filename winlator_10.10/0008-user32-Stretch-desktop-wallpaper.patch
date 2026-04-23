@@ -1,0 +1,33 @@
+From 339906a31113f0cb703f0c786839dda7ecd26e6c Mon Sep 17 00:00:00 2001
+From: BrunoSX <brunodeveloper85@gmail.com>
+Date: Mon, 22 Sep 2025 16:53:34 -0300
+Subject: [PATCH 08/40] user32: Stretch desktop wallpaper
+
+---
+ dlls/user32/desktop.c | 10 +++++-----
+ 1 file changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/dlls/user32/desktop.c b/dlls/user32/desktop.c
+index 35cf39b..fad651d 100755
+--- a/dlls/user32/desktop.c
++++ b/dlls/user32/desktop.c
+@@ -158,11 +158,11 @@ BOOL WINAPI PaintDesktop(HDC hdc)
+             }
+             else
+             {
+-                x = (rect.left + rect.right - bitmapSize.cx) / 2;
+-                y = (rect.top + rect.bottom - bitmapSize.cy) / 2;
+-                if (x < 0) x = 0;
+-                if (y < 0) y = 0;
+-                BitBlt( hdc, x, y, bitmapSize.cx, bitmapSize.cy, hMemDC, 0, 0, SRCCOPY );
++                SIZE deskSize;
++                deskSize.cx = rect.right - rect.left;
++                deskSize.cy = rect.bottom - rect.top;
++
++                StretchBlt( hdc, 0, 0, deskSize.cx, deskSize.cy, hMemDC, 0, 0, bitmapSize.cx, bitmapSize.cy, SRCCOPY );
+             }
+             DeleteDC( hMemDC );
+         }
+-- 
+2.53.0
+

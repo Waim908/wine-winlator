@@ -1,0 +1,25 @@
+From 82efd39c5c94d894fcf2d25dcc26f0611902f76b Mon Sep 17 00:00:00 2001
+From: BrunoSX <brunodeveloper85@gmail.com>
+Date: Tue, 23 Sep 2025 11:48:09 -0300
+Subject: [PATCH 14/40] winemenubuilder: Add timeout to wait for parent process
+
+---
+ programs/winemenubuilder/winemenubuilder.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/programs/winemenubuilder/winemenubuilder.c b/programs/winemenubuilder/winemenubuilder.c
+index f3ed125..259e826 100755
+--- a/programs/winemenubuilder/winemenubuilder.c
++++ b/programs/winemenubuilder/winemenubuilder.c
+@@ -2491,7 +2491,7 @@ static BOOL WaitForParentProcess( void )
+         goto done;
+     }
+ 
+-    if (MsgWaitForMultipleObjects( 1, &hprocess, FALSE, INFINITE, QS_ALLINPUT ) == WAIT_OBJECT_0)
++    if (MsgWaitForMultipleObjects( 1, &hprocess, FALSE, 1000, QS_ALLINPUT ) == WAIT_OBJECT_0)
+         ret = TRUE;
+     else
+         WINE_ERR("Unable to wait for parent process, error %ld\n", GetLastError());
+-- 
+2.53.0
+

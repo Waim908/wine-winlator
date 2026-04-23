@@ -1,0 +1,94 @@
+From e304bb7ea01f379433d8a26ae0b1d90643037240 Mon Sep 17 00:00:00 2001
+From: BrunoSX <brunodeveloper85@gmail.com>
+Date: Tue, 23 Sep 2025 16:11:21 -0300
+Subject: [PATCH 29/40] appwiz: Add fallback URL for Wine Mono/Gecko
+ installation
+
+---
+ dlls/appwiz.cpl/addons.c | 47 ++++++++++++++++++++++++++++++----------
+ 1 file changed, 35 insertions(+), 12 deletions(-)
+
+diff --git a/dlls/appwiz.cpl/addons.c b/dlls/appwiz.cpl/addons.c
+index 9e9ed5c..51fe206 100755
+--- a/dlls/appwiz.cpl/addons.c
++++ b/dlls/appwiz.cpl/addons.c
+@@ -250,6 +250,21 @@ static HKEY open_config_key(void)
+     return res == ERROR_SUCCESS ? ret : NULL;
+ }
+ 
++static BOOL get_default_url(WCHAR* url, DWORD size)
++{
++    HKEY hkey;
++    DWORD res;
++    LONG returned_size = size;
++
++    res = RegOpenKeyW(HKEY_CURRENT_USER, L"Software\\Wine\\AddonsURL", &hkey);
++    if(res != ERROR_SUCCESS)
++        return FALSE;
++
++    RegQueryValueW(hkey, NULL, url, &returned_size);
++    RegCloseKey(hkey);
++    return TRUE;
++}
++
+ static enum install_res install_from_registered_dir(void)
+ {
+     char *package_dir, *new_package_dir;
+@@ -606,19 +621,25 @@ static IInternetBindInfo InstallCallbackBindInfo = { &InstallCallbackBindInfoVtb
+ 
+ static void append_url_params( WCHAR *url )
+ {
+-    DWORD size = INTERNET_MAX_URL_LENGTH * sizeof(WCHAR);
+     DWORD len = lstrlenW(url);
+ 
+-    lstrcpyW(url+len, L"?arch=");
+-    len += lstrlenW(L"?arch=");
+-    len += MultiByteToWideChar(CP_ACP, 0, GECKO_ARCH, sizeof(GECKO_ARCH),
+-                               url+len, size/sizeof(WCHAR)-len)-1;
+-    lstrcpyW(url+len, L"&v=");
+-    len += lstrlenW(L"&v=");
+-    len += MultiByteToWideChar(CP_ACP, 0, addon->version, -1, url+len, size/sizeof(WCHAR)-len)-1;
+-    lstrcpyW(url+len, L"&winev=");
+-    len += lstrlenW(L"&winev=");
+-    MultiByteToWideChar(CP_ACP, 0, p_wine_get_version ? p_wine_get_version() : 0, -1, url+len, size/sizeof(WCHAR)-len);
++    if (wcsncmp(&url[len-1], L"/", 1) != 0)
++    {
++        DWORD size = INTERNET_MAX_URL_LENGTH * sizeof(WCHAR);
++
++        lstrcpyW(url+len, L"?arch=");
++        len += lstrlenW(L"?arch=");
++        len += MultiByteToWideChar(CP_ACP, 0, GECKO_ARCH, sizeof(GECKO_ARCH),
++                                   url+len, size/sizeof(WCHAR)-len)-1;
++        lstrcpyW(url+len, L"&v=");
++        len += lstrlenW(L"&v=");
++        len += MultiByteToWideChar(CP_ACP, 0, addon->version, -1, url+len, size/sizeof(WCHAR)-len)-1;
++        lstrcpyW(url+len, L"&winev=");
++        len += lstrlenW(L"&winev=");
++        MultiByteToWideChar(CP_ACP, 0, p_wine_get_version ? p_wine_get_version() : 0, -1, url+len, size/sizeof(WCHAR)-len);
++    }
++    else
++        lstrcpyW(url+len, addon->file_name);
+ }
+ 
+ static LPWSTR get_url(void)
+@@ -632,6 +653,7 @@ static LPWSTR get_url(void)
+     static const WCHAR httpW[] = {'h','t','t','p'};
+ 
+     url = malloc(size);
++    memset(url, 0, size);
+     returned_size = size;
+ 
+     hkey = open_config_key();
+@@ -644,7 +666,8 @@ static LPWSTR get_url(void)
+         if(res == ERROR_SUCCESS && type == REG_SZ) goto found;
+     }
+ 
+-    MultiByteToWideChar( CP_ACP, 0, addon->url_default, -1, url, size / sizeof(WCHAR) );
++    if (!get_default_url(url, size))
++        MultiByteToWideChar( CP_ACP, 0, addon->url_default, -1, url, size / sizeof(WCHAR) );
+ 
+ found:
+     if (returned_size > sizeof(httpW) && !memcmp(url, httpW, sizeof(httpW))) append_url_params( url );
+-- 
+2.53.0
+

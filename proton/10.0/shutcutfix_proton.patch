@@ -1,0 +1,21 @@
+diff -urN proton10_wine/programs/winemenubuilder/winemenubuilder.c b/programs/winemenubuilder/winemenubuilder.c
+--- proton10_wine/programs/winemenubuilder/winemenubuilder.c	2025-10-26 19:03:20.202763744 +0800
++++ b/programs/winemenubuilder/winemenubuilder.c	2025-10-27 00:09:37.661941860 +0800
+@@ -1274,7 +1274,7 @@
+ 
+     name = PathFindFileNameW( linkname );
+ 
+-    shortcuts_dir = heap_wprintf(L"%s", L"c:\\proton_shortcuts");
++    shortcuts_dir = heap_wprintf(L"%s", L"c:\\users\\xuser\\Desktop");
+     create_directories(shortcuts_dir);
+     location = heap_wprintf(L"%s\\%s.desktop", shortcuts_dir, name);
+     heap_free(shortcuts_dir);
+@@ -1288,7 +1288,7 @@
+     fprintf(file, "Name=%s\n", wchars_to_utf8_chars(name));
+     fprintf(file, "Exec=" );
+ 
+-    fprintf(file, "%s", escape(path));
++    fprintf(file, "wine %s", escape(path));
+     if (args) fprintf(file, " %s", escape(args) );
+     fputc( '\n', file );
+     fprintf(file, "Type=Application\n");

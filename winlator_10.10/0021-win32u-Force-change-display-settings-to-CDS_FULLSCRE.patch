@@ -1,0 +1,29 @@
+From 0ac5265d9861b1be811458593aa11df67823fd6a Mon Sep 17 00:00:00 2001
+From: BrunoSX <brunodeveloper85@gmail.com>
+Date: Tue, 23 Sep 2025 15:05:21 -0300
+Subject: [PATCH 21/40] win32u: Force change display settings to CDS_FULLSCREEN
+ flag
+
+---
+ dlls/win32u/sysparams.c | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/dlls/win32u/sysparams.c b/dlls/win32u/sysparams.c
+index 026403a..d19d289 100755
+--- a/dlls/win32u/sysparams.c
++++ b/dlls/win32u/sysparams.c
+@@ -4044,7 +4044,10 @@ LONG WINAPI NtUserChangeDisplaySettings( UNICODE_STRING *devname, DEVMODEW *devm
+ 
+     if (!(source = find_source( devname ))) return DISP_CHANGE_BADPARAM;
+ 
+-    if (!source_get_full_mode( source, devmode, &full_mode )) ret = DISP_CHANGE_BADMODE;
++    if (!source_get_full_mode( source, devmode, &full_mode )) {
++        if ((flags & CDS_FULLSCREEN) && devmode) ret = apply_display_settings( source, devmode, hwnd, flags, lparam );
++        else ret = DISP_CHANGE_BADMODE;
++    }
+     else if ((flags & CDS_UPDATEREGISTRY) && !source_set_registry_settings( source, &full_mode )) ret = DISP_CHANGE_NOTUPDATED;
+     else if (flags & (CDS_TEST | CDS_NORESET)) ret = DISP_CHANGE_SUCCESSFUL;
+     else ret = apply_display_settings( source, &full_mode, hwnd, flags, lparam );
+-- 
+2.53.0
+

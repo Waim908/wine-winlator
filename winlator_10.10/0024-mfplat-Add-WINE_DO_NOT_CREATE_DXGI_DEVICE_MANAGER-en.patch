@@ -1,0 +1,33 @@
+From dcad80e84f514859bed98201d3b8870a3f9564ed Mon Sep 17 00:00:00 2001
+From: BrunoSX <brunodeveloper85@gmail.com>
+Date: Tue, 23 Sep 2025 15:24:58 -0300
+Subject: [PATCH 24/40] mfplat: Add WINE_DO_NOT_CREATE_DXGI_DEVICE_MANAGER env
+
+---
+ dlls/mfplat/main.c | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/dlls/mfplat/main.c b/dlls/mfplat/main.c
+index 01d9d2d..1a24d38 100755
+--- a/dlls/mfplat/main.c
++++ b/dlls/mfplat/main.c
+@@ -9222,9 +9222,16 @@ static const IMFDXGIDeviceManagerVtbl dxgi_device_manager_vtbl =
+ HRESULT WINAPI MFCreateDXGIDeviceManager(UINT *token, IMFDXGIDeviceManager **manager)
+ {
+     struct dxgi_device_manager *object;
++    const char *do_not_create = getenv("WINE_DO_NOT_CREATE_DXGI_DEVICE_MANAGER");
+ 
+     TRACE("%p, %p.\n", token, manager);
+ 
++    if (do_not_create && do_not_create[0] != '\0')
++    {
++        FIXME("stubbing out\n");
++        return E_NOTIMPL;
++    }
++
+     if (!token || !manager)
+         return E_POINTER;
+ 
+-- 
+2.53.0
+
