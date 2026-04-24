@@ -63,7 +63,7 @@ sed2 _LD_FLAGS "-s -Wl,-O3,--sort-common,--as-needed"
 sed2 _CROSS_FLAGS "-O3 -pipe -msse3 -mfpmath=sse -ftree-vectorize -Wno-error=implicit-function-declaration -Wno-error=incompatible-pointer-types"
 sed2 _CROSS_LD_FLAGS "-s -Wl,-O3,--sort-common,--as-needed"
 sed2 _NOLIB32 wow64
-sed2 _configure_userargs64 "--disable-win16 --disable-tests --without-capi --without-coreaudio --without-cups --without-gphoto --without-osmesa --without-oss --without-pcap --without-pcsclite --without-sane --without-udev --without-unwind --without-usb --without-v4l2 --without-wayland --without-xinerama --without-piper --without-gphoto"
+sed2 _configure_userargs64 "--disable-win16 --disable-tests --without-capi --without-coreaudio --without-cups --without-gphoto --without-osmesa --without-oss --without-pcap --without-pcsclite --without-sane --without-udev --without-unwind --without-usb --without-v4l2 --without-wayland --without-xinerama --without-piper -without-ffmpeg"
 sed2 _user_patches_no_confirm true
 
 [[ $NO_COMPILE == 1 ]] && NO_COMPILE=true

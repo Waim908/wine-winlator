@@ -29,7 +29,7 @@ Glibc 7.1.x
 # 构建参数
 
 ```bash
---enable-archs=i386,x86_64 --disable-win16 --disable-tests --without-capi --without-coreaudio --without-cups --without-gphoto --without-osmesa --without-oss --without-pcap --without-pcsclite --without-sane --without-udev --without-unwind --without-usb --without-v4l2 --without-wayland --without-xinerama --without-piper --without-gphoto
+--enable-archs=i386,x86_64 --disable-win16 --disable-tests --without-capi --without-coreaudio --without-cups --without-gphoto --without-osmesa --without-oss --without-pcap --without-pcsclite --without-sane --without-udev --without-unwind --without-usb --without-v4l2 --without-wayland --without-xinerama --without-piper --without-ffmpeg
 ```
 
 # Arm64ec Wine
@@ -79,7 +79,7 @@ Glibc 7.1.x
   host_alias=aarch64-linux-gnu \
   build_alias=x86_64-linux-gnu \
   --with-wine-tools=amd64 \
-  --disable-win16 --disable-tests --without-capi --without-coreaudio --without-cups --without-gphoto --without-osmesa --without-oss --without-pcap --without-pcsclite --without-sane --without-udev --without-unwind --without-usb --without-v4l2 --without-wayland --without-xinerama --without-piper \
+  --disable-win16 --disable-tests --without-capi --without-coreaudio --without-cups --without-gphoto --without-osmesa --without-oss --without-pcap --without-pcsclite --without-sane --without-udev --without-unwind --without-usb --without-v4l2 --without-wayland --without-xinerama --without-piper -without-ffmpeg \
   CC=aarch64-linux-gnu-gcc
 ```
 
