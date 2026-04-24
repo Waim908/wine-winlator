@@ -1,0 +1,13 @@
+diff -urN a/dlls/winex11.drv/mouse.c b/dlls/winex11.drv/mouse.c
+--- a/dlls/winex11.drv/mouse.c
++++ b/dlls/winex11.drv/mouse.c
+@@ -1951,8 +1951,9 @@
+ /***********************************************************************
+  *              x11drv_xinput2_load
+  */
+ void x11drv_xinput2_load(void)
+ {
++    if (!usexinput2) return;
+ #if defined(SONAME_LIBXI)
+     int event, error;
+     void *libxi_handle = dlopen( SONAME_LIBXI, RTLD_NOW );
