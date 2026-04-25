@@ -75,7 +75,7 @@ fi
 cd $WINEPREFIX/..
 mkdir -p /tmp/output-whp
 
-if [[ -z $memLimit]]; then
+if [[ -z $memLimit ]]; then
 memLimit=$(free -h | awk 'NR==2{
     val=$7; gsub(/[a-zA-Z]/,"",val);
     unit=$7; gsub(/[0-9.]/,"",unit);
