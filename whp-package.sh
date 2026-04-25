@@ -4,11 +4,12 @@ rm -rf /tmp/output-whp
 rm -rf /data/data/com.winlator/files/rootfs/tmp
 mkdir -p /data/data/com.winlator/files/rootfs/tmp/shm
 mkdir -p /data/data/com.winlator/files/rootfs/home/xuser/.wine
-if [[ -z $1 ]]; then
+if [[ -z $wineVer ]]; then
   echo "你必须声明wineVer参数"
   echo "内容只能由数字或小数和-组成"
   exit 1
 fi
+[[ -z $1 ]] && echo "请指定wine可执行文件路径" && exit 1
 export WINEESYNC=1
 export WINEPREFIX=/data/data/com.winlator/files/rootfs/home/xuser/.wine
 export winePath=$1/bin
@@ -29,8 +30,16 @@ else
   if [[ $useBox64 == 1 ]]; then
       echo "使用box64执行"
       box64 $winePath/wineboot || exit 1
+      box64 $winePath/wineserver -w || exit 1
+      echo "删除注册表: HKEY_CURRENT_USER\Control Panel\Desktop\WindowMetrics"
+      box64 $winePath/wine reg delete "HKEY_CURRENT_USER\Control Panel\Desktop\WindowMetrics" /f || exit
+      box64 $winePath/wineserver -w || exit 1
   else
       $winePath/wineboot || exit 1
+      $winePath/wineserver -w || exit 1
+      echo "删除注册表: HKEY_CURRENT_USER\Control Panel\Desktop\WindowMetrics"
+      $winePath/wine reg delete "HKEY_CURRENT_USER\Control Panel\Desktop\WindowMetrics" /f || exit
+      $winePath/wineserver -w || exit 1
   fi
   sleep 3
   exit_status=$?
@@ -48,11 +57,9 @@ if [[ $useBox64 == 1 ]]; then
 else
   wine_version=$($winePath/wine --version)
 fi
-cat > '/data/data/com.winlator/files/rootfs/home/xuser/.wine/drive_c/ProgramData/Microsoft/Windows/Start Menu/TkG-version.txt' << EOF
+cat > '/data/data/com.winlator/files/rootfs/home/xuser/.wine/drive_c/ProgramData/Microsoft/Windows/Start Menu/wine_version.txt' << EOF
 Version: $wine_version
-Others:
-  More staging settings in winecfg
-  [Waim908/wine-winlator](https://github.com/Waim908/wine-winlator)
+[Waim908/wine-winlator](https://github.com/Waim908/wine-winlator)
 EOF
 rm -rf $WINEPREFIX/dosdevices/*
 mkdir $WINEPREFIX/drive_x
@@ -67,7 +74,22 @@ else
 fi
 cd $WINEPREFIX/..
 mkdir -p /tmp/output-whp
-tar -I 'zstd -T$(nproc) -9' -cvf /tmp/output-whp/container-pattern-$wineVer.tzst .wine
+
+if [[ -z $memLimit]]; then
+memLimit=$(free -h | awk 'NR==2{
+    val=$7; gsub(/[a-zA-Z]/,"",val);
+    unit=$7; gsub(/[0-9.]/,"",unit);
+    if(unit~/^G/) mem=val*1024;
+    else if(unit~/^M/) mem=val;
+    else mem=val/1024;
+    print int(mem*0.5)"M"
+}')
+fi
+[[ -z $memLimit ]] && memLimit="512M"
+echo "压缩时内存限制为([物理内存整数G]x0.5): $memLimit"
+echo "可以自定义\$memLimit变量提高上限"
+
+tar -I 'zstd -T$(nproc) --ultra -22 -M$memLimit' -cvf /tmp/output-whp/container-pattern-$wineVer.tzst .wine
 cp -r -p $wineRoot /tmp/output-whp/
 baseName=$(basename $wineRoot)
 if [[ ! haveInclude == 1 ]]; then
@@ -75,5 +97,5 @@ if [[ ! haveInclude == 1 ]]; then
 fi
 cd /tmp/output-whp/
 mv $baseName wine-$wineVer-
-tar -I 'xz -T$(nproc) -9' -cvf /tmp/output-whp/wine-$wineVer.whp wine-$wineVer- container-pattern-$wineVer.tzst
+tar -I 'xz -T$(nproc) -9e -M $memLimit' -cvf /tmp/output-whp/wine-$wineVer.whp wine-$wineVer- container-pattern-$wineVer.tzst
 echo "Output=> /tmp/output-whp/wine-$wineVer.whp"
