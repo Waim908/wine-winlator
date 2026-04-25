@@ -1,9 +1,7 @@
 diff -urN a/dlls/winex11.drv/mouse.c b/dlls/winex11.drv/mouse.c
 --- a/dlls/winex11.drv/mouse.c
 +++ b/dlls/winex11.drv/mouse.c
-@@ -1951,8 +1951,9 @@
- /***********************************************************************
-  *              x11drv_xinput2_load
+@@ -1953,6 +1953,7 @@
   */
  void x11drv_xinput2_load(void)
  {
@@ -11,3 +9,68 @@ diff -urN a/dlls/winex11.drv/mouse.c b/dlls/winex11.drv/mouse.c
  #if defined(SONAME_LIBXI)
      int event, error;
      void *libxi_handle = dlopen( SONAME_LIBXI, RTLD_NOW );
+diff -urN a/dlls/winex11.drv/x11drv.h b/dlls/winex11.drv/x11drv.h
+--- a/dlls/winex11.drv/x11drv.h
++++ b/dlls/winex11.drv/x11drv.h
+@@ -463,6 +463,7 @@
+ extern BOOL use_xfixes;
+ extern BOOL managed_mode;
+ extern BOOL private_color_map;
++extern BOOL usexinput2;
+ extern int primary_monitor;
+ extern int copy_default_colors;
+ extern int alloc_system_colors;
+diff -urN a/dlls/winex11.drv/x11drv_main.c b/dlls/winex11.drv/x11drv_main.c
+--- a/dlls/winex11.drv/x11drv_main.c
++++ b/dlls/winex11.drv/x11drv_main.c
+@@ -66,8 +66,8 @@
+ HWND systray_hwnd = 0;
+ unsigned int screen_bpp;
+ Window root_window;
+-BOOL usexvidmode = TRUE;
+-BOOL usexrandr = TRUE;
++BOOL usexvidmode = FALSE;
++BOOL usexrandr = FALSE;
+ BOOL usexcomposite = TRUE;
+ BOOL use_xfixes = FALSE;
+ BOOL use_take_focus = TRUE;
+@@ -79,6 +79,7 @@
+ BOOL managed_mode = TRUE;
+ BOOL private_color_map = FALSE;
+ int primary_monitor = 0;
++BOOL usexinput2 = FALSE;
+ BOOL client_side_graphics = TRUE;
+ BOOL client_side_with_render = TRUE;
+ BOOL shape_layered_windows = TRUE;
+@@ -507,6 +508,9 @@
+     if (!get_config_key( hkey, appkey, "AllocSystemColors", buffer, sizeof(buffer) ))
+         alloc_system_colors = wcstol( buffer, NULL, 0 );
+ 
++    if (!get_config_key( hkey, appkey, "UseXInput2", buffer, sizeof(buffer) ))
++        usexinput2 = IS_OPTION_TRUE( buffer[0] );
++
+     get_config_key( hkey, appkey, "InputStyle", input_style, sizeof(input_style) );
+ 
+     NtClose( appkey );
+diff -urN a/dlls/winex11.drv/xvidmode.c b/dlls/winex11.drv/xvidmode.c
+--- a/dlls/winex11.drv/xvidmode.c
++++ b/dlls/winex11.drv/xvidmode.c
+@@ -251,7 +251,7 @@
+   void *xvidmode_handle;
+   Bool ok;
+ 
+-  if (xf86vm_major) return; /* already initialized? */
++  if (!usexvidmode || xf86vm_major) return;
+ 
+   xvidmode_handle = dlopen(SONAME_LIBXXF86VM, RTLD_NOW);
+   if (!xvidmode_handle)
+@@ -301,9 +301,6 @@
+   }
+ #endif /* X_XF86VidModeSetGammaRamp */
+ 
+-  if (!usexvidmode)
+-    return;
+-
+   xf86vm_handler.name = "XF86VidMode";
+   xf86vm_handler.priority = 100;
+   xf86vm_handler.get_id = xf86vm_get_id;
