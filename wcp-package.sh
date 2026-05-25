@@ -1,5 +1,9 @@
 #!/bin/bash
 
+if [[ -z $imagefsPrefix ]]; then
+    imagefsPrefix="/data/data/com.winlator/files/imagefs/"
+fi
+
 if [[ $isArm64ec == 1 ]]; then
     isArm64ec="arm64ec"
 else
@@ -41,7 +45,7 @@ EOF
 }
 
 patchelf_fix() {
-    LD_RPATH="/data/data/com.winlator/files/imagefs/usr/lib"
+    LD_RPATH="${imagefsPrefix}/usr/lib"
     LD_FILE=$LD_RPATH/ld-linux-aarch64.so.1
     find . -type f -exec file {} + | grep -E ":.*ELF" | cut -d: -f1 | while read -r elf_file; do
         echo "Patching $elf_file..."
@@ -52,11 +56,11 @@ patchelf_fix() {
     done
 }
 
-rm -rf /data/data/com.winlator/files/imagefs/home/xuser/.wine
+rm -rf ${imagefsPrefix}/home/xuser/.wine
 rm -rf /tmp/output-wcp
-rm -rf /data/data/com.winlator/files/imagefs/tmp
-mkdir -p /data/data/com.winlator/files/imagefs/tmp/
-mkdir -p /data/data/com.winlator/files/imagefs/home/xuser/.wine
+rm -rf ${imagefsPrefix}/tmp
+mkdir -p ${imagefsPrefix}/tmp/
+mkdir -p ${imagefsPrefix}/home/xuser/.wine
 
 if [[ -z $wineVer ]]; then
     if [[ ! -z $2 ]]; then
@@ -70,7 +74,7 @@ fi
 wineVer="${wineVer#wine-}"
 
 export WINEESYNC=1
-export WINEPREFIX=/data/data/com.winlator/files/imagefs/home/xuser/.wine
+export WINEPREFIX=${imagefsPrefix}/home/xuser/.wine
 
 winePath=$1/bin
 wineRoot=$1
@@ -85,7 +89,7 @@ if ! command -v xz; then
     exit 1
 fi
 
-cat > /data/data/com.winlator/files/imagefs/tmp/fix_wm.reg << EOF
+cat > ${imagefsPrefix}/tmp/fix_wm.reg << EOF
 Windows Registry Editor Version 5.00
 
 [HKEY_CURRENT_USER\Control Panel\Desktop\WindowMetrics]
@@ -120,7 +124,7 @@ else
         box64 $winePath/wine reg delete "HKEY_CURRENT_USER\Control Panel\Desktop\WindowMetrics" /f || exit
         $winePath/wineserver -w || exit 1
         echo "导入新的注册表"
-        box64 $winePath/wine reg import /data/data/com.winlator/files/imagefs/tmp/fix_wm.reg || exit 1
+        box64 $winePath/wine reg import ${imagefsPrefix}/tmp/fix_wm.reg || exit 1
         box64 $winePath/wineserver -w || exit 1
     else
         if [[ $isArm64ec == "arm64ec" ]] && [[ ! -z $fexDllPath ]]; then
@@ -136,7 +140,7 @@ else
         $winePath/wine reg delete "HKEY_CURRENT_USER\Control Panel\Desktop\WindowMetrics" /f || exit 1
         $winePath/wineserver -w || exit 1
         echo "导入新的注册表"
-        $winePath/wine reg import /data/data/com.winlator/files/imagefs/tmp/fix_wm.reg || exit 1
+        $winePath/wine reg import ${imagefsPrefix}/tmp/fix_wm.reg || exit 1
         $winePath/wineserver -w || exit 1
     fi
 fi
@@ -166,7 +170,7 @@ fi
   else
     txtFileName="TkG-version.txt"
   fi
-  cat > "/data/data/com.winlator/files/imagefs/home/xuser/.wine/drive_c/ProgramData/Microsoft/Windows/Start Menu/${txtFileName}" << EOF
+  cat > "${imagefsPrefix}/home/xuser/.wine/drive_c/ProgramData/Microsoft/Windows/Start Menu/${txtFileName}" << EOF
 Version: $wine_version
 Others: More staging settings in winecfg
 [Waim908/wine-winlator](https://github.com/Waim908/wine-winlator)

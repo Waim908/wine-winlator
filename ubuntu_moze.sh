@@ -31,4 +31,5 @@ tar -I 'xz -T$(nproc) -9' -cf /tmp/ccache.tar.xz ccache
 echo "正在打包Wine-TKG..."
 wine_path=$(ls /tmp/output/ 2>/dev/null)
 [[ -z $wine_path ]] && exit 1
+export imagefsPrefix="/data/data/com.winlator.glibc/files/imagefs/usr"
 bash -x /tmp/wine-winlator/wcp-package.sh /tmp/output/$wine_path $wineVer || exit 1
