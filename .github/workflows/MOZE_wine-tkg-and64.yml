@@ -1,0 +1,103 @@
+name: Compile Wine-TKG for x86_64 (MOZE Glibc) (env BCC ubuntu)
+
+permissions:
+  contents: write
+  packages: write
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Wine-TKG Version (MOZE)"
+        required: false
+        default: "10.15"
+      customTag:
+        description: "Custom Releases Tag"
+        required: false
+        default: "moze-r"
+      customDescription:
+        description: "Custom Releases Description"
+        required: false
+        default: ""
+      cleanStaticLibrary:
+        description: "Clean Static Library Files"
+        type: boolean
+        required: false
+        default: true
+
+env:
+  wineVer: ${{ github.event.inputs.version }}
+  cleanStaticLibrary: ${{ inputs.cleanStaticLibrary == true && '1' || '0' }}
+
+
+jobs:
+  build_wine:
+    runs-on: ubuntu-24.04
+    name: Build Wine-TKG
+    steps:
+      - name: Download Cache
+        id: cache-tag
+        uses: actions/cache@v4
+        with:
+          path: /tmp/ccache.tar.xz
+          key: tkg-ccache-amd64
+
+      - name: Build Wine-TKG & Download BCC
+        run: |
+          [[ -z $wineVer ]] && { echo "你没有输入Wine版本！" && exit 1;}
+          git clone --depth=1 https://github.com/Waim908/wine-winlator.git || exit 1
+          git clone --depth=1 https://github.com/Frogging-Family/wine-tkg-git.git || exit 1
+          # aria2c -s$(nproc) -x$(nproc) https://github.com/Waim908/BCC/releases/download/wine-bcc-latest/wine-bcc.tar.xz || exit 1
+          aria2c -s$(nproc) -x$(nproc) https://github.com/Waim908/BCC/releases/download/wine-amd64-ubuntu2404-bcc-latest/wine-ubuntu2404-bcc-amd64.tar.xz || exit 1
+          tar xf wine-ubuntu2404-bcc-amd64.tar.xz && rm -rf wine-ubuntu2404-bcc-amd64.tar.xz
+
+      - name: Setting BCC & Compile Wine-TKG
+        run: |
+          echo $(pwd)
+          sudo bash wine-winlator/mount.sh mount ubuntu2404 || exit 1
+          sudo mkdir -p ubuntu2404/root/.cache/
+          if [[ -f /tmp/ccache.tar.xz ]]; then
+            echo "找到Ccache缓存，正在解压..."
+            sudo tar -xf /tmp/ccache.tar.xz -C ubuntu2404/root/.cache/ || exit 1
+          else
+            echo "未找到Ccache缓存，继续..."
+          fi
+          sudo cp -r -p wine-winlator/ ubuntu2404/tmp/
+          sudo cp -r -p wine-tkg-git/ ubuntu2404/tmp/
+          sudo echo "export ENABLE_PROTON_MF=0 export wineVer=${wineVer} && export cleanStaticLibrary=${cleanStaticLibrary}" > ubuntu2404/tmp/wineVer.conf
+
+
+      - name: Compile
+        run: |
+          sudo chroot ubuntu2404 bash -x /tmp/wine-winlator/ubuntu.sh || exit 1
+
+      - name: Collect Artifacts
+        run: |
+          sudo bash wine-winlator/mount.sh umount ubuntu2404 || exit 1
+          sudo chmod 644 ubuntu2404/tmp/output-wcp/*.wcp
+          sudo chmod 644 /tmp/ccache.tar.xz
+
+      - name: Save ccache
+        uses: actions/cache/save@v5
+        with:
+          path: /tmp/ccache.tar.xz
+          key: tkg-ccache-amd64
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.event.inputs.version }}-${{ github.event.inputs.customTag }}-tkg
+          name: Wine ${{ github.event.inputs.version }} TkG Staging GE for Winlator Glibc (${{ github.event.inputs.customTag }})
+          body: |
+            自动编译版本
+            启用Esync
+            启用Fsync
+            修改请查看此仓库源码。
+            Remake: ${{ github.event.inputs.customTag }}
+            Update Description: ${{ github.event.inputs.customDescription }}
+
+          files: /tmp/output-wcp/*.wcp
+          draft: false
+          prerelease: false
