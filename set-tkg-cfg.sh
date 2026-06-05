@@ -39,7 +39,7 @@ sed2 _wayland_driver false
 sed2 _proton_battleye_support false
 sed2 _proton_eac_support false
 sed2 _mk11_fix false
-sed2 _proton_fs_hack true
+sed2 _proton_fs_hack false
 #10.16+不支持！！！
 [[ $ENABLE_PROTON_MF == 1 ]] && ENABLE_PROTON_MF=true
 [[ $ENABLE_PROTON_MF == true ]] && {
