@@ -18,11 +18,15 @@ git clone --depth=1 https://github.com/brunodev85/wine-${wineVer}-custom.git win
 
 cd wine-src
 
-bash +x /tmp/wine-winlator/apply_patch.patch wine-winlator-custom $wineVer
+bash +x /tmp/wine-winlator/apply_patch.patch wine-winlator-custom $wineVer || ${ echo 补丁应用失败 && exit 1;}
 
 echo "正在构建Wine..."
 
 ./configure --prefix=/tmp/output/wine-10.10 --enable-archs="i386,x86_64" --disable-win16 --disable-tests --without-capi --without-coreaudio --without-cups --without-gphoto --without-osmesa --without-oss --without-pcap --without-pcsclite --without-sane --without-udev --without-unwind --without-usb --without-v4l2 --without-wayland --without-xinerama --without-piper --without-ffmpeg || { echo "构建失败" && exit 1; }
+
+source /tmp/wine-winlator/compile.conf amd64
+
+make -j`nproc`
 
 echo "正在保存Ccache缓存..."
 [[ -f /tmp/ccache.tar.xz ]] && rm -rf /tmp/ccache.tar.xz
