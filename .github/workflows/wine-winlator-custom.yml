@@ -33,7 +33,7 @@ env:
 jobs:
   build_wine:
     runs-on: ubuntu-24.04
-    name: Build Wine-TKG
+    name: Build Wine
     steps:
       - name: Download Cache
         id: cache-tag
@@ -46,7 +46,6 @@ jobs:
         run: |
           [[ -z $wineVer ]] && { echo "你没有输入Wine版本！" && exit 1;}
           git clone --depth=1 https://github.com/Waim908/wine-winlator.git || exit 1
-          git clone --depth=1 https://github.com/Frogging-Family/wine-tkg-git.git || exit 1
           # aria2c -s$(nproc) -x$(nproc) https://github.com/Waim908/BCC/releases/download/wine-bcc-latest/wine-bcc.tar.xz || exit 1
           aria2c -s$(nproc) -x$(nproc) https://github.com/Waim908/BCC/releases/download/wine-amd64-ubuntu2404-bcc-latest/wine-ubuntu2404-bcc-amd64.tar.xz || exit 1
           tar xf wine-ubuntu2404-bcc-amd64.tar.xz && rm -rf wine-ubuntu2404-bcc-amd64.tar.xz
@@ -63,7 +62,6 @@ jobs:
             echo "未找到Ccache缓存，继续..."
           fi
           sudo cp -r -p wine-winlator/ ubuntu2404/tmp/
-          sudo cp -r -p wine-tkg-git/ ubuntu2404/tmp/
           sudo echo "export wineVer=${wineVer} && export cleanStaticLibrary=${cleanStaticLibrary}" > ubuntu2404/tmp/wineVer.conf
 
 
@@ -88,7 +86,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ github.event.inputs.version }}-${{ github.event.inputs.customTag }}-tkg
+          tag_name: ${{ github.event.inputs.version }}-${{ github.event.inputs.customTag }}
           name: Wine ${{ github.event.inputs.version }} Winlator Glibc (${{ github.event.inputs.customTag }})
           body: |
             自动编译版本。
