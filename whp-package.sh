@@ -89,7 +89,9 @@ fi
 echo "压缩时内存限制为([物理内存整数G]x0.5): $memLimit"
 echo "可以自定义\$memLimit变量提高上限"
 
-tar -I "zstd -T$(nproc) --ultra -22 -M$memLimit" -cvf /tmp/output-whp/container-pattern-$wineVer.tzst .wine
+#tar -I "zstd -T$(nproc) --ultra -22 -M$memLimit" -cvf /tmp/output-whp/container-pattern-$wineVer.tzst .wine
+tar -I "zstd -T$(nproc) -9 -M$memLimit" -cvf /tmp/output-whp/container-pattern-$wineVer.tzst .wine
+
 cp -r -p $wineRoot /tmp/output-whp/
 baseName=$(basename $wineRoot)
 if [[ ! haveInclude == 1 ]]; then
