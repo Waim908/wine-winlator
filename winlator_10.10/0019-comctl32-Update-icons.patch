@@ -1,7 +1,7 @@
 From d465cd0e1394fa37fea7f31514ac49f43ec3eb56 Mon Sep 17 00:00:00 2001
 From: BrunoSX <brunodeveloper85@gmail.com>
 Date: Tue, 23 Sep 2025 13:56:46 -0300
-Subject: [PATCH 19/40] comctl32: Update icons
+Subject: [PATCH 19/47] comctl32: Update icons
 
 ---
  dlls/comctl32/Makefile.in         |   10 -
@@ -3652,5 +3652,5 @@ z7#J8p7$(@jz`%F_f|(C6Ft9&hU||2iz`zg1@;?|D<o_@**h6vsKTvSOG2{RL4a^XH
 kfcgLb1ML6*Kj4Sp5B&fCe~|zG|A+nm|9?OjoI?Hs00*?}0{{R3
 
 -- 
-2.53.0
+2.55.0
 

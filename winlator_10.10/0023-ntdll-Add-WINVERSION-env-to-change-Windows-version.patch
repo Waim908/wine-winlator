@@ -1,7 +1,7 @@
 From e5733ceaed55d2884f262e2fdf847006bb9c8492 Mon Sep 17 00:00:00 2001
 From: BrunoSX <brunodeveloper85@gmail.com>
 Date: Tue, 23 Sep 2025 15:06:33 -0300
-Subject: [PATCH 23/40] ntdll: Add WINVERSION env to change Windows version
+Subject: [PATCH 23/47] ntdll: Add WINVERSION env to change Windows version
 
 ---
  dlls/ntdll/version.c | 24 ++++++++++++++++++++----
@@ -44,5 +44,5 @@ index 5a11a6f..9e73f2c 100755
  
  
 -- 
-2.53.0
+2.55.0
 

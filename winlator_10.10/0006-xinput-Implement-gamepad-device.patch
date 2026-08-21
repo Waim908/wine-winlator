@@ -1,7 +1,7 @@
 From 1b9a5f472a69c05d2cce08ce79cdd550225b6186 Mon Sep 17 00:00:00 2001
 From: BrunoSX <brunodeveloper85@gmail.com>
 Date: Mon, 22 Sep 2025 16:49:50 -0300
-Subject: [PATCH 06/40] xinput: Implement gamepad device
+Subject: [PATCH 06/47] xinput: Implement gamepad device
 
 ---
  dlls/xinput1_1/Makefile.in   |   2 +-
@@ -1276,5 +1276,5 @@ index 290f083..28d5401 100755
  
  SOURCES = \
 -- 
-2.53.0
+2.55.0
 

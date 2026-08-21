@@ -1,7 +1,7 @@
 From 252b6cdce472d5a0b4e8f87141422b6d9dc37afc Mon Sep 17 00:00:00 2001
 From: BrunoSX <brunodeveloper85@gmail.com>
 Date: Tue, 23 Sep 2025 11:47:18 -0300
-Subject: [PATCH 13/40] winex11: Add extra window properties
+Subject: [PATCH 13/47] winex11: Add extra window properties
 
 ---
  dlls/winex11.drv/window.c      | 157 ++++++---------------------------
@@ -321,5 +321,5 @@ index cf21af8..2b1757b 100755
  
  /***********************************************************************
 -- 
-2.53.0
+2.55.0
 

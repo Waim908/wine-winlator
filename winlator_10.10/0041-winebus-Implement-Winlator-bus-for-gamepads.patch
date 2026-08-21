@@ -1,0 +1,2901 @@
+From c507e3fa64a415ecf81b1bf238f316467647bc39 Mon Sep 17 00:00:00 2001
+From: BrunoSX <brunodeveloper85@gmail.com>
+Date: Mon, 29 Jun 2026 17:12:33 -0300
+Subject: [PATCH 41/47] winebus: Implement Winlator bus for gamepads
+
+---
+ dlls/dinput/Makefile.in         |   5 +-
+ dlls/dinput/dinput.c            |  30 +-
+ dlls/dinput/dinput_private.h    |   2 -
+ dlls/dinput/gamepad.c           | 843 -----------------------------
+ dlls/dinput8/Makefile.in        |   5 +-
+ dlls/winebus.sys/Makefile.in    |   1 +
+ dlls/winebus.sys/bus_winlator.c | 514 ++++++++++++++++++
+ dlls/winebus.sys/main.c         |  14 +
+ dlls/winebus.sys/time_utils.h   |  34 ++
+ dlls/winebus.sys/unix_private.h |   4 +
+ dlls/winebus.sys/unixlib.c      |   3 +
+ dlls/winebus.sys/unixlib.h      |   3 +
+ dlls/xinput1_1/Makefile.in      |   2 +-
+ dlls/xinput1_2/Makefile.in      |   2 +-
+ dlls/xinput1_3/Makefile.in      |   2 +-
+ dlls/xinput1_3/main.c           | 927 +++++++++++++++++++++-----------
+ dlls/xinput1_4/Makefile.in      |   2 +-
+ dlls/xinput9_1_0/Makefile.in    |   2 +-
+ dlls/xinputuap/Makefile.in      |   2 +-
+ 19 files changed, 1194 insertions(+), 1203 deletions(-)
+ delete mode 100755 dlls/dinput/gamepad.c
+ create mode 100644 dlls/winebus.sys/bus_winlator.c
+ create mode 100644 dlls/winebus.sys/time_utils.h
+
+diff --git a/dlls/dinput/Makefile.in b/dlls/dinput/Makefile.in
+index 112ce44..d4bb1bc 100755
+--- a/dlls/dinput/Makefile.in
++++ b/dlls/dinput/Makefile.in
+@@ -1,6 +1,6 @@
+ MODULE    = dinput.dll
+ IMPORTLIB = dinput
+-IMPORTS   = dinput dxguid uuid comctl32 ole32 user32 advapi32 hid setupapi ws2_32
++IMPORTS   = dinput dxguid uuid comctl32 ole32 user32 advapi32 hid setupapi
+ EXTRADEFS = -DDIRECTINPUT_VERSION=0x0700
+ 
+ SOURCES = \
+@@ -15,5 +15,4 @@ SOURCES = \
+ 	joystick_hid.c \
+ 	keyboard.c \
+ 	mouse.c \
+-	version.rc \
+-    gamepad.c
++	version.rc
+diff --git a/dlls/dinput/dinput.c b/dlls/dinput/dinput.c
+index d9ddace..f851e17 100755
+--- a/dlls/dinput/dinput.c
++++ b/dlls/dinput/dinput.c
+@@ -282,11 +282,7 @@ static HRESULT WINAPI dinput7_CreateDeviceEx( IDirectInput7W *iface, const GUID
+ 
+     if (IsEqualGUID( &GUID_SysKeyboard, guid )) hr = keyboard_create_device( impl, guid, &device );
+     else if (IsEqualGUID( &GUID_SysMouse, guid )) hr = mouse_create_device( impl, guid, &device );
+-    else
+-    {
+-        hr = gamepad_create_device( impl, guid, &device );
+-        if (FAILED(hr)) hr = hid_joystick_create_device( impl, guid, &device );
+-    }
++    else hr = hid_joystick_create_device( impl, guid, &device );
+ 
+     if (FAILED(hr)) return hr;
+ 
+@@ -376,30 +372,12 @@ static HRESULT WINAPI dinput8_EnumDevices( IDirectInput8W *iface, DWORD type, LP
+ 
+     if (device_class == DI8DEVCLASS_ALL || device_class == DI8DEVCLASS_GAMECTRL)
+     {
+-        BOOL skip_hid_joystick = FALSE;
+-
+         do
+         {
+-            hr = gamepad_enum_device( type, flags, &instance, impl->dwVersion, i++ );
+-            if (hr == DI_OK)
+-            {
+-                skip_hid_joystick = TRUE;
+-                if (try_enum_device( device_type, callback, &instance, context, flags ) == DIENUM_STOP)
+-                    return DI_OK;
+-            }
++            hr = hid_joystick_enum_device( type, flags, &instance, impl->dwVersion, i++ );
++            if (hr == DI_OK && try_enum_device( device_type, callback, &instance, context, flags ) == DIENUM_STOP)
++                return DI_OK;
+         } while (SUCCEEDED(hr));
+-
+-        if (!skip_hid_joystick)
+-        {
+-            i = 0;
+-
+-            do
+-            {
+-                hr = hid_joystick_enum_device( type, flags, &instance, impl->dwVersion, i++ );
+-                if (hr == DI_OK && try_enum_device( device_type, callback, &instance, context, flags ) == DIENUM_STOP)
+-                    return DI_OK;
+-            } while (SUCCEEDED(hr));
+-        }
+     }
+ 
+     return DI_OK;
+diff --git a/dlls/dinput/dinput_private.h b/dlls/dinput/dinput_private.h
+index 15492a9..0609b81 100755
+--- a/dlls/dinput/dinput_private.h
++++ b/dlls/dinput/dinput_private.h
+@@ -56,8 +56,6 @@ extern HRESULT keyboard_enum_device( DWORD type, DWORD flags, DIDEVICEINSTANCEW
+ extern HRESULT keyboard_create_device( struct dinput *dinput, const GUID *guid, IDirectInputDevice8W **out );
+ extern HRESULT hid_joystick_enum_device( DWORD type, DWORD flags, DIDEVICEINSTANCEW *instance, DWORD version, int index );
+ extern HRESULT hid_joystick_create_device( struct dinput *dinput, const GUID *guid, IDirectInputDevice8W **out );
+-extern HRESULT gamepad_enum_device( DWORD type, DWORD flags, DIDEVICEINSTANCEW *instance, DWORD version, int index );
+-extern HRESULT gamepad_create_device( struct dinput *dinput, const GUID *guid, IDirectInputDevice8W **out );
+ 
+ struct DevicePlayer {
+     GUID instance_guid;
+diff --git a/dlls/dinput/gamepad.c b/dlls/dinput/gamepad.c
+deleted file mode 100755
+index 4c3844c..0000000
+--- a/dlls/dinput/gamepad.c
++++ /dev/null
+@@ -1,843 +0,0 @@
+-/*  DirectInput Gamepad device
+- *
+- * Copyright 2024 BrunoSX
+- *
+- * This library is free software; you can redistribute it and/or
+- * modify it under the terms of the GNU Lesser General Public
+- * License as published by the Free Software Foundation; either
+- * version 2.1 of the License, or (at your option) any later version.
+- *
+- * This library is distributed in the hope that it will be useful,
+- * but WITHOUT ANY WARRANTY; without even the implied warranty of
+- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+- * Lesser General Public License for more details.
+- *
+- * You should have received a copy of the GNU Lesser General Public
+- * License along with this library; if not, write to the Free Software
+- * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
+- */
+-
+-#include <stdarg.h>
+-#include <string.h>
+-#include <math.h>
+-
+-#include "windef.h"
+-#include "winbase.h"
+-#include "wingdi.h"
+-#include "winternl.h"
+-#include "winuser.h"
+-#include "winerror.h"
+-#include "winreg.h"
+-#include "dinput.h"
+-#include "winsock2.h"
+-#include "devguid.h"
+-#include "hidusage.h"
+-
+-#include "dinput_private.h"
+-#include "device_private.h"
+-#include "wine/debug.h"
+-#include "initguid.h"
+-
+-WINE_DEFAULT_DEBUG_CHANNEL(dinput);
+-
+-#define SERVER_PORT 7948
+-#define CLIENT_PORT 7947
+-#define BUFFER_SIZE 64
+-#define GAMEPAD_MAX_COUNT 4
+-
+-#define REQUEST_CODE_GET_GAMEPAD 8
+-#define REQUEST_CODE_GET_GAMEPAD_STATE 9
+-#define REQUEST_CODE_RELEASE_GAMEPAD 10
+-
+-#define MAPPER_TYPE_STANDARD 0
+-#define MAPPER_TYPE_XINPUT 1
+-
+-#define IDX_BUTTON_A 0
+-#define IDX_BUTTON_B 1
+-#define IDX_BUTTON_X 2
+-#define IDX_BUTTON_Y 3
+-#define IDX_BUTTON_L1 4
+-#define IDX_BUTTON_R1 5
+-#define IDX_BUTTON_L2 10
+-#define IDX_BUTTON_R2 11
+-#define IDX_BUTTON_SELECT 6
+-#define IDX_BUTTON_START 7
+-#define IDX_BUTTON_L3 8
+-#define IDX_BUTTON_R3 9
+-
+-DEFINE_GUID( gamepad_guid, 0x2ba21620, 0xb7d7, 0x4fa0, 0xa5, 89, 0xf0, 0xe5, 0x6c, 0xf6, 0xdf, 0x09 );
+-
+-struct gamepad_state 
+-{
+-    short buttons;
+-    char dpad;
+-    short thumb_lx;
+-    short thumb_ly;
+-    short thumb_rx;
+-    short thumb_ry;
+-};
+-
+-struct gamepad_info 
+-{
+-    CRITICAL_SECTION crit;
+-    char *name;
+-    BOOL connected;
+-    BOOL acquired;
+-    struct gamepad_state state;
+-    HANDLE hEvent;
+-};
+-
+-struct gamepad
+-{
+-    struct dinput_device base;
+-    int slot;
+-};
+-
+-static struct gamepad_info gamepads[GAMEPAD_MAX_COUNT];
+-
+-static CRITICAL_SECTION_DEBUG gamepad_critsect_debug[GAMEPAD_MAX_COUNT] =
+-{
+-    {
+-        0, 0, &gamepads[0].crit,
+-        { &gamepad_critsect_debug[0].ProcessLocksList, &gamepad_critsect_debug[0].ProcessLocksList },
+-        0, 0, { (DWORD_PTR)(__FILE__ ": gamepads[0].crit") }
+-    },
+-    {
+-        0, 0, &gamepads[1].crit,
+-        { &gamepad_critsect_debug[1].ProcessLocksList, &gamepad_critsect_debug[1].ProcessLocksList },
+-        0, 0, { (DWORD_PTR)(__FILE__ ": gamepads[1].crit") }
+-    },
+-    {
+-        0, 0, &gamepads[2].crit,
+-        { &gamepad_critsect_debug[2].ProcessLocksList, &gamepad_critsect_debug[2].ProcessLocksList },
+-        0, 0, { (DWORD_PTR)(__FILE__ ": gamepads[2].crit") }
+-    },
+-    {
+-        0, 0, &gamepads[3].crit,
+-        { &gamepad_critsect_debug[3].ProcessLocksList, &gamepad_critsect_debug[3].ProcessLocksList },
+-        0, 0, { (DWORD_PTR)(__FILE__ ": gamepads[3].crit") }
+-    },
+-};
+-
+-static struct gamepad_info gamepads[GAMEPAD_MAX_COUNT] = 
+-{
+-    {{&gamepad_critsect_debug[0], -1, 0, 0, 0, 0}, NULL, FALSE, FALSE, {0}, 0},
+-    {{&gamepad_critsect_debug[1], -1, 0, 0, 0, 0}, NULL, FALSE, FALSE, {0}, 0},
+-    {{&gamepad_critsect_debug[2], -1, 0, 0, 0, 0}, NULL, FALSE, FALSE, {0}, 0},
+-    {{&gamepad_critsect_debug[3], -1, 0, 0, 0, 0}, NULL, FALSE, FALSE, {0}, 0},
+-};
+-
+-static const struct dinput_device_vtbl gamepad_vtbl;
+-static SOCKET server_sock = INVALID_SOCKET;
+-static BOOL winsock_loaded = FALSE;
+-
+-static HANDLE start_event;
+-static BOOL thread_running = FALSE;
+-static HANDLE read_thread;
+-static char mapper_type = MAPPER_TYPE_XINPUT;
+-static BOOL force_update = FALSE;
+-static struct sockaddr_in client_addr = {0};
+-
+-static inline struct gamepad *impl_from_IDirectInputDevice8W( IDirectInputDevice8W *iface )
+-{
+-    return CONTAINING_RECORD( CONTAINING_RECORD( iface, struct dinput_device, IDirectInputDevice8W_iface ), struct gamepad, base );
+-}
+-
+-static void close_server_socket( void ) 
+-{
+-    if (server_sock != INVALID_SOCKET) 
+-    {
+-        closesocket( server_sock );
+-        server_sock = INVALID_SOCKET;
+-    }
+-    
+-    if (winsock_loaded) 
+-    {
+-        WSACleanup();
+-        winsock_loaded = FALSE;
+-    }    
+-}
+-
+-static BOOL create_server_socket( void )
+-{    
+-    WSADATA wsa_data;
+-    struct sockaddr_in server_addr;
+-    const UINT reuse_addr = 1;
+-    ULONG non_blocking = 1;
+-    int res;
+-
+-    close_server_socket();
+-
+-    winsock_loaded = WSAStartup( MAKEWORD(2,2), &wsa_data ) == NO_ERROR;
+-    if (!winsock_loaded) return FALSE;
+-
+-    server_addr.sin_family = AF_INET;
+-    server_addr.sin_addr.s_addr = inet_addr( "127.0.0.1" );
+-    server_addr.sin_port = htons( SERVER_PORT );
+-
+-    server_sock = socket( AF_INET, SOCK_DGRAM, IPPROTO_UDP );
+-    if (server_sock == INVALID_SOCKET) return FALSE;
+-
+-    res = setsockopt( server_sock, SOL_SOCKET, SO_REUSEADDR, (const char *)&reuse_addr, sizeof(reuse_addr) );
+-    if (res == SOCKET_ERROR) return FALSE;    
+-
+-    ioctlsocket( server_sock, FIONBIO, &non_blocking );
+-
+-    res = bind( server_sock, (struct sockaddr*)&server_addr, sizeof(server_addr) );
+-    if (res == SOCKET_ERROR) return FALSE;
+-
+-    client_addr.sin_family = AF_INET;
+-    client_addr.sin_addr.s_addr = inet_addr( "127.0.0.1" );
+-    client_addr.sin_port = htons( CLIENT_PORT );
+-
+-    return TRUE;
+-}
+-
+-static void get_gamepad_request( void ) 
+-{
+-    int i;
+-    char buffer[BUFFER_SIZE];
+-
+-    buffer[0] = REQUEST_CODE_GET_GAMEPAD;
+-    buffer[1] = 0;
+-    buffer[2] = 1;
+-    *(int*)(buffer + 3) = GetCurrentProcessId();
+-    buffer[7] = 0;
+-
+-    for (i = 0; i < GAMEPAD_MAX_COUNT; i++)
+-        buffer[8 + i] = gamepads[i].acquired;
+-
+-    sendto( server_sock, buffer, BUFFER_SIZE, 0, (struct sockaddr*)&client_addr, sizeof(client_addr) );
+-}
+-
+-static void release_gamepad_request( void ) 
+-{
+-    char buffer[BUFFER_SIZE];
+-
+-    buffer[0] = REQUEST_CODE_RELEASE_GAMEPAD;
+-    sendto( server_sock, buffer, BUFFER_SIZE, 0, (struct sockaddr*)&client_addr, sizeof(client_addr) );
+-}
+-
+-static LONG scale_value( LONG value, struct object_properties *properties )
+-{
+-    LONG log_min, log_max, phy_min, phy_max;
+-    log_min = properties->logical_min;
+-    log_max = properties->logical_max;
+-    phy_min = properties->range_min;
+-    phy_max = properties->range_max;
+-
+-    return phy_min + MulDiv( value - log_min, phy_max - phy_min, log_max - log_min );
+-}
+-
+-static LONG scale_axis_value( LONG value, struct object_properties *properties )
+-{
+-    LONG log_ctr, log_min, log_max, phy_ctr, phy_min, phy_max;
+-    log_min = properties->logical_min;
+-    log_max = properties->logical_max;
+-    phy_min = properties->range_min;
+-    phy_max = properties->range_max;
+-
+-    if (phy_min == 0) phy_ctr = phy_max >> 1;
+-    else phy_ctr = round( (phy_min + phy_max) / 2.0 );
+-    if (log_min == 0) log_ctr = log_max >> 1;
+-    else log_ctr = round( (log_min + log_max) / 2.0 );
+-
+-    value -= log_ctr;
+-    if (value <= 0)
+-    {
+-        log_max = MulDiv( log_min - log_ctr, properties->deadzone, 10000 );
+-        log_min = MulDiv( log_min - log_ctr, properties->saturation, 10000 );
+-        phy_max = phy_ctr;
+-    }
+-    else
+-    {
+-        log_min = MulDiv( log_max - log_ctr, properties->deadzone, 10000 );
+-        log_max = MulDiv( log_max - log_ctr, properties->saturation, 10000 );
+-        phy_min = phy_ctr;
+-    }
+-
+-    if (value <= log_min) return phy_min;
+-    if (value >= log_max) return phy_max;
+-    return phy_min + MulDiv( value - log_min, phy_max - phy_min, log_max - log_min );
+-}
+-
+-static void set_device_state_axis( IDirectInputDevice8W *iface, DWORD dwOfs, DWORD id, short value, DWORD time, BOOL is_axis_value ) 
+-{
+-    struct gamepad *impl = impl_from_IDirectInputDevice8W( iface );
+-    struct object_properties *properties;
+-    int index = dinput_device_object_index_from_id( iface, id );
+-    properties = impl->base.object_properties + index;
+-    *(LONG *)(impl->base.device_state + dwOfs) = is_axis_value ? scale_axis_value( value, properties ) : scale_value( value, properties );
+-    queue_event( iface, index, *(LONG *)(impl->base.device_state + dwOfs), time, impl->base.dinput->evsequence );    
+-}
+-
+-static void set_device_state_button( IDirectInputDevice8W *iface, DWORD id, BYTE value, DWORD time ) 
+-{
+-    struct gamepad *impl = impl_from_IDirectInputDevice8W( iface );
+-    DWORD dwOfs = DIJOFS_BUTTON( id );
+-    int index = dinput_device_object_index_from_id( iface, DIDFT_PSHBUTTON | DIDFT_MAKEINSTANCE( id ) );
+-    impl->base.device_state[dwOfs] = value;
+-    queue_event( iface, index, impl->base.device_state[dwOfs], time, impl->base.dinput->evsequence );    
+-}
+-
+-static void set_device_state_pov( IDirectInputDevice8W *iface, short value, DWORD time ) 
+-{
+-    struct gamepad *impl = impl_from_IDirectInputDevice8W( iface );
+-    DWORD dwOfs = DIJOFS_POV( 0 );
+-    int index = dinput_device_object_index_from_id( iface, DIDFT_POV | DIDFT_MAKEINSTANCE( 0 ) );
+-    *(LONG *)(impl->base.device_state + dwOfs) = value != -1 ? value * 4500 : -1;
+-    queue_event( iface, index, *(LONG *)(impl->base.device_state + dwOfs), time, impl->base.dinput->evsequence );    
+-}
+-
+-static int get_standard_mapping_index( int index ) 
+-{
+-    switch (index)
+-    {
+-    case IDX_BUTTON_A: return 1;
+-    case IDX_BUTTON_B: return 2;
+-    case IDX_BUTTON_X: return 0;
+-    case IDX_BUTTON_Y: return 3;
+-    case IDX_BUTTON_L1: return 4;
+-    case IDX_BUTTON_R1: return 5;
+-    case IDX_BUTTON_L2: return 6;
+-    case IDX_BUTTON_R2: return 7;
+-    case IDX_BUTTON_SELECT: return 8;
+-    case IDX_BUTTON_START: return 9;
+-    case IDX_BUTTON_L3: return 10;
+-    case IDX_BUTTON_R3: return 11;
+-    default: return -1;
+-    }
+-}
+-
+-static void gamepad_update_device_state( IDirectInputDevice8W *iface ) 
+-{
+-    struct gamepad *impl = impl_from_IDirectInputDevice8W( iface );
+-    struct gamepad_state *state = &gamepads[impl->slot].state;
+-    int i;
+-    DWORD time = GetCurrentTime();
+-    impl->base.dinput->evsequence++;
+-    
+-    if (mapper_type == MAPPER_TYPE_STANDARD) 
+-    {
+-        set_device_state_axis( iface, DIJOFS_X, DIDFT_ABSAXIS | DIDFT_MAKEINSTANCE( 0 ), state->thumb_lx, time, TRUE );
+-        set_device_state_axis( iface, DIJOFS_Y, DIDFT_ABSAXIS | DIDFT_MAKEINSTANCE( 1 ), state->thumb_ly, time, TRUE );
+-        set_device_state_axis( iface, DIJOFS_Z, DIDFT_ABSAXIS | DIDFT_MAKEINSTANCE( 2 ), state->thumb_rx, time, TRUE );
+-        set_device_state_axis( iface, DIJOFS_RZ, DIDFT_ABSAXIS | DIDFT_MAKEINSTANCE( 3 ), state->thumb_ry, time, TRUE );
+-        
+-        for (i = 0; i < 12; i++) set_device_state_button( iface, get_standard_mapping_index(i), (state->buttons & (1<<i)) ? 0x80 : 0x00, time );            
+-           
+-        set_device_state_pov( iface, state->dpad, time );
+-    }
+-    else if (mapper_type == MAPPER_TYPE_XINPUT) 
+-    {        
+-        set_device_state_axis( iface, DIJOFS_X, DIDFT_ABSAXIS | DIDFT_MAKEINSTANCE( 0 ), state->thumb_lx, time, TRUE );
+-        set_device_state_axis( iface, DIJOFS_Y, DIDFT_ABSAXIS | DIDFT_MAKEINSTANCE( 1 ), state->thumb_ly, time, TRUE );
+-        set_device_state_axis( iface, DIJOFS_RX, DIDFT_ABSAXIS | DIDFT_MAKEINSTANCE( 3 ), state->thumb_rx, time, TRUE );
+-        set_device_state_axis( iface, DIJOFS_RY, DIDFT_ABSAXIS | DIDFT_MAKEINSTANCE( 4 ), state->thumb_ry, time, TRUE );
+-        
+-        for (i = 0; i < 10; i++) set_device_state_button( iface, i, (state->buttons & (1<<i)) ? 0x80 : 0x00, time );
+-        
+-        set_device_state_axis( iface, DIJOFS_Z, DIDFT_ABSAXIS | DIDFT_MAKEINSTANCE( 2 ), (state->buttons & (1<<10)) ? 32767 : ((state->buttons & (1<<11)) ? -32768 : 0), time, FALSE );
+-        set_device_state_pov( iface, state->dpad, time );
+-    }
+-    
+-    if (impl->base.hEvent) SetEvent( impl->base.hEvent );
+-}
+-
+-static void reset_gamepad_info( struct gamepad_info *gamepad ) 
+-{
+-    if (gamepad->name)
+-    {
+-        free( gamepad->name );
+-        gamepad->name = NULL;
+-    }
+-
+-    gamepad->connected = FALSE;
+-}
+-
+-static void update_gamepad_list( char *data )
+-{
+-    int i, j, name_len;
+-
+-    for (i = 0, j = 0; i < GAMEPAD_MAX_COUNT; i++)
+-    {
+-        name_len = data[j+0];
+-        EnterCriticalSection( &gamepads[i].crit );
+-
+-        reset_gamepad_info( &gamepads[i] );
+-
+-        if (name_len > 0)
+-        {
+-            gamepads[i].connected = TRUE;
+-            gamepads[i].name = malloc( name_len + 1 );
+-            memcpy( gamepads[i].name, data + (j + 1), name_len );
+-            gamepads[i].name[name_len] = '\0';
+-        }
+-        else
+-        {
+-            memset( &gamepads[i].state, 0, sizeof(gamepads[i].state) );
+-            if (gamepads[i].acquired && gamepads[i].hEvent)
+-            {
+-                SetEvent( gamepads[i].hEvent );
+-                gamepads[i].hEvent = NULL;
+-            }
+-        }
+-
+-        LeaveCriticalSection( &gamepads[i].crit );
+-
+-        j += name_len + 1;
+-    }
+-}
+-
+-static DWORD WINAPI gamepad_read_thread_proc( void *param ) 
+-{
+-    int res;
+-    char buffer[128];
+-    BOOL started = FALSE;
+-    DWORD curr_time, last_time;
+-
+-    SetThreadDescription( GetCurrentThread(), L"wine_dinput_gamepad_read" );
+-    if (server_sock == INVALID_SOCKET && !create_server_socket())
+-    {
+-        SetEvent( start_event );
+-        return 0;
+-    }
+-
+-    get_gamepad_request();
+-
+-    last_time = GetCurrentTime();
+-    while (thread_running)
+-    {
+-        res = recvfrom( server_sock, buffer, 128, 0, NULL, NULL );
+-        if (res <= 0)
+-        {
+-            if (WSAGetLastError() != WSAEWOULDBLOCK) break;
+-            
+-            curr_time = GetCurrentTime();
+-            if ((curr_time - last_time) >= 2000 || force_update)
+-            {
+-                get_gamepad_request();
+-                last_time = curr_time;
+-                force_update = FALSE;
+-            }
+-            
+-            Sleep(16);
+-            continue;
+-        }
+-        
+-        if (buffer[0] == REQUEST_CODE_GET_GAMEPAD) 
+-        {
+-            mapper_type = buffer[1];
+-            update_gamepad_list( buffer + 2 );
+-
+-            if (!started) 
+-            {
+-                started = TRUE;
+-                SetEvent( start_event );
+-            }
+-        }
+-        else if (buffer[0] == REQUEST_CODE_GET_GAMEPAD_STATE)
+-        {
+-            int i;
+-            char slot = buffer[1];
+-
+-            for (i = 0; i < GAMEPAD_MAX_COUNT; i++)
+-            {
+-                if (i == slot && gamepads[i].connected)
+-                {
+-                    char *state = buffer + 2;
+-                    EnterCriticalSection( &gamepads[i].crit );
+-
+-                    gamepads[i].state.buttons = *(short*)(state + 0);
+-                    gamepads[i].state.dpad = state[2];
+-                    gamepads[i].state.thumb_lx = *(short*)(state + 3);
+-                    gamepads[i].state.thumb_ly = *(short*)(state + 5);
+-                    gamepads[i].state.thumb_rx = *(short*)(state + 7);
+-                    gamepads[i].state.thumb_ry = *(short*)(state + 9);
+-                    
+-                    if (gamepads[i].acquired && gamepads[i].hEvent) SetEvent( gamepads[i].hEvent );
+-                    LeaveCriticalSection( &gamepads[i].crit );
+-                    break;
+-                }
+-            }
+-        }
+-    }
+-
+-    return 0;
+-}
+-
+-static void start_read_thread_once( void )
+-{
+-    if (read_thread) return;
+-    thread_running = TRUE;
+-
+-    start_event = CreateEventA( NULL, FALSE, FALSE, NULL );
+-    if (!start_event) ERR( "failed to create start event, error %lu\n", GetLastError() );
+-    
+-    read_thread = CreateThread( NULL, 0, gamepad_read_thread_proc, NULL, 0, NULL );
+-    if (!read_thread) ERR( "failed to create read thread, error %lu\n", GetLastError() );
+-    
+-    WaitForSingleObject( start_event, 2000 );
+-    CloseHandle( start_event );   
+-}
+-
+-HRESULT gamepad_enum_device( DWORD type, DWORD flags, DIDEVICEINSTANCEW *instance, DWORD version, int index )
+-{   
+-    struct gamepad_info *gamepad;
+-
+-    TRACE( "type %#lx, flags %#lx, instance %p, version %#lx, index %d\n", type, flags, instance, version, index );
+-
+-    if (index >= GAMEPAD_MAX_COUNT) return DIERR_DEVICENOTREG;
+-    start_read_thread_once();
+-
+-    gamepad = &gamepads[index];
+-    if (!gamepad->connected) return DIERR_DEVICENOTREG;
+-
+-    memset( instance, 0, instance->dwSize );
+-    instance->guidInstance = gamepad_guid;
+-    instance->guidInstance.Data1 ^= index;
+-    instance->guidProduct = dinput_pidvid_guid;
+-    instance->guidProduct.Data1 = MAKELONG( 0x045e, 0x028e );
+-    if (version >= 0x0800) instance->dwDevType = DIDEVTYPE_HID | DI8DEVTYPE_GAMEPAD | (DI8DEVTYPEGAMEPAD_STANDARD << 8);
+-    else instance->dwDevType = DIDEVTYPE_HID | DIDEVTYPE_JOYSTICK | (DIDEVTYPEJOYSTICK_GAMEPAD << 8);
+-    instance->wUsagePage = HID_USAGE_PAGE_GENERIC;
+-    instance->wUsage = HID_USAGE_GENERIC_GAMEPAD;
+-    MultiByteToWideChar( CP_ACP, 0, gamepad->name, -1, instance->tszInstanceName, MAX_PATH );
+-    MultiByteToWideChar( CP_ACP, 0, gamepad->name, -1, instance->tszProductName, MAX_PATH );
+-
+-    return DI_OK;
+-}
+-
+-static BOOL init_object_properties( struct dinput_device *device, UINT index, struct hid_value_caps *caps,
+-                                    const DIDEVICEOBJECTINSTANCEW *instance, void *data )
+-{
+-    struct object_properties *properties;
+-    
+-    if (index == -1) return DIENUM_STOP;
+-    properties = device->object_properties + index;
+-    
+-    properties->physical_min = 0;
+-    properties->physical_max = 10000;
+-
+-    if (instance->dwType & DIDFT_AXIS) 
+-    {
+-        properties->logical_min = -32768;
+-        properties->logical_max = 32767;
+-        properties->range_min = 0;
+-        properties->range_max = 65535;        
+-    }
+-    else 
+-    {
+-        properties->logical_min = -18000;
+-        properties->logical_max = 18000;
+-        properties->range_min = 0;
+-        properties->range_max = 36000;
+-    }
+-
+-    properties->saturation = 10000;
+-    properties->granularity = 1;
+-
+-    return DIENUM_CONTINUE;
+-}
+-
+-static void gamepad_destroy( IDirectInputDevice8W *iface )
+-{
+-    struct gamepad *impl = impl_from_IDirectInputDevice8W( iface );
+-    struct gamepad_info *gamepad = &gamepads[impl->slot];
+-    EnterCriticalSection( &gamepad->crit );
+-
+-    CloseHandle( impl->base.read_event );
+-
+-    thread_running = FALSE;
+-    if (read_thread)
+-    {
+-        CloseHandle( read_thread );
+-        read_thread = NULL;
+-    }
+-
+-    reset_gamepad_info( gamepad );
+-    gamepad->hEvent = NULL;
+-    gamepad->acquired = FALSE;
+-
+-    release_gamepad_request();
+-    close_server_socket();
+-
+-    LeaveCriticalSection( &gamepad->crit );
+-}
+-
+-static HRESULT gamepad_read( IDirectInputDevice8W *iface )
+-{
+-    struct gamepad *impl = impl_from_IDirectInputDevice8W( iface );
+-    struct gamepad_info *gamepad = &gamepads[impl->slot];
+-    HRESULT hr;
+-
+-    EnterCriticalSection( &gamepad->crit );
+-
+-    if (gamepad->connected && gamepad->acquired)
+-    {
+-        gamepad_update_device_state( iface );
+-        ResetEvent( impl->base.read_event );
+-
+-        hr = DI_OK;
+-    } else
+-        hr = DIERR_INPUTLOST;
+-
+-    LeaveCriticalSection( &gamepad->crit );
+-    return hr;
+-}
+-
+-static HRESULT gamepad_acquire( IDirectInputDevice8W *iface )
+-{
+-    struct gamepad *impl = impl_from_IDirectInputDevice8W( iface );
+-    struct gamepad_info *gamepad = &gamepads[impl->slot];
+-    
+-    EnterCriticalSection( &gamepad->crit );
+-    
+-    if (!gamepad->connected) 
+-    {
+-        gamepad->hEvent = NULL;
+-        gamepad->acquired = FALSE;
+-        LeaveCriticalSection( &gamepad->crit );
+-        force_update = TRUE;
+-        return DIERR_UNPLUGGED;
+-    }
+-
+-    gamepad->hEvent = impl->base.read_event;
+-    gamepad->acquired = TRUE;
+-    
+-    LeaveCriticalSection( &gamepad->crit );
+-    force_update = TRUE;
+-    return DI_OK;
+-}
+-
+-static HRESULT gamepad_unacquire( IDirectInputDevice8W *iface )
+-{
+-    struct gamepad *impl = impl_from_IDirectInputDevice8W( iface );
+-    struct gamepad_info *gamepad = &gamepads[impl->slot];
+-
+-    EnterCriticalSection( &gamepad->crit );
+-
+-    gamepad->hEvent = NULL;
+-    gamepad->acquired = FALSE;
+-
+-    LeaveCriticalSection( &gamepad->crit );
+-    force_update = TRUE;
+-    return DI_OK;
+-}
+-
+-static BOOL try_enum_object( struct dinput_device *impl, const DIPROPHEADER *filter, DWORD flags, enum_object_callback callback,
+-                             UINT index, DIDEVICEOBJECTINSTANCEW *instance, void *data )
+-{
+-    if (flags != DIDFT_ALL && !(flags & DIDFT_GETTYPE( instance->dwType ))) return DIENUM_CONTINUE;
+-
+-    switch (filter->dwHow)
+-    {
+-    case DIPH_DEVICE:
+-        return callback( impl, index, NULL, instance, data );
+-    case DIPH_BYOFFSET:
+-        if (filter->dwObj != instance->dwOfs) return DIENUM_CONTINUE;
+-        return callback( impl, index, NULL, instance, data );
+-    case DIPH_BYID:
+-        if ((filter->dwObj & 0x00ffffff) != (instance->dwType & 0x00ffffff)) return DIENUM_CONTINUE;
+-        return callback( impl, index, NULL, instance, data );
+-    }
+-
+-    return DIENUM_CONTINUE;
+-}
+-
+-static void fill_device_object_instance( DIDEVICEOBJECTINSTANCEW *instance, WORD usage, int index ) 
+-{
+-    instance->dwType = DIDFT_ABSAXIS | DIDFT_MAKEINSTANCE( index );    
+-    instance->wUsagePage = HID_USAGE_PAGE_GENERIC;
+-    instance->wUsage = usage;
+-    instance->dwFlags = DIDOI_ASPECTPOSITION;
+-        
+-    switch (usage) 
+-    {
+-    case HID_USAGE_GENERIC_X:
+-        instance->guidType = GUID_XAxis;
+-        instance->dwOfs = DIJOFS_X;
+-        lstrcpynW( instance->tszName, L"X Axis", MAX_PATH );
+-        break;
+-    case HID_USAGE_GENERIC_Y:
+-        instance->guidType = GUID_YAxis;
+-        instance->dwOfs = DIJOFS_Y;
+-        lstrcpynW( instance->tszName, L"Y Axis", MAX_PATH );
+-        break;
+-    case HID_USAGE_GENERIC_Z:
+-        instance->guidType = GUID_ZAxis;
+-        instance->dwOfs = DIJOFS_Z;
+-        lstrcpynW( instance->tszName, L"Z Axis", MAX_PATH );
+-        break;
+-    case HID_USAGE_GENERIC_RX:
+-        instance->guidType = GUID_RxAxis;
+-        instance->dwOfs = DIJOFS_RX;
+-        lstrcpynW( instance->tszName, L"Rx Axis", MAX_PATH );
+-        break;
+-    case HID_USAGE_GENERIC_RY:
+-        instance->guidType = GUID_RyAxis;
+-        instance->dwOfs = DIJOFS_RY;
+-        lstrcpynW( instance->tszName, L"Ry Axis", MAX_PATH );
+-        break; 
+-    case HID_USAGE_GENERIC_RZ:
+-        instance->guidType = GUID_RzAxis;
+-        instance->dwOfs = DIJOFS_RZ;
+-        lstrcpynW( instance->tszName, L"Rz Axis", MAX_PATH );
+-        break;
+-    case HID_USAGE_GENERIC_HATSWITCH:
+-        instance->guidType = GUID_POV;
+-        instance->dwOfs = DIJOFS_POV( 0 );
+-        instance->dwType = DIDFT_POV | DIDFT_MAKEINSTANCE( 0 );
+-        instance->dwFlags = 0;
+-        lstrcpynW( instance->tszName, L"POV", MAX_PATH );
+-        break;        
+-    }
+-}
+-
+-static HRESULT gamepad_enum_objects( IDirectInputDevice8W *iface, const DIPROPHEADER *filter,
+-                                     DWORD flags, enum_object_callback callback, void *context )
+-{
+-    static const WORD standard_object_usages[] = {HID_USAGE_GENERIC_X, HID_USAGE_GENERIC_Y, HID_USAGE_GENERIC_Z, HID_USAGE_GENERIC_RZ, HID_USAGE_GENERIC_HATSWITCH, 0};
+-    static const WORD xinput_object_usages[] = {HID_USAGE_GENERIC_X, HID_USAGE_GENERIC_Y, HID_USAGE_GENERIC_Z, HID_USAGE_GENERIC_RX, HID_USAGE_GENERIC_RY, HID_USAGE_GENERIC_HATSWITCH, 0};
+-    struct gamepad *impl = impl_from_IDirectInputDevice8W( iface );
+-    
+-    DIDEVICEOBJECTINSTANCEW instance = {.dwSize = sizeof(DIDEVICEOBJECTINSTANCEW)};
+-    int i = 0, index = 0, button_count;
+-    const WORD *object_usages;
+-    BOOL ret;
+-    
+-    if (mapper_type == MAPPER_TYPE_STANDARD) 
+-    {
+-        object_usages = standard_object_usages;
+-        button_count = 12;
+-    }
+-    else
+-    {
+-        object_usages = xinput_object_usages;
+-        button_count = 10;
+-    }
+-
+-    while (object_usages[i] != 0)
+-    {
+-        fill_device_object_instance( &instance, object_usages[i], i );
+-        
+-        ret = try_enum_object( &impl->base, filter, flags, callback, index++, &instance, context );
+-        if (ret != DIENUM_CONTINUE) return DIENUM_STOP;
+-        i++;
+-    }
+-    
+-    for (i = 0; i < button_count; i++)
+-    {
+-        instance.guidType = GUID_Button,
+-        instance.dwOfs = DIJOFS_BUTTON( i ),
+-        instance.dwType = DIDFT_PSHBUTTON | DIDFT_MAKEINSTANCE( i ),
+-        instance.dwFlags = 0;
+-        swprintf( instance.tszName, MAX_PATH, L"Button %d", i );
+-        instance.wUsagePage = HID_USAGE_PAGE_BUTTON;
+-        instance.wUsage = i + 1;
+-            
+-        ret = try_enum_object( &impl->base, filter, flags, callback, index++, &instance, context );
+-        if (ret != DIENUM_CONTINUE) return DIENUM_STOP;        
+-    }
+-
+-    return DIENUM_CONTINUE;
+-}
+-
+-static HRESULT gamepad_get_property( IDirectInputDevice8W *iface, DWORD property,
+-                                     DIPROPHEADER *header, const DIDEVICEOBJECTINSTANCEW *instance )
+-{   
+-    struct gamepad *impl = impl_from_IDirectInputDevice8W( iface );
+-    
+-    switch (property)
+-    {
+-    case (DWORD_PTR)DIPROP_PRODUCTNAME:
+-    {
+-        DIPROPSTRING *value = (DIPROPSTRING *)header;
+-        lstrcpynW( value->wsz, impl->base.instance.tszProductName, MAX_PATH );
+-        return DI_OK;
+-    }
+-    case (DWORD_PTR)DIPROP_INSTANCENAME:
+-    {
+-        DIPROPSTRING *value = (DIPROPSTRING *)header;
+-        lstrcpynW( value->wsz, impl->base.instance.tszInstanceName, MAX_PATH );
+-        return DI_OK;
+-    }
+-    case (DWORD_PTR)DIPROP_VIDPID:
+-    {
+-        DIPROPDWORD *value = (DIPROPDWORD *)header;
+-        value->dwData = MAKELONG( 0x045e, 0x028e );
+-        return DI_OK;
+-    }
+-    case (DWORD_PTR)DIPROP_JOYSTICKID:
+-    {
+-        DIPROPDWORD *value = (DIPROPDWORD *)header;
+-        value->dwData = impl->base.instance.guidInstance.Data3;
+-        return DI_OK;
+-    }
+-    case (DWORD_PTR)DIPROP_GUIDANDPATH:
+-    {
+-        DIPROPGUIDANDPATH *value = (DIPROPGUIDANDPATH *)header;
+-        value->guidClass = GUID_DEVCLASS_HIDCLASS;
+-        lstrcpynW( value->wszPath, L"virtual#vid_045e&pid_028e&ig_00", MAX_PATH );
+-        return DI_OK;
+-    }
+-    }
+-
+-    return DIERR_UNSUPPORTED;
+-}
+-
+-HRESULT gamepad_create_device( struct dinput *dinput, const GUID *guid, IDirectInputDevice8W **out )
+-{
+-    static const DIPROPHEADER filter =
+-    {
+-        .dwSize = sizeof(filter),
+-        .dwHeaderSize = sizeof(filter),
+-        .dwHow = DIPH_DEVICE,
+-    };
+-    struct gamepad *impl = NULL;
+-    HRESULT hr;
+-    int index = guid->Data1 - gamepad_guid.Data1;
+-    
+-    TRACE( "dinput %p, guid %s, out %p.\n", dinput, debugstr_guid( guid ), out );
+-
+-    if (index < 0 || index >= GAMEPAD_MAX_COUNT || gamepads[index].acquired) return DIERR_ACQUIRED;
+-
+-    *out = NULL;
+-    if (!(impl = calloc( 1, sizeof(*impl) ))) return E_OUTOFMEMORY;   
+-    dinput_device_init( &impl->base, &gamepad_vtbl, guid, dinput );
+-    impl->slot = index;
+-    impl->base.crit.DebugInfo->Spare[0] = (DWORD_PTR)(__FILE__ ": struct gamepad*->base.crit");
+-    impl->base.read_event = CreateEventW( NULL, TRUE, FALSE, NULL );
+-
+-    gamepad_enum_device( 0, 0, &impl->base.instance, dinput->dwVersion, index );
+-    impl->base.caps.dwDevType = impl->base.instance.dwDevType;
+-    impl->base.caps.dwFirmwareRevision = 100;
+-    impl->base.caps.dwHardwareRevision = 100;
+-    impl->base.dwCoopLevel = DISCL_NONEXCLUSIVE | DISCL_BACKGROUND;
+-    
+-    if (FAILED(hr = dinput_device_init_device_format( &impl->base.IDirectInputDevice8W_iface ))) goto failed;
+-    gamepad_enum_objects( &impl->base.IDirectInputDevice8W_iface, &filter, DIDFT_AXIS | DIDFT_POV, init_object_properties, NULL );
+-
+-    *out = &impl->base.IDirectInputDevice8W_iface;
+-    return DI_OK;
+-    
+-failed:
+-    IDirectInputDevice_Release( &impl->base.IDirectInputDevice8W_iface );
+-    return hr;    
+-}
+-
+-static const struct dinput_device_vtbl gamepad_vtbl =
+-{
+-    gamepad_destroy,
+-    NULL,
+-    gamepad_read,
+-    gamepad_acquire,
+-    gamepad_unacquire,
+-    gamepad_enum_objects,
+-    gamepad_get_property,
+-    NULL,
+-    NULL,
+-    NULL,
+-    NULL,
+-    NULL,
+-};
+\ No newline at end of file
+diff --git a/dlls/dinput8/Makefile.in b/dlls/dinput8/Makefile.in
+index 45a5e72..f3f5fdc 100755
+--- a/dlls/dinput8/Makefile.in
++++ b/dlls/dinput8/Makefile.in
+@@ -1,6 +1,6 @@
+ MODULE    = dinput8.dll
+ IMPORTLIB = dinput8
+-IMPORTS   = dinput8 dxguid uuid comctl32 ole32 user32 advapi32 hid setupapi ws2_32
++IMPORTS   = dinput8 dxguid uuid comctl32 ole32 user32 advapi32 hid setupapi
+ EXTRADEFS = -DDIRECTINPUT_VERSION=0x0800
+ PARENTSRC = ../dinput
+ 
+@@ -16,5 +16,4 @@ SOURCES = \
+ 	joystick_hid.c \
+ 	keyboard.c \
+ 	mouse.c \
+-	version.rc \
+-    gamepad.c
++	version.rc
+diff --git a/dlls/winebus.sys/Makefile.in b/dlls/winebus.sys/Makefile.in
+index db32fae..eaca213 100755
+--- a/dlls/winebus.sys/Makefile.in
++++ b/dlls/winebus.sys/Makefile.in
+@@ -10,6 +10,7 @@ SOURCES = \
+ 	bus_iohid.c \
+ 	bus_sdl.c \
+ 	bus_udev.c \
++    bus_winlator.c \
+ 	hid.c \
+ 	main.c \
+ 	unixlib.c \
+diff --git a/dlls/winebus.sys/bus_winlator.c b/dlls/winebus.sys/bus_winlator.c
+new file mode 100644
+index 0000000..fb32dd4
+--- /dev/null
++++ b/dlls/winebus.sys/bus_winlator.c
+@@ -0,0 +1,514 @@
++/* 
++ * Gamepad support for Winlator
++ *
++ * Copyright 2026 BrunoSX
++ *
++ * This library is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU Lesser General Public
++ * License as published by the Free Software Foundation; either
++ * version 2.1 of the License, or (at your option) any later version.
++ *
++ * This library is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++ * Lesser General Public License for more details.
++ *
++ * You should have received a copy of the GNU Lesser General Public
++ * License along with this library; if not, write to the Free Software
++ * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
++ */
++
++#if 0
++#pragma makedep unix
++#endif
++
++#include "config.h"
++
++#include <stdarg.h>
++#include <unistd.h>
++#include <sys/types.h>
++#include <sys/socket.h>
++#include <sys/un.h>
++#include <arpa/inet.h>
++#include <netinet/in.h>
++#include <errno.h>
++
++#include <pthread.h>
++
++#include "ntstatus.h"
++#define WIN32_NO_STATUS
++#include "windef.h"
++#include "winbase.h"
++#include "winternl.h"
++#include "winioctl.h"
++#include "ddk/wdm.h"
++#include "ddk/hidtypes.h"
++#include "hidusage.h"
++
++#include "wine/debug.h"
++#include "wine/hid.h"
++#include "wine/unixlib.h"
++
++#include "time_utils.h"
++#include "unix_private.h"
++
++#define SERVER_PORT 7949
++#define CLIENT_PORT 7947
++#define GAMEPAD_MAX_COUNT 4
++#define GAMEPAD_GUID "3cdf206d9b324d26b024a0d029105c5d"
++
++#define GAMEPAD_STATE_DISCONNECTED 0
++#define GAMEPAD_STATE_CONNECTED 1
++#define GAMEPAD_STATE_STARTED 2
++
++#define REQUEST_CODE_GET_GAMEPAD 8
++#define REQUEST_CODE_GET_GAMEPAD_STATE 9
++#define REQUEST_CODE_RELEASE_GAMEPAD 10
++#define REQUEST_CODE_SET_GAMEPAD_STATE 19
++
++#define AXIS_MODE_X_Y_Z_RZ 0
++#define AXIS_MODE_X_Y_RX_RY_Z_RZ 1
++
++WINE_DEFAULT_DEBUG_CHANNEL(hid);
++
++struct gamepad
++{
++    struct unix_device unix_device;
++    uint8_t index;
++    uint8_t button_count;
++    uint8_t axis_mode;
++    BOOL vibration;
++    uint8_t state;
++};
++
++static pthread_mutex_t gamepad_cs = PTHREAD_MUTEX_INITIALIZER;
++static int server_fd = -1;
++static struct sockaddr_in client_addr = {0};
++static struct list event_queue = LIST_INIT(event_queue);
++static struct list device_list = LIST_INIT(device_list);
++
++static void close_server_socket(void)
++{
++    if (server_fd != -1)
++    {
++        close(server_fd);
++        server_fd = -1;
++    }
++}
++
++static BOOL create_server_socket(void)
++{
++    struct sockaddr_in server_addr = {0};
++    const int reuse_addr = 1;
++    int res;
++
++    server_addr.sin_family = AF_INET;
++    server_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
++    server_addr.sin_port = htons(SERVER_PORT);
++
++    close_server_socket();
++    server_fd = socket(AF_INET, SOCK_DGRAM | SOCK_NONBLOCK, IPPROTO_UDP);
++    if (server_fd == -1) goto error;
++
++    res = setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, (const char *)&reuse_addr, sizeof(reuse_addr));
++    if (res == -1) goto error;
++
++    res = bind(server_fd, (struct sockaddr*)&server_addr, sizeof(server_addr));
++    if (res == -1) goto error;
++
++    client_addr.sin_family = AF_INET;
++    client_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
++    client_addr.sin_port = htons(CLIENT_PORT);
++
++    return TRUE;
++
++error:
++    close_server_socket();
++    return FALSE;
++}
++
++static void get_gamepad_request(void)
++{
++    char buffer[64] = {0};
++    buffer[0] = REQUEST_CODE_GET_GAMEPAD;
++    sendto(server_fd, buffer, sizeof(buffer), 0, (struct sockaddr*)&client_addr, sizeof(client_addr));
++}
++
++static void set_gamepad_state_request(int slot, int left_motor_speed, int right_motor_speed, int duration_ms)
++{
++    char buffer[64];
++
++    buffer[0] = REQUEST_CODE_SET_GAMEPAD_STATE;
++    buffer[1] = slot;
++    *(int*)(buffer + 2) = left_motor_speed;
++    *(int*)(buffer + 6) = right_motor_speed;
++    *(int*)(buffer + 10) = duration_ms;
++    sendto(server_fd, buffer, sizeof(buffer), 0, (struct sockaddr*)&client_addr, sizeof(client_addr));
++}
++
++static void release_gamepad_request( void ) 
++{
++    char buffer[64];
++    buffer[0] = REQUEST_CODE_RELEASE_GAMEPAD;
++    sendto(server_fd, buffer, sizeof(buffer), 0, (struct sockaddr*)&client_addr, sizeof(client_addr));
++}
++
++static inline struct gamepad *impl_from_unix_device(struct unix_device *iface)
++{
++    return CONTAINING_RECORD(iface, struct gamepad, unix_device);
++}
++
++static struct gamepad *find_device_from_index(int index)
++{
++    struct gamepad *impl;
++
++    LIST_FOR_EACH_ENTRY(impl, &device_list, struct gamepad, unix_device.entry)
++        if (impl->index == index) return impl;
++
++    return NULL;
++}
++
++static void gamepad_destroy(struct unix_device *iface)
++{
++}
++
++static NTSTATUS gamepad_start(struct unix_device *iface)
++{
++    struct gamepad *impl = impl_from_unix_device(iface);
++
++    pthread_mutex_lock(&gamepad_cs);
++    impl->state = GAMEPAD_STATE_STARTED;
++    pthread_mutex_unlock(&gamepad_cs);
++    return STATUS_SUCCESS;
++}
++
++static void gamepad_stop(struct unix_device *iface)
++{
++    struct gamepad *impl = impl_from_unix_device(iface);
++
++    pthread_mutex_lock(&gamepad_cs);
++    impl->state = GAMEPAD_STATE_CONNECTED;
++    list_remove(&impl->unix_device.entry);
++    pthread_mutex_unlock(&gamepad_cs);
++}
++
++static NTSTATUS gamepad_haptics_start(struct unix_device *iface, UINT duration_ms,
++                                      USHORT rumble_intensity, USHORT buzz_intensity,
++                                      USHORT left_intensity, USHORT right_intensity)
++{
++    struct gamepad *impl = impl_from_unix_device(iface);
++
++    TRACE("iface %p, duration_ms %u, rumble_intensity %u, buzz_intensity %u, left_intensity %u, right_intensity %u.\n",
++          iface, duration_ms, rumble_intensity, buzz_intensity, left_intensity, right_intensity);
++
++    if (!impl->vibration) return STATUS_NOT_SUPPORTED;
++
++    set_gamepad_state_request(impl->index, rumble_intensity, buzz_intensity, duration_ms);
++    return STATUS_SUCCESS;
++}
++
++static NTSTATUS gamepad_haptics_stop(struct unix_device *iface)
++{
++    struct gamepad *impl = impl_from_unix_device(iface);
++
++    TRACE("iface %p.\n", iface);
++
++    if (!impl->vibration) return STATUS_NOT_SUPPORTED;
++
++    set_gamepad_state_request(impl->index, 0, 0, 0);
++    return STATUS_SUCCESS;   
++}
++
++static NTSTATUS gamepad_physical_device_control(struct unix_device *iface, USAGE control)
++{
++    return STATUS_NOT_SUPPORTED;
++}
++
++static NTSTATUS gamepad_physical_device_set_gain(struct unix_device *iface, BYTE percent)
++{
++    return STATUS_NOT_SUPPORTED;
++}
++
++static NTSTATUS gamepad_physical_effect_control(struct unix_device *iface, BYTE index,
++                                                 USAGE control, BYTE iterations)
++{
++    return STATUS_NOT_SUPPORTED;
++}
++
++static NTSTATUS gamepad_physical_effect_update(struct unix_device *iface, BYTE index, struct effect_params *params)
++{
++    return STATUS_NOT_SUPPORTED;
++}
++
++static const struct hid_device_vtbl gamepad_vtbl =
++{
++    gamepad_destroy,
++    gamepad_start,
++    gamepad_stop,
++    gamepad_haptics_start,
++    gamepad_haptics_stop,
++    gamepad_physical_device_control,
++    gamepad_physical_device_set_gain,
++    gamepad_physical_effect_control,
++    gamepad_physical_effect_update,
++};
++
++static NTSTATUS build_gamepad_report_descriptor(struct unix_device *iface)
++{
++    const USAGE_AND_PAGE device_usage = {.UsagePage = HID_USAGE_PAGE_GENERIC, .Usage = HID_USAGE_GENERIC_GAMEPAD};
++    const USAGE left_axis_usages[] = {HID_USAGE_GENERIC_X, HID_USAGE_GENERIC_Y};
++    const USAGE right_axis_usages[] = {HID_USAGE_GENERIC_RX, HID_USAGE_GENERIC_RY};
++    const USAGE trigger_axis_usages[] = {HID_USAGE_GENERIC_Z, HID_USAGE_GENERIC_RZ};
++    struct gamepad *impl = impl_from_unix_device(iface);
++
++    if (!hid_device_begin_report_descriptor(iface, &device_usage))
++        return STATUS_NO_MEMORY;
++
++    if (!hid_device_begin_input_report(iface, &device_usage))
++        return STATUS_NO_MEMORY;
++
++    if (impl->axis_mode == AXIS_MODE_X_Y_RX_RY_Z_RZ)
++    {
++        if (!hid_device_add_axes(iface, 2, HID_USAGE_PAGE_GENERIC, left_axis_usages,
++                                 FALSE, -32768, 32767))
++            return STATUS_NO_MEMORY;
++
++        if (!hid_device_add_axes(iface, 2, HID_USAGE_PAGE_GENERIC, right_axis_usages,
++                                 FALSE, -32768, 32767))
++            return STATUS_NO_MEMORY;
++
++        if (!hid_device_add_axes(iface, 2, HID_USAGE_PAGE_GENERIC, trigger_axis_usages,
++                                 FALSE, 0, 32767))
++            return STATUS_NO_MEMORY;
++    }
++    else if (impl->axis_mode == AXIS_MODE_X_Y_Z_RZ)
++    {
++        if (!hid_device_add_axes(iface, 2, HID_USAGE_PAGE_GENERIC, left_axis_usages,
++                                 FALSE, -32768, 32767))
++            return STATUS_NO_MEMORY;
++
++        if (!hid_device_add_axes(iface, 2, HID_USAGE_PAGE_GENERIC, trigger_axis_usages,
++                                 FALSE, -32768, 32767))
++            return STATUS_NO_MEMORY;
++    }
++
++    if (!hid_device_add_hatswitch(iface, 1))
++        return STATUS_NO_MEMORY;
++
++    if (!hid_device_add_buttons(iface, HID_USAGE_PAGE_BUTTON, 1, impl->button_count))
++        return STATUS_NO_MEMORY;
++
++    if (!hid_device_end_input_report(iface))
++        return STATUS_NO_MEMORY;
++
++    if (impl->vibration)
++    {
++        if (!hid_device_add_haptics(&impl->unix_device))
++            return FALSE;
++    }
++
++    if (!hid_device_end_report_descriptor(iface))
++        return STATUS_NO_MEMORY;
++
++    return STATUS_SUCCESS;
++}
++
++static void gamepad_create(int index, char *data)
++{
++    uint8_t button_count = data[0];
++    uint8_t axis_mode = data[1];
++    BOOL vibration = data[2] == 1 ? TRUE : FALSE;
++    struct device_desc desc =
++    {
++        .input = -1,
++        .manufacturer = {'W','i','n','l','a','t','o','r',0},
++        .version = 0,
++        .vid = *(short*)(data + 3),
++        .pid = *(short*)(data + 5),
++        .is_gamepad = FALSE,
++    };
++    int name_len = data[7];
++    char* name = data + 8;
++    char buffer[ARRAY_SIZE(desc.product)];
++    struct gamepad *impl;
++
++    snprintf(buffer, sizeof(buffer), "%s.%d", GAMEPAD_GUID, index);
++    ntdll_umbstowcs(buffer, strlen(buffer) + 1, desc.serialnumber, ARRAY_SIZE(desc.serialnumber));
++    ntdll_umbstowcs(name, name_len, desc.product, ARRAY_SIZE(desc.product));
++    desc.product[name_len] = '\0';
++
++    if (axis_mode == AXIS_MODE_X_Y_RX_RY_Z_RZ && button_count == 10)
++        desc.is_gamepad = TRUE;
++
++    TRACE("index %d, name %s, desc %s.\n", index, name, debugstr_device_desc(&desc));
++
++    if (!(impl = hid_device_create(&gamepad_vtbl, sizeof(struct gamepad)))) return;
++    list_add_tail(&device_list, &impl->unix_device.entry);
++    impl->index = index;
++    impl->button_count = button_count;
++    impl->axis_mode = axis_mode;
++    impl->vibration = vibration;
++    impl->state = GAMEPAD_STATE_CONNECTED;
++
++    if (build_gamepad_report_descriptor(&impl->unix_device))
++    {
++        list_remove(&impl->unix_device.entry);
++        impl->unix_device.vtbl->destroy(&impl->unix_device);
++        return;
++    }
++
++    bus_event_queue_device_created(&event_queue, &impl->unix_device, &desc);
++}
++
++static void update_gamepad_list(char *data)
++{
++    int i, j;
++    BOOL connected;
++    struct gamepad *impl;
++
++    for (i = 0, j = 0; i < GAMEPAD_MAX_COUNT; i++, j += 60)
++    {
++        connected = data[j+0] == 1 ? TRUE : FALSE;
++        impl = find_device_from_index(i);
++
++        if (connected && !impl)
++        {
++            gamepad_create(i, data + j + 1);
++        }
++        else if (!connected && impl && 
++                               impl->state != GAMEPAD_STATE_DISCONNECTED)
++        {
++            impl->state = GAMEPAD_STATE_DISCONNECTED;
++            bus_event_queue_device_removed(&event_queue, &impl->unix_device);
++        }
++    }
++}
++
++static void gamepad_set_state(int slot, char *data)
++{
++    int i, j, axis_count = 0;
++    char dpad;
++    BOOL pressed;
++    short buttons, axis_value;
++    struct gamepad *impl = find_device_from_index(slot);
++    struct unix_device *iface = &impl->unix_device;
++    struct hid_device_state *state = &iface->hid_device_state;
++    LONG dpad_x = 0, dpad_y = 0;
++
++    if (impl->state != GAMEPAD_STATE_STARTED)
++    {
++        WARN("Device %p with index %d is stopped, can't set state\n", impl, slot);
++        return;
++    }
++
++    buttons = *(short*)(data + 0);
++    dpad = data[2];
++
++    for (i = 0; i < impl->button_count; i++)
++    {
++        pressed = (buttons & (1<<i)) ? TRUE : FALSE;
++        hid_device_set_button(iface, i, pressed);
++    }
++
++    switch (dpad)
++    {
++    case 0: dpad_y = -1; break;
++    case 1: dpad_x =  1; dpad_y = -1; break;
++    case 2: dpad_x =  1; break;
++    case 3: dpad_x =  1; dpad_y =  1; break;
++    case 4: dpad_y =  1; break;
++    case 5: dpad_x = -1; dpad_y =  1; break;
++    case 6: dpad_x = -1; break;
++    case 7: dpad_x = -1; dpad_y = -1; break;
++    }
++
++    hid_device_set_hatswitch_x(iface, 0, dpad_x);
++    hid_device_set_hatswitch_y(iface, 0, dpad_y);
++
++    if (impl->axis_mode == AXIS_MODE_X_Y_RX_RY_Z_RZ)
++        axis_count = 6;
++    else if (impl->axis_mode == AXIS_MODE_X_Y_Z_RZ)
++        axis_count = 4;
++
++    for (i = 0, j = 3; i < axis_count; i++, j += 2)
++    {
++        axis_value = *(short*)(data + j);
++        hid_device_set_abs_axis(iface, i, axis_value);
++    }
++
++    bus_event_queue_input_report(&event_queue, iface, state->report_buf, state->report_len);
++}
++
++NTSTATUS winlator_bus_init(void *args)
++{
++    TRACE("args %p\n", args);
++
++    if (!create_server_socket())
++    {
++        ERR("could not init Winlator bus\n");
++        return STATUS_UNSUCCESSFUL;
++    }
++
++    return STATUS_SUCCESS;
++}
++
++NTSTATUS winlator_bus_wait(void *args)
++{
++    struct bus_event *result = args;
++    int res;
++    char buffer[256];
++    DWORD curr_time, last_time;
++
++    /* cleanup previously returned event */
++    bus_event_cleanup(result);
++
++    last_time = currentTimeMillis();
++    do
++    {
++        if (bus_event_queue_pop(&event_queue, result)) return STATUS_PENDING;
++
++        res = recvfrom(server_fd, buffer, sizeof(buffer), 0, NULL, NULL);
++        if (res <= 0)
++        {
++            if (errno != EWOULDBLOCK) break;
++
++            curr_time = currentTimeMillis();
++            if ((curr_time - last_time) >= 2000)
++            {
++                get_gamepad_request();
++                last_time = curr_time;
++            }
++
++            msleep(16);
++            continue;
++        }
++
++        pthread_mutex_lock(&gamepad_cs);
++        if (buffer[0] == REQUEST_CODE_GET_GAMEPAD)
++        {
++            update_gamepad_list(buffer + 1);
++        }
++        else if (buffer[0] == REQUEST_CODE_GET_GAMEPAD_STATE)
++        {
++            char slot = buffer[1];
++            gamepad_set_state(slot, buffer + 2);
++        }
++        pthread_mutex_unlock(&gamepad_cs);
++    } while (1);
++
++    TRACE("Winlator main loop exiting\n");
++    bus_event_queue_destroy(&event_queue);
++
++    release_gamepad_request();
++    close_server_socket();
++    return STATUS_SUCCESS;
++}
++
++NTSTATUS winlator_bus_stop(void *args)
++{
++    if (server_fd == -1) return STATUS_SUCCESS;
++
++    release_gamepad_request();
++    close_server_socket();
++    return STATUS_SUCCESS;
++}
+diff --git a/dlls/winebus.sys/main.c b/dlls/winebus.sys/main.c
+index cb9104b..c6a6d57 100755
+--- a/dlls/winebus.sys/main.c
++++ b/dlls/winebus.sys/main.c
+@@ -1054,6 +1054,19 @@ static NTSTATUS iohid_driver_init(void)
+     return bus_main_thread_start(&bus);
+ }
+ 
++static NTSTATUS winlator_driver_init(void)
++{
++    struct bus_main_params bus =
++    {
++        .name = L"WINLATOR",
++        .init_args = NULL,
++        .init_code = winlator_init,
++        .wait_code = winlator_wait,
++    };
++
++    return bus_main_thread_start(&bus);
++}
++
+ static NTSTATUS fdo_pnp_dispatch(DEVICE_OBJECT *device, IRP *irp)
+ {
+     IO_STACK_LOCATION *irpsp = IoGetCurrentIrpStackLocation(irp);
+@@ -1073,6 +1086,7 @@ static NTSTATUS fdo_pnp_dispatch(DEVICE_OBJECT *device, IRP *irp)
+             enable_sdl = !sdl_driver_init();
+         udev_driver_init(enable_sdl);
+         iohid_driver_init();
++        winlator_driver_init();
+ 
+         irp->IoStatus.Status = STATUS_SUCCESS;
+         break;
+diff --git a/dlls/winebus.sys/time_utils.h b/dlls/winebus.sys/time_utils.h
+new file mode 100644
+index 0000000..fab7e0a
+--- /dev/null
++++ b/dlls/winebus.sys/time_utils.h
+@@ -0,0 +1,34 @@
++#ifndef WINLATOR_TIME_UTILS_H
++#define WINLATOR_TIME_UTILS_H
++
++#include <sys/time.h>
++
++#define NSEC_PER_SEC 1000000000UL
++
++static inline uint64_t nanoTime(void) {
++    struct timespec time;
++    clock_gettime(CLOCK_REALTIME, &time);
++    return time.tv_sec * NSEC_PER_SEC + time.tv_nsec;
++}
++
++static inline uint64_t currentTimeMillis(void) {
++    return nanoTime() / 1000000UL;
++}
++
++static inline void timespecFromNanos(uint64_t ns, struct timespec* ts) {
++    ts->tv_sec = ns / NSEC_PER_SEC;
++    ts->tv_nsec = ns % NSEC_PER_SEC;
++}
++
++static inline uint64_t timespecToMillis(struct timespec* ts) {
++    return (ts->tv_sec * NSEC_PER_SEC + ts->tv_nsec) / 1000000UL;
++}
++
++static inline void msleep(uint64_t ms) {
++    struct timespec ts;
++    ts.tv_sec = ms / 1000;
++    ts.tv_nsec = (ms % 1000) * 1000000L;
++    nanosleep(&ts, NULL);
++}
++
++#endif
+diff --git a/dlls/winebus.sys/unix_private.h b/dlls/winebus.sys/unix_private.h
+index 5c39cae..9bfde6d 100755
+--- a/dlls/winebus.sys/unix_private.h
++++ b/dlls/winebus.sys/unix_private.h
+@@ -234,6 +234,10 @@ extern NTSTATUS iohid_bus_init(void *);
+ extern NTSTATUS iohid_bus_wait(void *);
+ extern NTSTATUS iohid_bus_stop(void *);
+ 
++extern NTSTATUS winlator_bus_init(void *);
++extern NTSTATUS winlator_bus_wait(void *);
++extern NTSTATUS winlator_bus_stop(void *);
++
+ extern void bus_event_cleanup(struct bus_event *event);
+ extern void bus_event_queue_destroy(struct list *queue);
+ extern BOOL bus_event_queue_device_removed(struct list *queue, struct unix_device *device);
+diff --git a/dlls/winebus.sys/unixlib.c b/dlls/winebus.sys/unixlib.c
+index bd4351f..abea015 100755
+--- a/dlls/winebus.sys/unixlib.c
++++ b/dlls/winebus.sys/unixlib.c
+@@ -319,6 +319,9 @@ const unixlib_entry_t __wine_unix_call_funcs[] =
+     unix_device_set_output_report,
+     unix_device_get_feature_report,
+     unix_device_set_feature_report,
++    winlator_bus_init,
++    winlator_bus_wait,
++    winlator_bus_stop,
+ };
+ 
+ C_ASSERT(ARRAYSIZE(__wine_unix_call_funcs) == unix_funcs_count);
+diff --git a/dlls/winebus.sys/unixlib.h b/dlls/winebus.sys/unixlib.h
+index 02e7a1c..03323e5 100755
+--- a/dlls/winebus.sys/unixlib.h
++++ b/dlls/winebus.sys/unixlib.h
+@@ -144,6 +144,9 @@ enum unix_funcs
+     device_set_output_report,
+     device_get_feature_report,
+     device_set_feature_report,
++    winlator_init,
++    winlator_wait,
++    winlator_stop,
+     unix_funcs_count,
+ };
+ 
+diff --git a/dlls/xinput1_1/Makefile.in b/dlls/xinput1_1/Makefile.in
+index b62e618..b5c13cd 100755
+--- a/dlls/xinput1_1/Makefile.in
++++ b/dlls/xinput1_1/Makefile.in
+@@ -1,5 +1,5 @@
+ MODULE    = xinput1_1.dll
+-IMPORTS   = hid setupapi advapi32 user32 ws2_32
++IMPORTS   = hid setupapi advapi32 user32
+ PARENTSRC = ../xinput1_3
+ 
+ SOURCES = \
+diff --git a/dlls/xinput1_2/Makefile.in b/dlls/xinput1_2/Makefile.in
+index d226175..f49e8f5 100755
+--- a/dlls/xinput1_2/Makefile.in
++++ b/dlls/xinput1_2/Makefile.in
+@@ -1,5 +1,5 @@
+ MODULE    = xinput1_2.dll
+-IMPORTS   = hid setupapi advapi32 user32 ws2_32
++IMPORTS   = hid setupapi advapi32 user32
+ PARENTSRC = ../xinput1_3
+ 
+ SOURCES = \
+diff --git a/dlls/xinput1_3/Makefile.in b/dlls/xinput1_3/Makefile.in
+index 9c4f707..28d46d8 100755
+--- a/dlls/xinput1_3/Makefile.in
++++ b/dlls/xinput1_3/Makefile.in
+@@ -1,6 +1,6 @@
+ MODULE    = xinput1_3.dll
+ IMPORTLIB = xinput
+-IMPORTS   = hid setupapi advapi32 user32 ws2_32
++IMPORTS   = hid setupapi advapi32 user32
+ 
+ SOURCES = \
+ 	main.c \
+diff --git a/dlls/xinput1_3/main.c b/dlls/xinput1_3/main.c
+index 725b9ac..28f57e9 100755
+--- a/dlls/xinput1_3/main.c
++++ b/dlls/xinput1_3/main.c
+@@ -3,7 +3,6 @@
+  * Copyright 2008 Andrew Fenn
+  * Copyright 2018 Aric Stewart
+  * Copyright 2021 Rémi Bernon for CodeWeavers
+- * Copyright 2024 BrunoSX 
+  *
+  * This library is free software; you can redistribute it and/or
+  * modify it under the terms of the GNU Lesser General Public
+@@ -33,41 +32,23 @@
+ #include "wingdi.h"
+ #include "winnls.h"
+ #include "winternl.h"
+-#include "winsock2.h"
+ 
+ #include "dbt.h"
+ #include "setupapi.h"
++#include "devpkey.h"
++#include "hidusage.h"
++#include "ddk/hidsdi.h"
+ #include "initguid.h"
+ #include "devguid.h"
+ #include "xinput.h"
+ 
+ #include "wine/debug.h"
+ 
++DEFINE_GUID(GUID_DEVINTERFACE_WINEXINPUT,0x6c53d5fd,0x6480,0x440f,0xb6,0x18,0x47,0x67,0x50,0xc5,0xe1,0xa6);
++
+ /* Not defined in the headers, used only by XInputGetStateEx */
+ #define XINPUT_GAMEPAD_GUIDE 0x0400
+ 
+-#define SERVER_PORT 7949
+-#define CLIENT_PORT 7947
+-#define BUFFER_SIZE 64
+-
+-#define REQUEST_CODE_GET_GAMEPAD 8
+-#define REQUEST_CODE_GET_GAMEPAD_STATE 9
+-#define REQUEST_CODE_RELEASE_GAMEPAD 10
+-#define REQUEST_CODE_SET_GAMEPAD_STATE 19
+-
+-#define IDX_BUTTON_A 0
+-#define IDX_BUTTON_B 1
+-#define IDX_BUTTON_X 2
+-#define IDX_BUTTON_Y 3
+-#define IDX_BUTTON_L1 4
+-#define IDX_BUTTON_R1 5
+-#define IDX_BUTTON_L2 10
+-#define IDX_BUTTON_R2 11
+-#define IDX_BUTTON_SELECT 6
+-#define IDX_BUTTON_START 7
+-#define IDX_BUTTON_L3 8
+-#define IDX_BUTTON_R3 9
+-
+ WINE_DEFAULT_DEBUG_CHANNEL(xinput);
+ 
+ struct xinput_controller
+@@ -77,400 +58,716 @@ struct xinput_controller
+     XINPUT_STATE state;
+     XINPUT_GAMEPAD last_keystroke;
+     XINPUT_VIBRATION vibration;
++    HANDLE device;
++    WCHAR device_path[MAX_PATH];
+     BOOL enabled;
+-    BOOL connected;
++
++    struct
++    {
++        PHIDP_PREPARSED_DATA preparsed;
++        HIDP_CAPS caps;
++        HIDP_VALUE_CAPS lx_caps;
++        HIDP_VALUE_CAPS ly_caps;
++        HIDP_VALUE_CAPS lt_caps;
++        HIDP_VALUE_CAPS rx_caps;
++        HIDP_VALUE_CAPS ry_caps;
++        HIDP_VALUE_CAPS rt_caps;
++
++        HANDLE read_event;
++        OVERLAPPED read_ovl;
++
++        char *input_report_buf;
++        char *output_report_buf;
++        char *feature_report_buf;
++
++        BYTE haptics_report;
++        HIDP_VALUE_CAPS haptics_rumble_caps;
++        HIDP_VALUE_CAPS haptics_buzz_caps;
++    } hid;
+ };
+ 
+ static struct xinput_controller controllers[XUSER_MAX_COUNT];
+-static CRITICAL_SECTION_DEBUG controller_critsect_debug[XUSER_MAX_COUNT] = 
++static CRITICAL_SECTION_DEBUG controller_critsect_debug[XUSER_MAX_COUNT] =
+ {
+     {
+         0, 0, &controllers[0].crit,
+-        {&controller_critsect_debug[0].ProcessLocksList, &controller_critsect_debug[0].ProcessLocksList},
+-        0, 0, {(DWORD_PTR)(__FILE__ ": controllers[0].crit")}
++        { &controller_critsect_debug[0].ProcessLocksList, &controller_critsect_debug[0].ProcessLocksList },
++          0, 0, { (DWORD_PTR)(__FILE__ ": controllers[0].crit") }
+     },
+     {
+         0, 0, &controllers[1].crit,
+-        {&controller_critsect_debug[1].ProcessLocksList, &controller_critsect_debug[1].ProcessLocksList},
+-        0, 0, {(DWORD_PTR)(__FILE__ ": controllers[1].crit")}
++        { &controller_critsect_debug[1].ProcessLocksList, &controller_critsect_debug[1].ProcessLocksList },
++          0, 0, { (DWORD_PTR)(__FILE__ ": controllers[1].crit") }
+     },
+     {
+         0, 0, &controllers[2].crit,
+-        {&controller_critsect_debug[2].ProcessLocksList, &controller_critsect_debug[2].ProcessLocksList},
+-        0, 0, {(DWORD_PTR)(__FILE__ ": controllers[2].crit")}
++        { &controller_critsect_debug[2].ProcessLocksList, &controller_critsect_debug[2].ProcessLocksList },
++          0, 0, { (DWORD_PTR)(__FILE__ ": controllers[2].crit") }
+     },
+     {
+         0, 0, &controllers[3].crit,
+-        {&controller_critsect_debug[3].ProcessLocksList, &controller_critsect_debug[3].ProcessLocksList},
+-        0, 0, {(DWORD_PTR)(__FILE__ ": controllers[3].crit")}
++        { &controller_critsect_debug[3].ProcessLocksList, &controller_critsect_debug[3].ProcessLocksList },
++          0, 0, { (DWORD_PTR)(__FILE__ ": controllers[3].crit") }
+     },
+ };
+ 
+-static struct xinput_controller controllers[XUSER_MAX_COUNT] = 
++static struct xinput_controller controllers[XUSER_MAX_COUNT] =
+ {
+-    {{&controller_critsect_debug[0], -1, 0, 0, 0, 0}, {0}, {0}, {0}, {0}, TRUE, FALSE},
+-    {{&controller_critsect_debug[1], -1, 0, 0, 0, 0}, {0}, {0}, {0}, {0}, TRUE, FALSE},
+-    {{&controller_critsect_debug[2], -1, 0, 0, 0, 0}, {0}, {0}, {0}, {0}, TRUE, FALSE},
+-    {{&controller_critsect_debug[3], -1, 0, 0, 0, 0}, {0}, {0}, {0}, {0}, TRUE, FALSE},
++    {{ &controller_critsect_debug[0], -1, 0, 0, 0, 0 }},
++    {{ &controller_critsect_debug[1], -1, 0, 0, 0, 0 }},
++    {{ &controller_critsect_debug[2], -1, 0, 0, 0, 0 }},
++    {{ &controller_critsect_debug[3], -1, 0, 0, 0, 0 }},
+ };
+ 
++static HMODULE xinput_instance;
+ static HANDLE start_event;
+-static BOOL thread_running = FALSE;
+-static SOCKET server_sock = INVALID_SOCKET;
+-static BOOL winsock_loaded = FALSE;
+-static BOOL force_update = FALSE;
+-static BOOL updated_once = FALSE;
+-static char xinput_min_index = 3;
+-static struct sockaddr_in client_addr = {0};
++static HANDLE update_event;
+ 
+-static void close_server_socket(void) 
++static BOOL find_opened_device(const WCHAR *device_path, int *free_slot)
+ {
+-    if (server_sock != INVALID_SOCKET) 
++    int i;
++
++    *free_slot = XUSER_MAX_COUNT;
++    for (i = XUSER_MAX_COUNT; i > 0; i--)
+     {
+-        closesocket(server_sock);
+-        server_sock = INVALID_SOCKET;
++        if (!controllers[i - 1].device) *free_slot = i - 1;
++        else if (!wcsicmp(device_path, controllers[i - 1].device_path)) return TRUE;
+     }
+-    
+-    if (winsock_loaded) 
++    return FALSE;
++}
++
++static void check_value_caps(struct xinput_controller *controller, USHORT usage, HIDP_VALUE_CAPS *caps)
++{
++    switch (usage)
+     {
+-        WSACleanup();
+-        winsock_loaded = FALSE;
++    case HID_USAGE_GENERIC_X: controller->hid.lx_caps = *caps; break;
++    case HID_USAGE_GENERIC_Y: controller->hid.ly_caps = *caps; break;
++    case HID_USAGE_GENERIC_Z: controller->hid.lt_caps = *caps; break;
++    case HID_USAGE_GENERIC_RX: controller->hid.rx_caps = *caps; break;
++    case HID_USAGE_GENERIC_RY: controller->hid.ry_caps = *caps; break;
++    case HID_USAGE_GENERIC_RZ: controller->hid.rt_caps = *caps; break;
+     }
+ }
+ 
+-static BOOL create_server_socket(void)
+-{    
+-    WSADATA wsa_data;
+-    struct sockaddr_in server_addr;
+-    const UINT reuse_addr = 1;
+-    ULONG non_blocking = 1;
+-    int res;
++static void check_waveform_caps(struct xinput_controller *controller, HANDLE device, PHIDP_PREPARSED_DATA preparsed,
++                                HIDP_LINK_COLLECTION_NODE *collections, HIDP_VALUE_CAPS *caps)
++{
++    USHORT count, report_len = controller->hid.caps.FeatureReportByteLength;
++    char *report_buf = controller->hid.feature_report_buf;
++    ULONG parent = caps->LinkCollection, waveform = 0;
++    HIDP_VALUE_CAPS value_caps;
++    USAGE_AND_PAGE phy_usages;
++    NTSTATUS status;
++
++    while (collections[parent].LinkUsagePage != HID_USAGE_PAGE_HAPTICS ||
++           collections[parent].LinkUsage != HID_USAGE_HAPTICS_SIMPLE_CONTROLLER)
++        if (!(parent = collections[parent].Parent)) break;
++
++    if (collections[parent].LinkUsagePage != HID_USAGE_PAGE_HAPTICS ||
++        collections[parent].LinkUsage != HID_USAGE_HAPTICS_SIMPLE_CONTROLLER)
++    {
++        WARN("Failed to find haptics simple controller collection\n");
++        return;
++    }
++    phy_usages.UsagePage = collections[collections[parent].Parent].LinkUsagePage;
++    phy_usages.Usage = collections[collections[parent].Parent].LinkUsage;
++
++    status = HidP_InitializeReportForID(HidP_Feature, caps->ReportID, preparsed, report_buf, report_len);
++    if (status != HIDP_STATUS_SUCCESS) WARN("HidP_InitializeReportForID returned %#lx\n", status);
++    if (!HidD_GetFeature(device, report_buf, report_len))
++    {
++        WARN("Failed to get waveform list report, error %lu\n", GetLastError());
++        return;
++    }
++
++    status = HidP_GetUsageValue(HidP_Feature, caps->UsagePage, caps->LinkCollection, caps->NotRange.Usage,
++                                &waveform, preparsed, report_buf, report_len);
++    if (status != HIDP_STATUS_SUCCESS) WARN("HidP_GetUsageValue returned %#lx\n", status);
++
++    count = 1;
++    status = HidP_GetSpecificValueCaps(HidP_Output, HID_USAGE_PAGE_HAPTICS, parent, HID_USAGE_HAPTICS_INTENSITY,
++                                       &value_caps, &count, preparsed);
++    if (status != HIDP_STATUS_SUCCESS || !count) WARN("Failed to get waveform intensity caps, status %#lx\n", status);
++    else if (phy_usages.UsagePage == HID_USAGE_PAGE_GENERIC && phy_usages.Usage == HID_USAGE_GENERIC_Z)
++        TRACE( "Ignoring left rumble caps\n" );
++    else if (phy_usages.UsagePage == HID_USAGE_PAGE_GENERIC && phy_usages.Usage == HID_USAGE_GENERIC_RZ)
++        TRACE( "Ignoring right rumble caps\n" );
++    else if (waveform == HID_USAGE_HAPTICS_WAVEFORM_RUMBLE)
++    {
++        TRACE("Found rumble caps, report %u collection %u\n", value_caps.ReportID, value_caps.LinkCollection);
++        controller->hid.haptics_report = value_caps.ReportID;
++        controller->hid.haptics_rumble_caps = value_caps;
++    }
++    else if (waveform == HID_USAGE_HAPTICS_WAVEFORM_BUZZ)
++    {
++        TRACE("Found buzz caps, report %u collection %u\n", value_caps.ReportID, value_caps.LinkCollection);
++        controller->hid.haptics_report = value_caps.ReportID;
++        controller->hid.haptics_buzz_caps = value_caps;
++    }
++    else FIXME("Unsupported waveform type %#lx\n", waveform);
++}
++
++static BOOL controller_check_caps(struct xinput_controller *controller, HANDLE device, PHIDP_PREPARSED_DATA preparsed)
++{
++    USHORT caps_count = 0, waveform_caps_count = 0;
++    XINPUT_CAPABILITIES *caps = &controller->caps;
++    HIDP_LINK_COLLECTION_NODE *collections;
++    HIDP_VALUE_CAPS waveform_caps[8];
++    HIDP_BUTTON_CAPS *button_caps;
++    ULONG collections_count = 0;
++    HIDP_VALUE_CAPS *value_caps;
++    int i, u, button_count = 0;
++    NTSTATUS status;
++
++    /* Count buttons */
++    memset(caps, 0, sizeof(XINPUT_CAPABILITIES));
++
++    if (!(button_caps = malloc(sizeof(*button_caps) * controller->hid.caps.NumberInputButtonCaps))) return FALSE;
++    status = HidP_GetButtonCaps(HidP_Input, button_caps, &controller->hid.caps.NumberInputButtonCaps, preparsed);
++    if (status != HIDP_STATUS_SUCCESS) WARN("HidP_GetButtonCaps returned %#lx\n", status);
++    else for (i = 0; i < controller->hid.caps.NumberInputButtonCaps; i++)
++    {
++        if (button_caps[i].UsagePage != HID_USAGE_PAGE_BUTTON)
++            continue;
++        if (button_caps[i].IsRange)
++            button_count = max(button_count, button_caps[i].Range.UsageMax);
++        else
++            button_count = max(button_count, button_caps[i].NotRange.Usage);
++    }
++    free(button_caps);
++    if (button_count < 11)
++        WARN("Too few buttons, continuing anyway\n");
++    caps->Gamepad.wButtons = 0xffff;
++
++    if (!(value_caps = malloc(sizeof(*value_caps) * controller->hid.caps.NumberInputValueCaps))) return FALSE;
++    status = HidP_GetValueCaps(HidP_Input, value_caps, &controller->hid.caps.NumberInputValueCaps, preparsed);
++    if (status != HIDP_STATUS_SUCCESS) WARN("HidP_GetValueCaps returned %#lx\n", status);
++    else for (i = 0; i < controller->hid.caps.NumberInputValueCaps; i++)
++    {
++        HIDP_VALUE_CAPS *caps = value_caps + i;
++        if (caps->UsagePage != HID_USAGE_PAGE_GENERIC) continue;
++        if (!caps->IsRange) check_value_caps(controller, caps->NotRange.Usage, caps);
++        else for (u = caps->Range.UsageMin; u <=caps->Range.UsageMax; u++) check_value_caps(controller, u, value_caps + i);
++    }
++    free(value_caps);
++
++    if (!controller->hid.lt_caps.UsagePage) WARN("Missing axis LeftTrigger\n");
++    else caps->Gamepad.bLeftTrigger = (1u << (sizeof(caps->Gamepad.bLeftTrigger) + 1)) - 1;
++    if (!controller->hid.rt_caps.UsagePage) WARN("Missing axis RightTrigger\n");
++    else caps->Gamepad.bRightTrigger = (1u << (sizeof(caps->Gamepad.bRightTrigger) + 1)) - 1;
++    if (!controller->hid.lx_caps.UsagePage) WARN("Missing axis ThumbLX\n");
++    else caps->Gamepad.sThumbLX = (1u << (sizeof(caps->Gamepad.sThumbLX) + 1)) - 1;
++    if (!controller->hid.ly_caps.UsagePage) WARN("Missing axis ThumbLY\n");
++    else caps->Gamepad.sThumbLY = (1u << (sizeof(caps->Gamepad.sThumbLY) + 1)) - 1;
++    if (!controller->hid.rx_caps.UsagePage) WARN("Missing axis ThumbRX\n");
++    else caps->Gamepad.sThumbRX = (1u << (sizeof(caps->Gamepad.sThumbRX) + 1)) - 1;
++    if (!controller->hid.ry_caps.UsagePage) WARN("Missing axis ThumbRY\n");
++    else caps->Gamepad.sThumbRY = (1u << (sizeof(caps->Gamepad.sThumbRY) + 1)) - 1;
++
++    caps->Type = XINPUT_DEVTYPE_GAMEPAD;
++    caps->SubType = XINPUT_DEVSUBTYPE_GAMEPAD;
++
++    collections_count = controller->hid.caps.NumberLinkCollectionNodes;
++    if (!(collections = malloc(sizeof(*collections) * controller->hid.caps.NumberLinkCollectionNodes))) return FALSE;
++    status = HidP_GetLinkCollectionNodes(collections, &collections_count, preparsed);
++    if (status != HIDP_STATUS_SUCCESS) WARN("HidP_GetLinkCollectionNodes returned %#lx\n", status);
++    else for (i = 0; i < collections_count; ++i)
++    {
++        if (collections[i].LinkUsagePage != HID_USAGE_PAGE_HAPTICS) continue;
++        if (collections[i].LinkUsage == HID_USAGE_HAPTICS_WAVEFORM_LIST)
++        {
++            caps_count = ARRAY_SIZE(waveform_caps) - waveform_caps_count;
++            value_caps = waveform_caps + waveform_caps_count;
++            status = HidP_GetSpecificValueCaps(HidP_Feature, HID_USAGE_PAGE_ORDINAL, i, 0, value_caps, &caps_count, preparsed);
++            if (status == HIDP_STATUS_SUCCESS) waveform_caps_count += caps_count;
++        }
++    }
++    for (i = 0; i < waveform_caps_count; ++i) check_waveform_caps(controller, device, preparsed, collections, waveform_caps + i);
++    free(collections);
++
++    if (controller->hid.haptics_rumble_caps.UsagePage ||
++        controller->hid.haptics_buzz_caps.UsagePage)
++    {
++        caps->Flags |= XINPUT_CAPS_FFB_SUPPORTED;
++        caps->Vibration.wLeftMotorSpeed = 255;
++        caps->Vibration.wRightMotorSpeed = 255;
++    }
++
++    return TRUE;
++}
+ 
+-    close_server_socket();
++static DWORD HID_set_state(struct xinput_controller *controller, XINPUT_VIBRATION *state)
++{
++    ULONG report_len = controller->hid.caps.OutputReportByteLength;
++    PHIDP_PREPARSED_DATA preparsed = controller->hid.preparsed;
++    char *report_buf = controller->hid.output_report_buf;
++    BOOL ret, update_rumble, update_buzz;
++    USHORT collection;
++    NTSTATUS status;
++    BYTE report_id;
+ 
+-    winsock_loaded = WSAStartup(MAKEWORD(2,2), &wsa_data) == NO_ERROR;
+-    if (!winsock_loaded) return FALSE;
++    if (!(controller->caps.Flags & XINPUT_CAPS_FFB_SUPPORTED)) return ERROR_SUCCESS;
+ 
+-    server_addr.sin_family = AF_INET;
+-    server_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+-    server_addr.sin_port = htons(SERVER_PORT);
++    update_rumble = (controller->vibration.wLeftMotorSpeed != state->wLeftMotorSpeed);
++    controller->vibration.wLeftMotorSpeed = state->wLeftMotorSpeed;
++    update_buzz = (controller->vibration.wRightMotorSpeed != state->wRightMotorSpeed);
++    controller->vibration.wRightMotorSpeed = state->wRightMotorSpeed;
+ 
+-    server_sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+-    if (server_sock == INVALID_SOCKET) return FALSE;
++    if (!controller->enabled) return ERROR_SUCCESS;
++    if (!update_rumble && !update_buzz) return ERROR_SUCCESS;
+ 
+-    res = setsockopt(server_sock, SOL_SOCKET, SO_REUSEADDR, (const char *)&reuse_addr, sizeof(reuse_addr));
+-    if (res == SOCKET_ERROR) return FALSE;
++    report_id = controller->hid.haptics_report;
++    status = HidP_InitializeReportForID(HidP_Output, report_id, preparsed, report_buf, report_len);
++    if (status != HIDP_STATUS_SUCCESS) WARN("HidP_InitializeReportForID returned %#lx\n", status);
+ 
+-    ioctlsocket(server_sock, FIONBIO, &non_blocking);
++    collection = controller->hid.haptics_rumble_caps.LinkCollection;
++    status = HidP_SetUsageValue(HidP_Output, HID_USAGE_PAGE_HAPTICS, collection, HID_USAGE_HAPTICS_INTENSITY,
++                                state->wLeftMotorSpeed, preparsed, report_buf, report_len);
++    if (status != HIDP_STATUS_SUCCESS) WARN("HidP_SetUsageValue INTENSITY returned %#lx\n", status);
+ 
+-    res = bind(server_sock, (struct sockaddr*)&server_addr, sizeof(server_addr));
+-    if (res == SOCKET_ERROR) return FALSE;
++    collection = controller->hid.haptics_buzz_caps.LinkCollection;
++    status = HidP_SetUsageValue(HidP_Output, HID_USAGE_PAGE_HAPTICS, collection, HID_USAGE_HAPTICS_INTENSITY,
++                                state->wRightMotorSpeed, preparsed, report_buf, report_len);
++    if (status != HIDP_STATUS_SUCCESS) WARN("HidP_SetUsageValue INTENSITY returned %#lx\n", status);
+ 
+-    client_addr.sin_family = AF_INET;
+-    client_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+-    client_addr.sin_port = htons(CLIENT_PORT);    
++    ret = HidD_SetOutputReport(controller->device, report_buf, report_len);
++    if (!ret) WARN("HidD_SetOutputReport failed with error %lu\n", GetLastError());
++    return 0;
+ 
+-    return TRUE;
++    return ERROR_SUCCESS;
+ }
+ 
+-static void get_gamepad_request(void)
++static void controller_destroy(struct xinput_controller *controller, BOOL already_removed);
++
++static void controller_enable(struct xinput_controller *controller)
+ {
+-    int i;
+-    char buffer[BUFFER_SIZE];
++    ULONG report_len = controller->hid.caps.InputReportByteLength;
++    char *report_buf = controller->hid.input_report_buf;
++    XINPUT_VIBRATION state = controller->vibration;
++    BOOL ret;
++
++    if (controller->enabled) return;
++    if (controller->caps.Flags & XINPUT_CAPS_FFB_SUPPORTED) HID_set_state(controller, &state);
++    controller->enabled = TRUE;
++
++    memset(&controller->hid.read_ovl, 0, sizeof(controller->hid.read_ovl));
++    controller->hid.read_ovl.hEvent = controller->hid.read_event;
++    ret = ReadFile(controller->device, report_buf, report_len, NULL, &controller->hid.read_ovl);
++    if (!ret && GetLastError() != ERROR_IO_PENDING) controller_destroy(controller, TRUE);
++    else SetEvent(update_event);
++}
+ 
+-    buffer[0] = REQUEST_CODE_GET_GAMEPAD;
+-    buffer[1] = 1;
+-    buffer[2] = 1;
+-    *(int*)(buffer + 3) = GetCurrentProcessId();
+-    buffer[7] = updated_once ? 1 : 0;
++static void controller_disable(struct xinput_controller *controller)
++{
++    XINPUT_VIBRATION state = {0};
+ 
+-    for (i = 0; i < XUSER_MAX_COUNT; i++)
+-        buffer[8 + i] = controllers[i].enabled;
++    if (!controller->enabled) return;
++    if (controller->caps.Flags & XINPUT_CAPS_FFB_SUPPORTED) HID_set_state(controller, &state);
++    controller->enabled = FALSE;
+ 
+-    sendto(server_sock, buffer, BUFFER_SIZE, 0, (struct sockaddr*)&client_addr, sizeof(client_addr));
++    CancelIoEx(controller->device, &controller->hid.read_ovl);
++    WaitForSingleObject(controller->hid.read_ovl.hEvent, INFINITE);
++    SetEvent(update_event);
+ }
+ 
+-static void set_gamepad_state_request(int slot, XINPUT_VIBRATION *state)
++static BOOL controller_init(struct xinput_controller *controller, PHIDP_PREPARSED_DATA preparsed,
++                            HIDP_CAPS *caps, HANDLE device, const WCHAR *device_path)
+ {
+-    char buffer[BUFFER_SIZE];
++    HANDLE event = NULL;
++
++    controller->hid.caps = *caps;
++    if (!(controller->hid.feature_report_buf = calloc(1, controller->hid.caps.FeatureReportByteLength))) goto failed;
++    if (!controller_check_caps(controller, device, preparsed)) goto failed;
++    if (!(event = CreateEventW(NULL, TRUE, FALSE, NULL))) goto failed;
++
++    TRACE("Found gamepad %s\n", debugstr_w(device_path));
++
++    controller->hid.preparsed = preparsed;
++    controller->hid.read_event = event;
++    if (!(controller->hid.input_report_buf = calloc(1, controller->hid.caps.InputReportByteLength))) goto failed;
++    if (!(controller->hid.output_report_buf = calloc(1, controller->hid.caps.OutputReportByteLength))) goto failed;
+ 
+-    buffer[0] = REQUEST_CODE_SET_GAMEPAD_STATE;
+-    buffer[1] = slot;
+-    *(int*)(buffer + 2) = state->wLeftMotorSpeed;
+-    *(int*)(buffer + 6) = state->wRightMotorSpeed;
+-    sendto(server_sock, buffer, BUFFER_SIZE, 0, (struct sockaddr*)&client_addr, sizeof(client_addr));
++    memset(&controller->state, 0, sizeof(controller->state));
++    memset(&controller->vibration, 0, sizeof(controller->vibration));
++    lstrcpynW(controller->device_path, device_path, MAX_PATH);
++    controller->enabled = FALSE;
++
++    EnterCriticalSection(&controller->crit);
++    controller->device = device;
++    controller_enable(controller);
++    LeaveCriticalSection(&controller->crit);
++    return TRUE;
++
++failed:
++    free(controller->hid.input_report_buf);
++    free(controller->hid.output_report_buf);
++    free(controller->hid.feature_report_buf);
++    memset(&controller->hid, 0, sizeof(controller->hid));
++    CloseHandle(event);
++    return FALSE;
+ }
+ 
+-static void release_gamepad_request(void)
++static void get_registry_keys(HKEY *defkey, HKEY *appkey)
+ {
+-    char buffer[BUFFER_SIZE];
++    WCHAR buffer[MAX_PATH + 26], *name = buffer, *tmp;
++    DWORD len;
++    HKEY hkey;
++
++    *appkey = 0;
++    if (RegOpenKeyW(HKEY_CURRENT_USER, L"Software\\Wine\\DirectInput\\Joysticks", defkey))
++        *defkey = 0;
++
++    if (!(len = GetModuleFileNameW(0, buffer, MAX_PATH)) || len >= MAX_PATH)
++        return;
+ 
+-    buffer[0] = REQUEST_CODE_RELEASE_GAMEPAD;
+-    sendto(server_sock, buffer, BUFFER_SIZE, 0, (struct sockaddr*)&client_addr, sizeof(client_addr));
++    if (!RegOpenKeyW(HKEY_CURRENT_USER, L"Software\\Wine\\AppDefaults", &hkey))
++    {
++        if ((tmp = wcsrchr(name, '/'))) name = tmp + 1;
++        if ((tmp = wcsrchr(name, '\\'))) name = tmp + 1;
++        wcscat(name, L"\\DirectInput\\Joysticks");
++        if (RegOpenKeyW(hkey, name, appkey)) *appkey = 0;
++        RegCloseKey(hkey);
++    }
+ }
+ 
+-static void destroy_controllers(void)
+-{   
+-    int i;
++static BOOL device_is_overridden(HANDLE device)
++{
++    WCHAR name[MAX_PATH], buffer[MAX_PATH];
++    DWORD size = sizeof(buffer);
++    BOOL disable = FALSE;
++    HKEY defkey, appkey;
+ 
+-    thread_running = FALSE;
+-    release_gamepad_request();
+-    xinput_min_index = 3;
++    if (!HidD_GetProductString(device, name, MAX_PATH)) return FALSE;
+ 
+-    for (i = 0; i < XUSER_MAX_COUNT; i++)
++    get_registry_keys(&defkey, &appkey);
++    if (!defkey && !appkey) return FALSE;
++    if ((appkey && !RegQueryValueExW(appkey, name, 0, NULL, (LPBYTE)buffer, &size)) ||
++        (defkey && !RegQueryValueExW(defkey, name, 0, NULL, (LPBYTE)buffer, &size)))
+     {
+-        EnterCriticalSection(&controllers[i].crit);
+-        controllers[i].enabled = FALSE;
+-        controllers[i].connected = FALSE;
+-        LeaveCriticalSection(&controllers[i].crit);
++        if ((disable = !wcscmp(buffer, L"override")))
++            TRACE("Disabling gamepad '%s' based on registry key.\n", debugstr_w(name));
+     }
+ 
+-    close_server_socket();
++    if (appkey) RegCloseKey(appkey);
++    if (defkey) RegCloseKey(defkey);
++    return disable;
+ }
+ 
+-static void controller_init(struct xinput_controller *controller, BOOL vibration)
++static BOOL try_add_device(const WCHAR *device_path)
+ {
+-    XINPUT_CAPABILITIES *caps = &controller->caps;
+-
+-    if (!controller->connected)
+-    {
+-        memset(caps, 0, sizeof(XINPUT_CAPABILITIES));
+-        memset(&controller->state, 0, sizeof(controller->state));
++    SP_DEVICE_INTERFACE_DATA iface = {sizeof(iface)};
++    PHIDP_PREPARSED_DATA preparsed;
++    HIDP_CAPS caps;
++    NTSTATUS status;
++    HANDLE device;
++    int i;
+ 
+-        caps->Gamepad.wButtons = 0xffff;
+-        caps->Gamepad.bLeftTrigger = (1u << (sizeof(caps->Gamepad.bLeftTrigger) + 1)) - 1;
+-        caps->Gamepad.bRightTrigger = (1u << (sizeof(caps->Gamepad.bRightTrigger) + 1)) - 1;
+-        caps->Gamepad.sThumbLX = (1u << (sizeof(caps->Gamepad.sThumbLX) + 1)) - 1;
+-        caps->Gamepad.sThumbLY = (1u << (sizeof(caps->Gamepad.sThumbLY) + 1)) - 1;
+-        caps->Gamepad.sThumbRX = (1u << (sizeof(caps->Gamepad.sThumbRX) + 1)) - 1;
+-        caps->Gamepad.sThumbRY = (1u << (sizeof(caps->Gamepad.sThumbRY) + 1)) - 1;
++    if (find_opened_device(device_path, &i)) return TRUE; /* already opened */
++    if (i == XUSER_MAX_COUNT) return FALSE; /* no more slots */
++
++    device = CreateFileW(device_path, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE,
++                         NULL, OPEN_EXISTING, FILE_FLAG_OVERLAPPED | FILE_FLAG_NO_BUFFERING, NULL);
++    if (device == INVALID_HANDLE_VALUE) return TRUE;
++
++    preparsed = NULL;
++    if (!HidD_GetPreparsedData(device, &preparsed))
++        WARN("ignoring HID device, HidD_GetPreparsedData failed with error %lu\n", GetLastError());
++    else if ((status = HidP_GetCaps(preparsed, &caps)) != HIDP_STATUS_SUCCESS)
++        WARN("ignoring HID device, HidP_GetCaps returned %#lx\n", status);
++    else if (caps.UsagePage != HID_USAGE_PAGE_GENERIC)
++        WARN("ignoring HID device, unsupported usage page %04x\n", caps.UsagePage);
++    else if (caps.Usage != HID_USAGE_GENERIC_GAMEPAD && caps.Usage != HID_USAGE_GENERIC_JOYSTICK &&
++             caps.Usage != HID_USAGE_GENERIC_MULTI_AXIS_CONTROLLER)
++        WARN("ignoring HID device, unsupported usage %04x:%04x\n", caps.UsagePage, caps.Usage);
++    else if (device_is_overridden(device))
++        WARN("ignoring HID device, overridden for dinput\n");
++    else if (!controller_init(&controllers[i], preparsed, &caps, device, device_path))
++        WARN("ignoring HID device, failed to initialize\n");
++    else
++        return TRUE;
+ 
+-        caps->Type = XINPUT_DEVTYPE_GAMEPAD;
+-        caps->SubType = XINPUT_DEVSUBTYPE_GAMEPAD;
+-        controller->enabled = TRUE;
+-    }
++    CloseHandle(device);
++    HidD_FreePreparsedData(preparsed);
++    return TRUE;
++}
+ 
+-    if (vibration){
+-        caps->Flags |= XINPUT_CAPS_FFB_SUPPORTED;
+-        caps->Vibration.wLeftMotorSpeed = 255;
+-        caps->Vibration.wRightMotorSpeed = 255;
+-    }
++static void try_remove_device(const WCHAR *device_path)
++{
++    int i;
+ 
+-    controller->connected = TRUE;
++    if (find_opened_device(device_path, &i))
++        controller_destroy(&controllers[i], TRUE);
+ }
+ 
+-static void controller_reset(struct xinput_controller *controller)
++static void update_controller_list(void)
+ {
+-    XINPUT_CAPABILITIES *caps = &controller->caps;
++    char buffer[sizeof(SP_DEVICE_INTERFACE_DETAIL_DATA_W) + MAX_PATH * sizeof(WCHAR)];
++    SP_DEVICE_INTERFACE_DETAIL_DATA_W *detail = (SP_DEVICE_INTERFACE_DETAIL_DATA_W *)buffer;
++    SP_DEVICE_INTERFACE_DATA iface = {sizeof(iface)};
++    HDEVINFO set;
++    DWORD idx;
++    GUID guid;
+ 
+-    if (!controller->connected) return;
++    guid = GUID_DEVINTERFACE_WINEXINPUT;
+ 
+-    memset(&controller->state, 0, sizeof(controller->state));
++    set = SetupDiGetClassDevsW(&guid, NULL, NULL, DIGCF_DEVICEINTERFACE | DIGCF_PRESENT);
++    detail->cbSize = sizeof(*detail);
+ 
+-    caps->Flags = 0;
+-    caps->Vibration.wLeftMotorSpeed = 0;
+-    caps->Vibration.wRightMotorSpeed = 0;
+-    controller->connected = FALSE;
++    idx = 0;
++    while (SetupDiEnumDeviceInterfaces(set, NULL, &guid, idx++, &iface))
++    {
++        if (!SetupDiGetDeviceInterfaceDetailW(set, &iface, detail, sizeof(buffer), NULL, NULL))
++            continue;
++        if (!try_add_device(detail->DevicePath))
++            break;
++    }
++
++    SetupDiDestroyDeviceInfoList(set);
+ }
+ 
+-static DWORD controller_set_state(int index, XINPUT_VIBRATION *state)
++static void controller_destroy(struct xinput_controller *controller, BOOL already_removed)
+ {
+-    BOOL update_left_motor, update_right_motor;
+-    struct xinput_controller *controller = &controllers[index];
+-    
+-    if (!(controller->caps.Flags & XINPUT_CAPS_FFB_SUPPORTED)) return ERROR_SUCCESS;
++    EnterCriticalSection(&controller->crit);
+ 
+-    update_left_motor = (controller->vibration.wLeftMotorSpeed != state->wLeftMotorSpeed);
+-    controller->vibration.wLeftMotorSpeed = state->wLeftMotorSpeed;
+-    update_right_motor = (controller->vibration.wRightMotorSpeed != state->wRightMotorSpeed);
+-    controller->vibration.wRightMotorSpeed = state->wRightMotorSpeed;
++    if (controller->device)
++    {
++        if (!already_removed) controller_disable(controller);
++        CloseHandle(controller->device);
++        controller->device = NULL;
++
++        free(controller->hid.input_report_buf);
++        free(controller->hid.output_report_buf);
++        free(controller->hid.feature_report_buf);
++        HidD_FreePreparsedData(controller->hid.preparsed);
++        memset(&controller->hid, 0, sizeof(controller->hid));
++    }
+ 
+-    if (controller->enabled && (update_left_motor || update_right_motor))
+-        set_gamepad_state_request(index, state);
+-    return ERROR_SUCCESS;
++    LeaveCriticalSection(&controller->crit);
+ }
+ 
+-static void controller_update_state(struct xinput_controller *controller, char *data)
++static LONG sign_extend(ULONG value, const HIDP_VALUE_CAPS *caps)
+ {
+-    int i;
+-    char dpad;
+-    short buttons, thumb_lx, thumb_ly, thumb_rx, thumb_ry;
+-    XINPUT_STATE *state = &controller->state;
++    UINT sign = 1 << (caps->BitSize - 1);
++    if (sign <= 1 || caps->LogicalMin >= 0) return value;
++    return value - ((value & sign) << 1);
++}
+ 
+-    EnterCriticalSection(&controller->crit);
++static LONG scale_value(ULONG value, const HIDP_VALUE_CAPS *caps, LONG min, LONG max)
++{
++    LONG tmp = sign_extend(value, caps);
++    if (caps->LogicalMin > caps->LogicalMax) return 0;
++    if (caps->LogicalMin > tmp || caps->LogicalMax < tmp) return 0;
++    return min + MulDiv(tmp - caps->LogicalMin, max - min, caps->LogicalMax - caps->LogicalMin);
++}
+ 
+-    buttons = *(short*)(data + 0);
+-    dpad = data[2];
++static void read_controller_state(struct xinput_controller *controller)
++{
++    ULONG read_len, report_len = controller->hid.caps.InputReportByteLength;
++    char *report_buf = controller->hid.input_report_buf;
++    XINPUT_STATE state;
++    NTSTATUS status;
++    USAGE buttons[11];
++    ULONG i, button_length, value;
++    BOOL ret;
++
++    if (!GetOverlappedResult(controller->device, &controller->hid.read_ovl, &read_len, TRUE))
++    {
++        if (GetLastError() == ERROR_OPERATION_ABORTED) return;
++        if (GetLastError() == ERROR_ACCESS_DENIED || GetLastError() == ERROR_INVALID_HANDLE) controller_destroy(controller, TRUE);
++        else ERR("Failed to read input report, GetOverlappedResult failed with error %lu\n", GetLastError());
++        return;
++    }
+ 
+-    thumb_lx = *(short*)(data + 3);
+-    thumb_ly = *(short*)(data + 5);
+-    thumb_rx = *(short*)(data + 7);
+-    thumb_ry = *(short*)(data + 9);
++    button_length = ARRAY_SIZE(buttons);
++    status = HidP_GetUsages(HidP_Input, HID_USAGE_PAGE_BUTTON, 0, buttons, &button_length, controller->hid.preparsed, report_buf, report_len);
++    if (status != HIDP_STATUS_SUCCESS) WARN("HidP_GetUsages HID_USAGE_PAGE_BUTTON returned %#lx\n", status);
+ 
+-    state->Gamepad.wButtons = 0;
+-    for (i = 0; i < 10; i++)
+-    {    
+-        if ((buttons & (1<<i))) 
++    state.Gamepad.wButtons = 0;
++    for (i = 0; i < button_length; i++)
++    {
++        switch (buttons[i])
+         {
+-            switch (i)
+-            {
+-            case IDX_BUTTON_A: state->Gamepad.wButtons |= XINPUT_GAMEPAD_A; break;
+-            case IDX_BUTTON_B: state->Gamepad.wButtons |= XINPUT_GAMEPAD_B; break;
+-            case IDX_BUTTON_X: state->Gamepad.wButtons |= XINPUT_GAMEPAD_X; break;
+-            case IDX_BUTTON_Y: state->Gamepad.wButtons |= XINPUT_GAMEPAD_Y; break;
+-            case IDX_BUTTON_L1: state->Gamepad.wButtons |= XINPUT_GAMEPAD_LEFT_SHOULDER; break;
+-            case IDX_BUTTON_R1: state->Gamepad.wButtons |= XINPUT_GAMEPAD_RIGHT_SHOULDER; break;
+-            case IDX_BUTTON_SELECT: state->Gamepad.wButtons |= XINPUT_GAMEPAD_BACK; break;
+-            case IDX_BUTTON_START: state->Gamepad.wButtons |= XINPUT_GAMEPAD_START; break;
+-            case IDX_BUTTON_L3: state->Gamepad.wButtons |= XINPUT_GAMEPAD_LEFT_THUMB; break;
+-            case IDX_BUTTON_R3: state->Gamepad.wButtons |= XINPUT_GAMEPAD_RIGHT_THUMB; break;
+-            }
++        case 1: state.Gamepad.wButtons |= XINPUT_GAMEPAD_A; break;
++        case 2: state.Gamepad.wButtons |= XINPUT_GAMEPAD_B; break;
++        case 3: state.Gamepad.wButtons |= XINPUT_GAMEPAD_X; break;
++        case 4: state.Gamepad.wButtons |= XINPUT_GAMEPAD_Y; break;
++        case 5: state.Gamepad.wButtons |= XINPUT_GAMEPAD_LEFT_SHOULDER; break;
++        case 6: state.Gamepad.wButtons |= XINPUT_GAMEPAD_RIGHT_SHOULDER; break;
++        case 7: state.Gamepad.wButtons |= XINPUT_GAMEPAD_BACK; break;
++        case 8: state.Gamepad.wButtons |= XINPUT_GAMEPAD_START; break;
++        case 9: state.Gamepad.wButtons |= XINPUT_GAMEPAD_LEFT_THUMB; break;
++        case 10: state.Gamepad.wButtons |= XINPUT_GAMEPAD_RIGHT_THUMB; break;
++        case 11: state.Gamepad.wButtons |= XINPUT_GAMEPAD_GUIDE; break;
+         }
+     }
+-    
+-    state->Gamepad.bLeftTrigger = (buttons & (1<<10)) ? 255 : 0;
+-    state->Gamepad.bRightTrigger = (buttons & (1<<11)) ? 255 : 0;
+ 
+-    switch (dpad)
++    status = HidP_GetUsageValue(HidP_Input, HID_USAGE_PAGE_GENERIC, 0, HID_USAGE_GENERIC_HATSWITCH, &value, controller->hid.preparsed, report_buf, report_len);
++    if (status != HIDP_STATUS_SUCCESS) WARN("HidP_GetUsageValue HID_USAGE_PAGE_GENERIC / HID_USAGE_GENERIC_HATSWITCH returned %#lx\n", status);
++    else switch (value)
+     {
+-    case 0: state->Gamepad.wButtons |= XINPUT_GAMEPAD_DPAD_UP; break;
+-    case 1: state->Gamepad.wButtons |= XINPUT_GAMEPAD_DPAD_UP | XINPUT_GAMEPAD_DPAD_RIGHT; break;
+-    case 2: state->Gamepad.wButtons |= XINPUT_GAMEPAD_DPAD_RIGHT; break;
+-    case 3: state->Gamepad.wButtons |= XINPUT_GAMEPAD_DPAD_RIGHT | XINPUT_GAMEPAD_DPAD_DOWN; break;
+-    case 4: state->Gamepad.wButtons |= XINPUT_GAMEPAD_DPAD_DOWN; break;
+-    case 5: state->Gamepad.wButtons |= XINPUT_GAMEPAD_DPAD_DOWN | XINPUT_GAMEPAD_DPAD_LEFT; break;
+-    case 6: state->Gamepad.wButtons |= XINPUT_GAMEPAD_DPAD_LEFT; break;
+-    case 7: state->Gamepad.wButtons |= XINPUT_GAMEPAD_DPAD_LEFT | XINPUT_GAMEPAD_DPAD_UP; break;
++    /* 8 1 2
++     * 7 0 3
++     * 6 5 4 */
++    case 0: break;
++    case 1: state.Gamepad.wButtons |= XINPUT_GAMEPAD_DPAD_UP; break;
++    case 2: state.Gamepad.wButtons |= XINPUT_GAMEPAD_DPAD_UP | XINPUT_GAMEPAD_DPAD_RIGHT; break;
++    case 3: state.Gamepad.wButtons |= XINPUT_GAMEPAD_DPAD_RIGHT; break;
++    case 4: state.Gamepad.wButtons |= XINPUT_GAMEPAD_DPAD_RIGHT | XINPUT_GAMEPAD_DPAD_DOWN; break;
++    case 5: state.Gamepad.wButtons |= XINPUT_GAMEPAD_DPAD_DOWN; break;
++    case 6: state.Gamepad.wButtons |= XINPUT_GAMEPAD_DPAD_DOWN | XINPUT_GAMEPAD_DPAD_LEFT; break;
++    case 7: state.Gamepad.wButtons |= XINPUT_GAMEPAD_DPAD_LEFT; break;
++    case 8: state.Gamepad.wButtons |= XINPUT_GAMEPAD_DPAD_LEFT | XINPUT_GAMEPAD_DPAD_UP; break;
+     }
+ 
+-    state->Gamepad.sThumbLX = thumb_lx;
+-    state->Gamepad.sThumbLY = -thumb_ly;
+-    state->Gamepad.sThumbRX = thumb_rx;
+-    state->Gamepad.sThumbRY = -thumb_ry;
+-    
+-    state->dwPacketNumber++;
++    status = HidP_GetUsageValue(HidP_Input, HID_USAGE_PAGE_GENERIC, 0, HID_USAGE_GENERIC_X, &value, controller->hid.preparsed, report_buf, report_len);
++    if (status != HIDP_STATUS_SUCCESS) WARN("HidP_GetUsageValue HID_USAGE_PAGE_GENERIC / HID_USAGE_GENERIC_X returned %#lx\n", status);
++    else state.Gamepad.sThumbLX = scale_value(value, &controller->hid.lx_caps, -32768, 32767);
++
++    status = HidP_GetUsageValue(HidP_Input, HID_USAGE_PAGE_GENERIC, 0, HID_USAGE_GENERIC_Y, &value, controller->hid.preparsed, report_buf, report_len);
++    if (status != HIDP_STATUS_SUCCESS) WARN("HidP_GetUsageValue HID_USAGE_PAGE_GENERIC / HID_USAGE_GENERIC_Y returned %#lx\n", status);
++    else state.Gamepad.sThumbLY = -scale_value(value, &controller->hid.ly_caps, -32768, 32767) - 1;
++
++    status = HidP_GetUsageValue(HidP_Input, HID_USAGE_PAGE_GENERIC, 0, HID_USAGE_GENERIC_RX, &value, controller->hid.preparsed, report_buf, report_len);
++    if (status != HIDP_STATUS_SUCCESS) WARN("HidP_GetUsageValue HID_USAGE_PAGE_GENERIC / HID_USAGE_GENERIC_RX returned %#lx\n", status);
++    else state.Gamepad.sThumbRX = scale_value(value, &controller->hid.rx_caps, -32768, 32767);
++
++    status = HidP_GetUsageValue(HidP_Input, HID_USAGE_PAGE_GENERIC, 0, HID_USAGE_GENERIC_RY, &value, controller->hid.preparsed, report_buf, report_len);
++    if (status != HIDP_STATUS_SUCCESS) WARN("HidP_GetUsageValue HID_USAGE_PAGE_GENERIC / HID_USAGE_GENERIC_RY returned %#lx\n", status);
++    else state.Gamepad.sThumbRY = -scale_value(value, &controller->hid.ry_caps, -32768, 32767) - 1;
++
++    status = HidP_GetUsageValue(HidP_Input, HID_USAGE_PAGE_GENERIC, 0, HID_USAGE_GENERIC_RZ, &value, controller->hid.preparsed, report_buf, report_len);
++    if (status != HIDP_STATUS_SUCCESS) WARN("HidP_GetUsageValue HID_USAGE_PAGE_GENERIC / HID_USAGE_GENERIC_RZ returned %#lx\n", status);
++    else state.Gamepad.bRightTrigger = scale_value(value, &controller->hid.rt_caps, 0, 255);
++
++    status = HidP_GetUsageValue(HidP_Input, HID_USAGE_PAGE_GENERIC, 0, HID_USAGE_GENERIC_Z, &value, controller->hid.preparsed, report_buf, report_len);
++    if (status != HIDP_STATUS_SUCCESS) WARN("HidP_GetUsageValue HID_USAGE_PAGE_GENERIC / HID_USAGE_GENERIC_Z returned %#lx\n", status);
++    else state.Gamepad.bLeftTrigger = scale_value(value, &controller->hid.lt_caps, 0, 255);
++
++    EnterCriticalSection(&controller->crit);
++    if (controller->enabled)
++    {
++        state.dwPacketNumber = controller->state.dwPacketNumber + 1;
++        controller->state = state;
++        memset(&controller->hid.read_ovl, 0, sizeof(controller->hid.read_ovl));
++        controller->hid.read_ovl.hEvent = controller->hid.read_event;
++        ret = ReadFile(controller->device, report_buf, report_len, NULL, &controller->hid.read_ovl);
++        if (!ret && GetLastError() != ERROR_IO_PENDING) controller_destroy(controller, TRUE);
++    }
+     LeaveCriticalSection(&controller->crit);
+ }
+ 
+-static void update_controller_list(char *data)
++static LRESULT CALLBACK xinput_devnotify_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
+ {
+-    int i, j;
+-    BOOL connected;
+-    BOOL vibration;
+-
+-    for (i = 0, j = 0; i < XUSER_MAX_COUNT; i++, j += 2)
++    if (msg == WM_DEVICECHANGE)
+     {
+-        connected = data[j+0] == 1;
+-        vibration = data[j+1] == 1;
+-        EnterCriticalSection(&controllers[i].crit);
+-        
+-        if (connected)
+-        {
+-            controller_init(&controllers[i], vibration);
+-        }
+-        else controller_reset(&controllers[i]);
+-
+-        LeaveCriticalSection(&controllers[i].crit);
++        DEV_BROADCAST_DEVICEINTERFACE_W *iface = (DEV_BROADCAST_DEVICEINTERFACE_W *)lparam;
++        if (wparam == DBT_DEVICEARRIVAL) try_add_device(iface->dbcc_name);
++        if (wparam == DBT_DEVICEREMOVECOMPLETE) try_remove_device(iface->dbcc_name);
+     }
++
++    return DefWindowProcW(hwnd, msg, wparam, lparam);
+ }
+ 
+-static DWORD WINAPI controller_read_thread_proc(void *param) 
++static DWORD WINAPI hid_update_thread_proc(void *param)
+ {
+-    int res;
+-    char buffer[16];
+-    BOOL started = FALSE;
+-    DWORD curr_time, last_time;
+-
+-    SetThreadDescription(GetCurrentThread(), L"wine_xinput_controller_read");
+-    if (server_sock == INVALID_SOCKET && !create_server_socket()) 
++    struct xinput_controller *devices[XUSER_MAX_COUNT + 1];
++    HANDLE events[XUSER_MAX_COUNT + 1];
++    DWORD i, count = 1, ret = WAIT_TIMEOUT;
++    DEV_BROADCAST_DEVICEINTERFACE_W filter =
+     {
+-        SetEvent(start_event);
+-        return 0;
+-    }
++        .dbcc_size = sizeof(DEV_BROADCAST_DEVICEINTERFACE_W),
++        .dbcc_devicetype = DBT_DEVTYP_DEVICEINTERFACE,
++        .dbcc_classguid = GUID_DEVINTERFACE_WINEXINPUT,
++    };
++    WNDCLASSEXW cls =
++    {
++        .cbSize = sizeof(WNDCLASSEXW),
++        .hInstance = xinput_instance,
++        .lpszClassName = L"__wine_xinput_devnotify",
++        .lpfnWndProc = xinput_devnotify_wndproc,
++    };
++    HDEVNOTIFY notif;
++    HWND hwnd;
++    MSG msg;
++
++    SetThreadDescription(GetCurrentThread(), L"wine_xinput_hid_update");
+ 
+-    get_gamepad_request();
++    RegisterClassExW(&cls);
++    hwnd = CreateWindowExW(0, cls.lpszClassName, NULL, 0, 0, 0, 0, 0,
++                           HWND_MESSAGE, NULL, NULL, NULL);
++    notif = RegisterDeviceNotificationW(hwnd, &filter, DEVICE_NOTIFY_WINDOW_HANDLE);
+ 
+-    last_time = GetCurrentTime();
+-    while (thread_running)
++    update_controller_list();
++    SetEvent(start_event);
++
++    do
+     {
+-        res = recvfrom(server_sock, buffer, 16, 0, NULL, NULL);
+-        if (res <= 0)
+-        {
+-            if (WSAGetLastError() != WSAEWOULDBLOCK) break;
+-            
+-            curr_time = GetCurrentTime();
+-            if ((curr_time - last_time) >= 2000 || force_update)
+-            {
+-                get_gamepad_request();
+-                last_time = curr_time;
+-                force_update = FALSE;
+-            }
+-            
+-            Sleep(16);
+-            continue;
+-        }
+-        
+-        if (buffer[0] == REQUEST_CODE_GET_GAMEPAD) 
+-        {
+-            update_controller_list(buffer + 1);
++        if (ret == count) while (PeekMessageW(&msg, hwnd, 0, 0, PM_REMOVE)) DispatchMessageW(&msg);
++        if (ret == WAIT_TIMEOUT) update_controller_list();
++        if (ret < count - 1) read_controller_state(devices[ret]);
+ 
+-            if (!started) 
+-            {
+-                started = TRUE;
+-                SetEvent(start_event);    
+-            }
+-        }
+-        else if (buffer[0] == REQUEST_CODE_GET_GAMEPAD_STATE)
++        count = 0;
++        for (i = 0; i < XUSER_MAX_COUNT; ++i)
+         {
+-            int i;
+-            char slot = buffer[1];
+-            
+-            for (i = 0; i < XUSER_MAX_COUNT; i++)
++            if (!controllers[i].device) continue;
++            EnterCriticalSection(&controllers[i].crit);
++            if (controllers[i].enabled)
+             {
+-                if (i == slot && controllers[i].connected)
+-                {
+-                    controller_update_state(&controllers[i], buffer + 2);
+-                    break;
+-                }
++                devices[count] = controllers + i;
++                events[count] = controllers[i].hid.read_event;
++                count++;
+             }
++            LeaveCriticalSection(&controllers[i].crit);
+         }
++        events[count++] = update_event;
+     }
++    while ((ret = MsgWaitForMultipleObjectsEx(count, events, 2000, QS_ALLINPUT, MWMO_ALERTABLE)) <= count ||
++            ret == WAIT_TIMEOUT);
+ 
+-    return 0;
++    ERR("wait failed in the update thread, ret %lu, error %lu\n", ret, GetLastError());
++
++    UnregisterDeviceNotification(notif);
++    DestroyWindow(hwnd);
++    UnregisterClassW(cls.lpszClassName, xinput_instance);
++
++    FreeLibraryAndExitThread(xinput_instance, ret);
+ }
+ 
+-static BOOL WINAPI start_read_thread_once(INIT_ONCE *once, void *param, void **context)
++static BOOL WINAPI start_update_thread_once( INIT_ONCE *once, void *param, void **context )
+ {
+     HANDLE thread;
++    HMODULE module;
+ 
+-    thread_running = TRUE;
++    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, (void*)hid_update_thread_proc, &module))
++        WARN("Failed to increase module's reference count, error: %lu\n", GetLastError());
+ 
+     start_event = CreateEventA(NULL, FALSE, FALSE, NULL);
+-    if (!start_event) ERR("failed to create start event, error %lu\n", GetLastError());   
++    if (!start_event) ERR("failed to create start event, error %lu\n", GetLastError());
+ 
+-    thread = CreateThread(NULL, 0, controller_read_thread_proc, NULL, 0, NULL);
+-    if (!thread) ERR("failed to create read thread, error %lu\n", GetLastError());
+-    CloseHandle(thread);
++    update_event = CreateEventA(NULL, FALSE, FALSE, NULL);
++    if (!update_event) ERR("failed to create update event, error %lu\n", GetLastError());
+ 
+-    WaitForSingleObject(start_event, 2000);
+-    CloseHandle(start_event);
++    thread = CreateThread(NULL, 0, hid_update_thread_proc, NULL, 0, NULL);
++    if (!thread) ERR("failed to create update thread, error %lu\n", GetLastError());
++    CloseHandle(thread);
+ 
++    WaitForSingleObject(start_event, INFINITE);
+     return TRUE;
+ }
+ 
+-static void start_read_thread(void)
++static void start_update_thread(void)
+ {
+     static INIT_ONCE init_once = INIT_ONCE_STATIC_INIT;
+-    InitOnceExecuteOnce(&init_once, start_read_thread_once, NULL, NULL);
++    InitOnceExecuteOnce(&init_once, start_update_thread_once, NULL, NULL);
+ }
+ 
+ static BOOL controller_lock(struct xinput_controller *controller)
+ {
+-    if (!controller->connected) return FALSE;
++    if (!controller->device) return FALSE;
+ 
+     EnterCriticalSection(&controller->crit);
+ 
+-    if (!controller->connected)
++    if (!controller->device)
+     {
+         LeaveCriticalSection(&controller->crit);
+         return FALSE;
+@@ -491,12 +788,9 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved)
+     switch (reason)
+     {
+     case DLL_PROCESS_ATTACH:
++        xinput_instance = inst;
+         DisableThreadLibraryCalls(inst);
+         break;
+-    case DLL_PROCESS_DETACH:
+-        if (reserved) break;
+-        destroy_controllers();
+-        break;
+     }
+     return TRUE;
+ }
+@@ -504,7 +798,6 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved)
+ void WINAPI DECLSPEC_HOTPATCH XInputEnable(BOOL enable)
+ {
+     int index;
+-    XINPUT_VIBRATION state = {0};
+ 
+     TRACE("enable %d.\n", enable);
+ 
+@@ -512,25 +805,15 @@ void WINAPI DECLSPEC_HOTPATCH XInputEnable(BOOL enable)
+     to the controllers. Setting to true will send the last vibration
+     value (sent to XInputSetState) to the controller and allow messages to
+     be sent */
+-    start_read_thread();
++    start_update_thread();
+ 
+     for (index = 0; index < XUSER_MAX_COUNT; index++)
+     {
+         if (!controller_lock(&controllers[index])) continue;
+-
+-        if (enable)
+-        {
+-            controllers[index].enabled = TRUE;
+-        }
+-        else {
+-            controller_set_state(index, &state);
+-            controllers[index].enabled = FALSE;
+-        }
+-
++        if (enable) controller_enable(&controllers[index]);
++        else controller_disable(&controllers[index]);
+         controller_unlock(&controllers[index]);
+     }
+-
+-    force_update = TRUE;
+ }
+ 
+ DWORD WINAPI DECLSPEC_HOTPATCH XInputSetState(DWORD index, XINPUT_VIBRATION *vibration)
+@@ -539,15 +822,15 @@ DWORD WINAPI DECLSPEC_HOTPATCH XInputSetState(DWORD index, XINPUT_VIBRATION *vib
+ 
+     TRACE("index %lu, vibration %p.\n", index, vibration);
+ 
+-    updated_once = TRUE;
+-    start_read_thread();
++    start_update_thread();
+ 
+     if (index >= XUSER_MAX_COUNT) return ERROR_BAD_ARGUMENTS;
+     if (!controller_lock(&controllers[index])) return ERROR_DEVICE_NOT_CONNECTED;
+ 
+-    ret = controller_set_state(index, vibration);
++    ret = HID_set_state(&controllers[index], vibration);
+ 
+     controller_unlock(&controllers[index]);
++
+     return ret;
+ }
+ 
+@@ -555,17 +838,16 @@ DWORD WINAPI DECLSPEC_HOTPATCH XInputSetState(DWORD index, XINPUT_VIBRATION *vib
+  * XInputGetState() in the hook, so we need a wrapper. */
+ static DWORD xinput_get_state(DWORD index, XINPUT_STATE *state)
+ {
+-    if (!state || index >= XUSER_MAX_COUNT) return ERROR_BAD_ARGUMENTS;
++    if (!state) return ERROR_BAD_ARGUMENTS;
+ 
+-    updated_once = TRUE;
+-    start_read_thread();
++    start_update_thread();
+ 
+-    if (index < xinput_min_index) xinput_min_index = index;
+-    if (index == xinput_min_index) index = 0;
++    if (index >= XUSER_MAX_COUNT) return ERROR_BAD_ARGUMENTS;
+     if (!controller_lock(&controllers[index])) return ERROR_DEVICE_NOT_CONNECTED;
+ 
+     *state = controllers[index].state;
+     controller_unlock(&controllers[index]);
++
+     return ERROR_SUCCESS;
+ }
+ 
+@@ -712,7 +994,7 @@ static DWORD check_for_keystroke(const DWORD index, XINPUT_KEYSTROKE *keystroke)
+         /* note: guide button does not send an event */
+     };
+ 
+-    if (!controller_lock(controller)) return ERROR_DEVICE_NOT_CONNECTED;    
++    if (!controller_lock(controller)) return ERROR_DEVICE_NOT_CONNECTED;
+ 
+     cur = &controller->state.Gamepad;
+ 
+@@ -807,9 +1089,8 @@ DWORD WINAPI DECLSPEC_HOTPATCH XInputGetCapabilities(DWORD index, DWORD flags, X
+     XINPUT_CAPABILITIES_EX caps_ex;
+     DWORD ret;
+ 
+-    TRACE("index %lu, flags %#lx, capabilities %p.\n", index, flags, capabilities);
++    ret = XInputGetCapabilitiesEx(1, index, flags, &caps_ex);
+ 
+-    ret = XInputGetCapabilitiesEx(0, index, flags, &caps_ex);
+     if (!ret) *capabilities = caps_ex.Capabilities;
+ 
+     return ret;
+@@ -821,7 +1102,7 @@ DWORD WINAPI DECLSPEC_HOTPATCH XInputGetDSoundAudioDeviceGuids(DWORD index, GUID
+           debugstr_guid(capture_guid));
+ 
+     if (index >= XUSER_MAX_COUNT) return ERROR_BAD_ARGUMENTS;
+-    if (!controllers[index].connected) return ERROR_DEVICE_NOT_CONNECTED;
++    if (!controllers[index].device) return ERROR_DEVICE_NOT_CONNECTED;
+ 
+     return ERROR_NOT_SUPPORTED;
+ }
+@@ -833,31 +1114,37 @@ DWORD WINAPI DECLSPEC_HOTPATCH XInputGetBatteryInformation(DWORD index, BYTE typ
+     if (!once++) FIXME("index %lu, type %u, battery %p.\n", index, type, battery);
+ 
+     if (index >= XUSER_MAX_COUNT) return ERROR_BAD_ARGUMENTS;
+-    if (!controllers[index].connected) return ERROR_DEVICE_NOT_CONNECTED;
++    if (!controllers[index].device) return ERROR_DEVICE_NOT_CONNECTED;
+ 
+     return ERROR_NOT_SUPPORTED;
+ }
+ 
+ DWORD WINAPI DECLSPEC_HOTPATCH XInputGetCapabilitiesEx(DWORD unk, DWORD index, DWORD flags, XINPUT_CAPABILITIES_EX *caps)
+ {
++    HIDD_ATTRIBUTES attr;
+     DWORD ret = ERROR_SUCCESS;
+-    
++
+     TRACE("unk %lu, index %lu, flags %#lx, capabilities %p.\n", unk, index, flags, caps);
+ 
+-    start_read_thread();
++    start_update_thread();
+ 
+     if (index >= XUSER_MAX_COUNT) return ERROR_BAD_ARGUMENTS;
++
+     if (!controller_lock(&controllers[index])) return ERROR_DEVICE_NOT_CONNECTED;
+ 
+-    if (flags & XINPUT_FLAG_GAMEPAD && controllers[index].caps.SubType != XINPUT_DEVSUBTYPE_GAMEPAD) 
++    if (flags & XINPUT_FLAG_GAMEPAD && controllers[index].caps.SubType != XINPUT_DEVSUBTYPE_GAMEPAD)
++        ret = ERROR_DEVICE_NOT_CONNECTED;
++    else if (!HidD_GetAttributes(controllers[index].device, &attr))
+         ret = ERROR_DEVICE_NOT_CONNECTED;
+     else
+     {
+         caps->Capabilities = controllers[index].caps;
+-        caps->VendorId = 0x045E; // Wireless Xbox 360 Controller
+-        caps->ProductId = 0x02A1;
++        caps->VendorId = attr.VendorID;
++        caps->ProductId = attr.ProductID;
++        caps->VersionNumber = attr.VersionNumber;
+     }
+ 
+     controller_unlock(&controllers[index]);
++
+     return ret;
+-}
+\ No newline at end of file
++}
+diff --git a/dlls/xinput1_4/Makefile.in b/dlls/xinput1_4/Makefile.in
+index a834edf..69d6b9c 100755
+--- a/dlls/xinput1_4/Makefile.in
++++ b/dlls/xinput1_4/Makefile.in
+@@ -1,5 +1,5 @@
+ MODULE    = xinput1_4.dll
+-IMPORTS   = hid setupapi advapi32 user32 ws2_32
++IMPORTS   = hid setupapi advapi32 user32
+ PARENTSRC = ../xinput1_3
+ 
+ SOURCES = \
+diff --git a/dlls/xinput9_1_0/Makefile.in b/dlls/xinput9_1_0/Makefile.in
+index 915171b..d5f2adf 100755
+--- a/dlls/xinput9_1_0/Makefile.in
++++ b/dlls/xinput9_1_0/Makefile.in
+@@ -1,5 +1,5 @@
+ MODULE    = xinput9_1_0.dll
+-IMPORTS   = hid setupapi advapi32 user32 ws2_32
++IMPORTS   = hid setupapi advapi32 user32
+ PARENTSRC = ../xinput1_3
+ 
+ SOURCES = \
+diff --git a/dlls/xinputuap/Makefile.in b/dlls/xinputuap/Makefile.in
+index 28d5401..290f083 100755
+--- a/dlls/xinputuap/Makefile.in
++++ b/dlls/xinputuap/Makefile.in
+@@ -1,5 +1,5 @@
+ MODULE    = xinputuap.dll
+-IMPORTS   = hid setupapi advapi32 user32 ws2_32
++IMPORTS   = hid setupapi advapi32 user32
+ PARENTSRC = ../xinput1_3
+ 
+ SOURCES = \
+-- 
+2.55.0
+

@@ -1,0 +1,25 @@
+From f7c7cecd79f4da546648a7fc0224e8d3bb657f24 Mon Sep 17 00:00:00 2001
+From: BrunoSX <brunodeveloper85@gmail.com>
+Date: Mon, 29 Jun 2026 17:17:01 -0300
+Subject: [PATCH 42/47] mf: Add a NULL check for the audio client
+
+---
+ dlls/mf/sar.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/dlls/mf/sar.c b/dlls/mf/sar.c
+index 19e4eed..206960f 100755
+--- a/dlls/mf/sar.c
++++ b/dlls/mf/sar.c
+@@ -1458,7 +1458,7 @@ static HRESULT WINAPI audio_renderer_stream_Flush(IMFStreamSink *iface)
+         }
+     }
+     renderer->queued_frames = 0;
+-    if (FAILED(hr = IAudioClient_Reset(renderer->audio_client)))
++    if (renderer->audio_client && FAILED(hr = IAudioClient_Reset(renderer->audio_client)))
+         WARN("Failed to reset audio client, hr %#lx.\n", hr);
+     LeaveCriticalSection(&renderer->cs);
+ 
+-- 
+2.55.0
+

@@ -1,7 +1,7 @@
 From 86fd3a30ccace1637714c4fa84bb112ad2a737a3 Mon Sep 17 00:00:00 2001
 From: BrunoSX <brunodeveloper85@gmail.com>
 Date: Thu, 25 Sep 2025 16:47:27 -0300
-Subject: [PATCH 32/40] comdlg32: Add New Folder button
+Subject: [PATCH 32/47] comdlg32: Add New Folder button
 
 ---
  dlls/comdlg32/Makefile.in        |    4 -
@@ -2580,5 +2580,5 @@ index 911d64c..0000000
 - <image id="icon:32-4" xlink:href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgBAMAAACBVGfHAAAAAXNSR0IArs4c6QAAAA9QTFRFZXQt ////f39/AAB/wMDARmQiZQAAAAF0Uk5TAEDm2GYAAAABYktHRACIBR1IAAAACXBIWXMAAA3XAAAN 1wFCKJt4AAAAB3RJTUUH2gQWFTENXYIh/gAAAGNJREFUKM/N0s0NgDAIBWDiBggDWDcgrws07L+T rdEGvHjUd/wSfkIgomWf2Wik8Mz6OYi9gdcHVGRQQ0sg7JbAWWoCY0UERU8LINfgCT76RhgNtdfc oOfeAYAuDvzgyBHyOxzx7CJGBKXSjAAAAABJRU5ErkJggg== " height="32" width="32" y="8" x="88"/>
 -</svg>
 -- 
-2.53.0
+2.55.0
 

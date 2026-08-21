@@ -1,7 +1,7 @@
 From 14b3e5684c73d041375fd83143284162b59f1ea4 Mon Sep 17 00:00:00 2001
 From: BrunoSX <brunodeveloper85@gmail.com>
 Date: Thu, 25 Sep 2025 16:46:45 -0300
-Subject: [PATCH 31/40] win32u: Do not duplicate explorer
+Subject: [PATCH 31/47] win32u: Do not duplicate explorer
 
 ---
  dlls/win32u/winstation.c | 8 ++++++--
@@ -41,5 +41,5 @@ index eaa5f40..abd14b3 100755
      {
          buffer = malloc( params->Desktop.Length + sizeof(WCHAR) );
 -- 
-2.53.0
+2.55.0
 

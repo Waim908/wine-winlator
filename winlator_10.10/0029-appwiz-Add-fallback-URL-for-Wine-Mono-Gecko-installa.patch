@@ -1,7 +1,7 @@
 From e304bb7ea01f379433d8a26ae0b1d90643037240 Mon Sep 17 00:00:00 2001
 From: BrunoSX <brunodeveloper85@gmail.com>
 Date: Tue, 23 Sep 2025 16:11:21 -0300
-Subject: [PATCH 29/40] appwiz: Add fallback URL for Wine Mono/Gecko
+Subject: [PATCH 29/47] appwiz: Add fallback URL for Wine Mono/Gecko
  installation
 
 ---
@@ -90,5 +90,5 @@ index 9e9ed5c..51fe206 100755
  found:
      if (returned_size > sizeof(httpW) && !memcmp(url, httpW, sizeof(httpW))) append_url_params( url );
 -- 
-2.53.0
+2.55.0
 

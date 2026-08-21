@@ -1,7 +1,7 @@
 From 82078144c53fc36ad2fc10c338e7886602cb879c Mon Sep 17 00:00:00 2001
 From: BrunoSX <brunodeveloper85@gmail.com>
 Date: Thu, 25 Sep 2025 16:51:00 -0300
-Subject: [PATCH 34/40] winex11: Do not use additional extensions by default
+Subject: [PATCH 34/47] winex11: Do not use additional extensions by default
 
 ---
  dlls/winex11.drv/mouse.c       | 1 +
@@ -91,5 +91,5 @@ index dd762f2..d0a26e6 100755
    xf86vm_handler.priority = 100;
    xf86vm_handler.get_id = xf86vm_get_id;
 -- 
-2.53.0
+2.55.0
 

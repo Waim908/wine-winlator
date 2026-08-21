@@ -1,7 +1,7 @@
 From e800c38ac8ff3e76960ce8a2236f10ed9f7bc3e9 Mon Sep 17 00:00:00 2001
 From: BrunoSX <brunodeveloper85@gmail.com>
 Date: Tue, 23 Sep 2025 13:33:07 -0300
-Subject: [PATCH 17/40] ntdll: Add WINEOVERRIDEAFFINITYMASK env to override
+Subject: [PATCH 17/47] ntdll: Add WINEOVERRIDEAFFINITYMASK env to override
  process affinity
 
 ---
@@ -61,5 +61,5 @@ index 36ffe20..a1e9f35 100755
              ret = wine_server_call( req );
          }
 -- 
-2.53.0
+2.55.0
 

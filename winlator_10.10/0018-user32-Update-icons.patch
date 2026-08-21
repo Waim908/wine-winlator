@@ -1,7 +1,7 @@
 From b9f76cf039df3244a569e46ad496fb40313a7e86 Mon Sep 17 00:00:00 2001
 From: BrunoSX <brunodeveloper85@gmail.com>
 Date: Tue, 23 Sep 2025 13:56:14 -0300
-Subject: [PATCH 18/40] user32: Update icons
+Subject: [PATCH 18/47] user32: Update icons
 
 ---
  dlls/user32/Makefile.in                   |   23 -
@@ -10405,5 +10405,5 @@ index 1d3b7f8..0000000
 -  </g>
 -</svg>
 -- 
-2.53.0
+2.55.0
 

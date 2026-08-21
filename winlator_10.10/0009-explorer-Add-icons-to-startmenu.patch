@@ -1,7 +1,7 @@
 From cb9eff0a289d1b8be9d3d0a3aa3821741817ef68 Mon Sep 17 00:00:00 2001
 From: BrunoSX <brunodeveloper85@gmail.com>
 Date: Mon, 22 Sep 2025 17:46:00 -0300
-Subject: [PATCH 09/40] explorer: Add icons to startmenu
+Subject: [PATCH 09/47] explorer: Add icons to startmenu
 
 ---
  programs/explorer/desktop.c   |  12 ++--
@@ -334,5 +334,5 @@ index fcbceb6..c4599f2 100755
  
      add_taskbar_button( 0 );
 -- 
-2.53.0
+2.55.0
 

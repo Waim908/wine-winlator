@@ -1,7 +1,7 @@
 From 7005b80d4a732fcf8982a03265e205ba29781454 Mon Sep 17 00:00:00 2001
 From: BrunoSX <brunodeveloper85@gmail.com>
 Date: Tue, 23 Sep 2025 15:05:51 -0300
-Subject: [PATCH 22/40] explorer: Add nogui option
+Subject: [PATCH 22/47] explorer: Add nogui option
 
 ---
  programs/explorer/desktop.c | 27 +++++++++++++++++++--------
@@ -95,5 +95,5 @@ index 693e2ff..e3c92f2 100755
  
          if ((shell32 = LoadLibraryW( L"shell32.dll" )) &&
 -- 
-2.53.0
+2.55.0
 

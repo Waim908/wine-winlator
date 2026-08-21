@@ -1,0 +1,57 @@
+From 9450b93697bfbeba79cc42ed6ac116419bfe4a7e Mon Sep 17 00:00:00 2001
+From: BrunoSX <brunodeveloper85@gmail.com>
+Date: Thu, 30 Jul 2026 10:47:52 -0300
+Subject: [PATCH 47/47] loader: Add WINPREEXEC env
+
+---
+ loader/main.c | 27 +++++++++++++++++++++++++++
+ 1 file changed, 27 insertions(+)
+
+diff --git a/loader/main.c b/loader/main.c
+index f8b113f..7e7c541 100755
+--- a/loader/main.c
++++ b/loader/main.c
+@@ -31,6 +31,8 @@
+ #include <unistd.h>
+ #include <dlfcn.h>
+ #include <limits.h>
++#include <spawn.h>
++#include <wait.h>
+ #ifdef HAVE_SYS_SYSCTL_H
+ # include <sys/sysctl.h>
+ #endif
+@@ -175,6 +177,31 @@ int main( int argc, char *argv[] )
+ {
+     void *handle;
+ 
++    if (getenv( "WINPREEXEC" ) && argc > 1)
++    {
++        pid_t pid = fork();
++        if (pid < 0)
++        {
++            fprintf( stderr, "wine: fork failed\n" );
++            exit(1);
++        }
++        else if (pid == 0)
++        {
++            char *preexec = getenv( "WINPREEXEC" );
++            char *new_argv[] = { preexec, argv[1], NULL };
++
++            execvp( preexec, new_argv );
++            fprintf( stderr, "wine: could not pre exec %s\n", preexec );
++            exit(1);
++        }
++        else
++        {
++            int status;
++            waitpid( pid, &status, 0 );
++            if (WIFEXITED(status) && WEXITSTATUS(status) == 2) exit(1);
++        }
++    }
++
+     init_reserved_areas();
+ 
+     if ((handle = try_dlopen( get_self_exe() )) ||
+-- 
+2.55.0
+

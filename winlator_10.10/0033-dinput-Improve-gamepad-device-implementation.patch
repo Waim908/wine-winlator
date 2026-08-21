@@ -1,7 +1,7 @@
 From b9497e93e8c5008ba47d1ad4e1b3d4851563453e Mon Sep 17 00:00:00 2001
 From: BrunoSX <brunodeveloper85@gmail.com>
 Date: Thu, 25 Sep 2025 16:49:31 -0300
-Subject: [PATCH 33/40] dinput: Improve gamepad device implementation
+Subject: [PATCH 33/47] dinput: Improve gamepad device implementation
 
 ---
  dlls/dinput/gamepad.c | 10 +++++++++-
@@ -32,5 +32,5 @@ index d89ac8c..4c3844c
          LeaveCriticalSection( &gamepads[i].crit );
  
 -- 
-2.53.0
+2.55.0
 

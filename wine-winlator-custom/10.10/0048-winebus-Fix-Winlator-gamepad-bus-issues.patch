@@ -1,0 +1,96 @@
+From 9cb1187bdfa527b4fd00fd663af8bfc7ea61115e Mon Sep 17 00:00:00 2001
+From: Waim908 <waimxj449@foxmail.com>
+Date: Fri, 21 Aug 2026 23:24:30 +0800
+Subject: [PATCH] winebus: Fix Winlator gamepad bus issues
+
+Fix a NULL pointer crash in gamepad_set_state when a state packet
+arrives for an unconnected slot, return a proper error status when
+adding haptics fails, clamp the product name length to avoid an
+out-of-bounds write, and skip the hidraw preference filtering for
+synthetic devices so emulated gamepad models (e.g. DualShock 4) are
+not dropped before reaching dinput.
+---
+ dlls/winebus.sys/bus_winlator.c | 18 +++++++++++++++---
+ dlls/winebus.sys/main.c         |  2 +-
+ dlls/winebus.sys/unixlib.h      |  1 +
+ 3 files changed, 17 insertions(+), 4 deletions(-)
+
+diff --git a/dlls/winebus.sys/bus_winlator.c b/dlls/winebus.sys/bus_winlator.c
+index fb32dd4..b2c1403 100644
+--- a/dlls/winebus.sys/bus_winlator.c
++++ b/dlls/winebus.sys/bus_winlator.c
+@@ -304,7 +304,7 @@ static NTSTATUS build_gamepad_report_descriptor(struct unix_device *iface)
+     if (impl->vibration)
+     {
+         if (!hid_device_add_haptics(&impl->unix_device))
+-            return FALSE;
++            return STATUS_UNSUCCESSFUL;
+     }
+ 
+     if (!hid_device_end_report_descriptor(iface))
+@@ -326,12 +326,15 @@ static void gamepad_create(int index, char *data)
+         .vid = *(short*)(data + 3),
+         .pid = *(short*)(data + 5),
+         .is_gamepad = FALSE,
++        .is_synthetic = TRUE,
+     };
+     int name_len = data[7];
+     char* name = data + 8;
+     char buffer[ARRAY_SIZE(desc.product)];
+     struct gamepad *impl;
+ 
++    if (name_len < 0 || name_len >= ARRAY_SIZE(desc.product)) name_len = 0;
++
+     snprintf(buffer, sizeof(buffer), "%s.%d", GAMEPAD_GUID, index);
+     ntdll_umbstowcs(buffer, strlen(buffer) + 1, desc.serialnumber, ARRAY_SIZE(desc.serialnumber));
+     ntdll_umbstowcs(name, name_len, desc.product, ARRAY_SIZE(desc.product));
+@@ -391,10 +394,19 @@ static void gamepad_set_state(int slot, char *data)
+     BOOL pressed;
+     short buttons, axis_value;
+     struct gamepad *impl = find_device_from_index(slot);
+-    struct unix_device *iface = &impl->unix_device;
+-    struct hid_device_state *state = &iface->hid_device_state;
++    struct unix_device *iface;
++    struct hid_device_state *state;
+     LONG dpad_x = 0, dpad_y = 0;
+ 
++    if (!impl)
++    {
++        WARN("No device with index %d, can't set state\n", slot);
++        return;
++    }
++
++    iface = &impl->unix_device;
++    state = &iface->hid_device_state;
++
+     if (impl->state != GAMEPAD_STATE_STARTED)
+     {
+         WARN("Device %p with index %d is stopped, can't set state\n", impl, slot);
+diff --git a/dlls/winebus.sys/main.c b/dlls/winebus.sys/main.c
+index c6a6d57..986d33c 100755
+--- a/dlls/winebus.sys/main.c
++++ b/dlls/winebus.sys/main.c
+@@ -841,7 +841,7 @@ static DWORD CALLBACK bus_main_thread(void *args)
+             UINT buttons;
+ 
+             usages = get_device_usages(event->device, &buttons);
+-            if (!desc.is_hidraw != !is_hidraw_enabled(desc.vid, desc.pid, &usages, buttons))
++            if (!desc.is_synthetic && !desc.is_hidraw != !is_hidraw_enabled(desc.vid, desc.pid, &usages, buttons))
+             {
+                 struct device_remove_params params = {.device = event->device};
+                 WARN("ignoring %shidraw device %04x:%04x with usages %04x:%04x\n", desc.is_hidraw ? "" : "non-",
+diff --git a/dlls/winebus.sys/unixlib.h b/dlls/winebus.sys/unixlib.h
+index 03323e5..2510506 100755
+--- a/dlls/winebus.sys/unixlib.h
++++ b/dlls/winebus.sys/unixlib.h
+@@ -41,6 +41,7 @@ struct device_desc
+     BOOL is_gamepad;
+     BOOL is_hidraw;
+     BOOL is_bluetooth;
++    BOOL is_synthetic;
+ 
+     WCHAR manufacturer[MAX_PATH];
+     WCHAR product[MAX_PATH];
+-- 
+2.55.0
+

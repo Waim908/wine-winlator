@@ -1,7 +1,7 @@
 From 41b704f7f1638d52a72139724d5ab49c5028c98a Mon Sep 17 00:00:00 2001
 From: BrunoSX <brunodeveloper85@gmail.com>
 Date: Tue, 30 Sep 2025 16:46:56 -0300
-Subject: [PATCH 35/40] Remove NtUserRegisterWindowMessage implementation
+Subject: [PATCH 35/47] Remove NtUserRegisterWindowMessage implementation
 
 ---
  dlls/user32/clipboard.c     |  18 +-
@@ -889,5 +889,5 @@ index 6eba130..49bf0d0 100755
  W32KAPI INT     WINAPI NtUserReleaseDC( HWND hwnd, HDC hdc );
  W32KAPI BOOL    WINAPI NtUserRemoveClipboardFormatListener( HWND hwnd );
 -- 
-2.53.0
+2.55.0
 

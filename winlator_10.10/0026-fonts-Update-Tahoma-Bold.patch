@@ -1,7 +1,7 @@
 From f7d8fa47213cb03c254b2643b5fff1524e5f2b3e Mon Sep 17 00:00:00 2001
 From: BrunoSX <brunodeveloper85@gmail.com>
 Date: Tue, 23 Sep 2025 15:26:08 -0300
-Subject: [PATCH 26/40] fonts: Update Tahoma Bold
+Subject: [PATCH 26/47] fonts: Update Tahoma Bold
 
 ---
  fonts/tahomabd.ttf | Bin 137272 -> 355436 bytes
@@ -6352,5 +6352,5 @@ z;R}iiP&p0i<AUNBlx{)o5zsyWedwGSD6T<m2v8pb)ZYd5r9k})kbY47fcnj#_5PrB
 JARzNFFaYZ=OiTa(
 
 -- 
-2.53.0
+2.55.0
 

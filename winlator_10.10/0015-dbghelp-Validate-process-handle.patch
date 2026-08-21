@@ -1,7 +1,7 @@
 From 61fe8ba96a4ac1b3530224b88febca0151d76d75 Mon Sep 17 00:00:00 2001
 From: BrunoSX <brunodeveloper85@gmail.com>
 Date: Tue, 23 Sep 2025 11:48:39 -0300
-Subject: [PATCH 15/40] dbghelp: Validate process handle
+Subject: [PATCH 15/47] dbghelp: Validate process handle
 
 ---
  dlls/dbghelp/dbghelp.c | 15 ++++++++++++++-
@@ -41,5 +41,5 @@ index a46d052..e37dd3f 100755
      {
          if ((*ppcs)->handle == hProcess)
 -- 
-2.53.0
+2.55.0
 

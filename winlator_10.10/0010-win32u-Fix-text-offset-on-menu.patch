@@ -1,7 +1,7 @@
 From 60c7dd5c33f89f66e943520f0830245c15ae50ed Mon Sep 17 00:00:00 2001
 From: BrunoSX <brunodeveloper85@gmail.com>
 Date: Tue, 23 Sep 2025 09:52:03 -0300
-Subject: [PATCH 10/40] win32u: Fix text offset on menu
+Subject: [PATCH 10/47] win32u: Fix text offset on menu
 
 ---
  dlls/win32u/menu.c | 9 +++------
@@ -51,5 +51,5 @@ index 1bcc7fa..40883e7 100755
          if (item->fState & MFS_DEFAULT)
          {
 -- 
-2.53.0
+2.55.0
 

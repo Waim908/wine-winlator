@@ -1,7 +1,7 @@
 From 0c455f4100f870d96beeaa7e51b69ad0c2567b85 Mon Sep 17 00:00:00 2001
 From: BrunoSX <brunodeveloper85@gmail.com>
 Date: Mon, 22 Sep 2025 16:47:58 -0300
-Subject: [PATCH 05/40] dinput: Implement gamepad device
+Subject: [PATCH 05/47] dinput: Implement gamepad device
 
 ---
  dlls/dinput/Makefile.in      |   5 +-
@@ -957,5 +957,5 @@ index f3f5fdc..45a5e72 100755
 +	version.rc \
 +    gamepad.c
 -- 
-2.53.0
+2.55.0
 

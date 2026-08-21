@@ -1,7 +1,7 @@
 From 31d5181b2bae0aa19fb21c92915963b5834d23b6 Mon Sep 17 00:00:00 2001
 From: BrunoSX <brunodeveloper85@gmail.com>
 Date: Mon, 22 Sep 2025 16:08:40 -0300
-Subject: [PATCH 04/40] ntdll: Add WINEARGS env to append extra arguments
+Subject: [PATCH 04/47] ntdll: Add WINEARGS env to append extra arguments
 
 ---
  dlls/ntdll/unix/env.c | 45 +++++++++++++++++++++++++++++++++++++++----
@@ -91,5 +91,5 @@ index 48da75b..a5df874 100755
      copy_unicode_string( &src, &dst, &params->Desktop, info->desktop_len );
      copy_unicode_string( &src, &dst, &params->ShellInfo, info->shellinfo_len );
 -- 
-2.53.0
+2.55.0
 

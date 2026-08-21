@@ -1,7 +1,7 @@
 From 27e859628f055c879c57f33816b57fc43773956c Mon Sep 17 00:00:00 2001
 From: BrunoSX <brunodeveloper85@gmail.com>
 Date: Tue, 23 Sep 2025 13:57:24 -0300
-Subject: [PATCH 20/40] inetcpl: Update icons
+Subject: [PATCH 20/47] inetcpl: Update icons
 
 ---
  dlls/inetcpl.cpl/Makefile.in          |    1 -
@@ -2461,5 +2461,5 @@ literal 0
 HcmV?d00001
 
 -- 
-2.53.0
+2.55.0
 

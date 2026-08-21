@@ -1,0 +1,39 @@
+From 53e19a40b4f61be52cc95f506b85c17dae783f8c Mon Sep 17 00:00:00 2001
+From: BrunoSX <brunodeveloper85@gmail.com>
+Date: Mon, 29 Jun 2026 17:19:40 -0300
+Subject: [PATCH 43/47] ntdll: Add WINEENV to append extra env to the program
+
+---
+ dlls/ntdll/unix/env.c | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+diff --git a/dlls/ntdll/unix/env.c b/dlls/ntdll/unix/env.c
+index a5df874..44822a4 100755
+--- a/dlls/ntdll/unix/env.c
++++ b/dlls/ntdll/unix/env.c
+@@ -1086,6 +1086,7 @@ static void add_dynamic_environment( WCHAR **env, SIZE_T *pos, SIZE_T *size )
+ {
+     const char *overrides = getenv( "WINEDLLOVERRIDES" );
+     unsigned int i;
++    char *extra_env;
+     char str[22];
+ 
+     add_path_var( env, pos, size, "WINEDATADIR", data_dir );
+@@ -1112,6 +1113,14 @@ static void add_dynamic_environment( WCHAR **env, SIZE_T *pos, SIZE_T *size )
+     append_envA( env, pos, size, "WINEUSERLOCALE", user_locale );
+     append_envA( env, pos, size, "SystemDrive", "C:" );
+     append_envA( env, pos, size, "SystemRoot", "C:\\windows" );
++
++    extra_env = getenv( "WINEENV" );
++    if (extra_env && strchr(extra_env, '='))
++    {
++        char *value = strchr(extra_env, '=') + 1;
++        *strchr(extra_env, '=') = '\0';
++        append_envA( env, pos, size, extra_env, value );
++    }
+ }
+ 
+ 
+-- 
+2.55.0
+

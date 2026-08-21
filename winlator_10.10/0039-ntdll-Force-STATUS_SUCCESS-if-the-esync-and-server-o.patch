@@ -1,7 +1,7 @@
 From 0ccee81fde397917e1ff07d6c4a8bcd85da8925d Mon Sep 17 00:00:00 2001
 From: BrunoSX <brunodeveloper85@gmail.com>
 Date: Sat, 1 Nov 2025 16:35:38 -0300
-Subject: [PATCH 39/40] ntdll: Force STATUS_SUCCESS if the esync and server
+Subject: [PATCH 39/47] ntdll: Force STATUS_SUCCESS if the esync and server
  objects exist
 
 ---
@@ -49,5 +49,5 @@ index 86809b6..6da6a39
          return STATUS_NOT_IMPLEMENTED;
  
 -- 
-2.53.0
+2.55.0
 

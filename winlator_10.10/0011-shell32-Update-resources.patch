@@ -1,7 +1,7 @@
 From 133d0b16c5df2e2d06e72410e730ecd607d82206 Mon Sep 17 00:00:00 2001
 From: BrunoSX <brunodeveloper85@gmail.com>
 Date: Tue, 23 Sep 2025 10:59:02 -0300
-Subject: [PATCH 11/40] shell32: Update resources
+Subject: [PATCH 11/47] shell32: Update resources
 
 ---
  dlls/shell32/Makefile.in                 |   43 -
@@ -65871,5 +65871,5 @@ index cee1069..e4531d5 100755
  /* 
  AVI resources, windows shell32 has 14 of them: 150-152 and 160-170
 -- 
-2.53.0
+2.55.0
 

@@ -1,7 +1,7 @@
 From 4c92dd10e0938eebfe5bdfd48551f631d57cce20 Mon Sep 17 00:00:00 2001
 From: BrunoSX <brunodeveloper85@gmail.com>
 Date: Tue, 23 Sep 2025 11:01:03 -0300
-Subject: [PATCH 12/40] Update startmenu icons
+Subject: [PATCH 12/47] Update startmenu icons
 
 ---
  programs/explorer/startmenu.c | 24 ++++++++++++++----------
@@ -70,5 +70,5 @@ index 6c2bb62..bccbf90 100755
              int iconIndex = get_icon_index(item->displayname, item->folder ? TRUE : FALSE);
              ExtractIconExA("shell32.dll", iconIndex, NULL, &hicon, 1);
 -- 
-2.53.0
+2.55.0
 

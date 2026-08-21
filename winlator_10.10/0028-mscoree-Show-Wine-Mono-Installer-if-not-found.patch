@@ -1,7 +1,7 @@
 From a2c3753b29793b678e07fcc1aca38fda50c4caf5 Mon Sep 17 00:00:00 2001
 From: BrunoSX <brunodeveloper85@gmail.com>
 Date: Tue, 23 Sep 2025 16:10:54 -0300
-Subject: [PATCH 28/40] mscoree: Show Wine Mono Installer if not found
+Subject: [PATCH 28/47] mscoree: Show Wine Mono Installer if not found
 
 ---
  dlls/mscoree/metahost.c | 11 ++++++++++-
@@ -37,5 +37,5 @@ index e1dd006..d0fd536 100755
      }
  
 -- 
-2.53.0
+2.55.0
 

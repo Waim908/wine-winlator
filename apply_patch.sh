@@ -3,7 +3,7 @@
 script_dir="$(dirname $(readlink -f "$0"))"
 source "$script_dir/$1/$2/__patch__.conf"
 
-[[ -z $_patch_file_ ]] && { echo "补丁数组变量为空" && exit 1;}
+[[ -z $_patch_file_ ]] && { echo "补丁数组变量为空" && exit 0;}
 
 echo "${_patch_file_[@]}"
 

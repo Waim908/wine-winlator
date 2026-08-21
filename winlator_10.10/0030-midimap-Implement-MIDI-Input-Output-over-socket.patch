@@ -1,7 +1,7 @@
 From 59b6143dcbed3ba4872022efb4e5f024ef9ae9a1 Mon Sep 17 00:00:00 2001
 From: BrunoSX <brunodeveloper85@gmail.com>
 Date: Tue, 23 Sep 2025 16:12:05 -0300
-Subject: [PATCH 30/40] midimap: Implement MIDI Input/Output over socket
+Subject: [PATCH 30/47] midimap: Implement MIDI Input/Output over socket
 
 ---
  dlls/midimap/Makefile.in  |   4 +-
@@ -1085,5 +1085,5 @@ index b0283e7..e1c44cd 100755
      for (i = k = 0; i <= MMDrvsHi; i++) {
  	while (MMDrvs[i].parts[type].nIDMin <= k && k < MMDrvs[i].parts[type].nIDMax) {
 -- 
-2.53.0
+2.55.0
 

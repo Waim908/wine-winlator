@@ -1,0 +1,37 @@
+From a8559d70f6609490529602cf3f6b7c35dbeb6df1 Mon Sep 17 00:00:00 2001
+From: BrunoSX <brunodeveloper85@gmail.com>
+Date: Thu, 30 Jul 2026 10:42:48 -0300
+Subject: [PATCH 45/47] ntdll: Remove the default 32-bit loader
+
+---
+ dlls/ntdll/unix/loader.c | 6 +-----
+ 1 file changed, 1 insertion(+), 5 deletions(-)
+
+diff --git a/dlls/ntdll/unix/loader.c b/dlls/ntdll/unix/loader.c
+index 63b7d32..cf23115 100755
+--- a/dlls/ntdll/unix/loader.c
++++ b/dlls/ntdll/unix/loader.c
+@@ -2219,7 +2219,6 @@ static int pre_exec(void)
+ static void reexec_loader( int argc, char *argv[], char *extra_arg )
+ {
+     static char noexec[] = "WINELOADERNOEXEC=1";
+-    WORD machine = current_machine;
+     char **new_argv;
+ 
+     /* have to exec if we have a preloader, or an argument, or if we are the initial wrapper */
+@@ -2237,11 +2236,8 @@ static void reexec_loader( int argc, char *argv[], char *extra_arg )
+         memcpy( new_argv + 2, argv + 1, argc * sizeof(*argv) );
+     }
+ 
+-    /* default to 32-bit loader to support 32-bit prefixes */
+-    if (machine == IMAGE_FILE_MACHINE_AMD64) machine = IMAGE_FILE_MACHINE_I386;
+-
+     putenv( noexec );
+-    loader_exec( new_argv, machine );
++    loader_exec( new_argv, current_machine );
+     fatal_error( "could not exec the wine loader\n" );
+ }
+ 
+-- 
+2.55.0
+
